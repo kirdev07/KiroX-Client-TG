@@ -115,10 +115,10 @@ private fun PagingEffect(listState: LazyListState, complete: Boolean, loadMore: 
 private fun CallRow(call: TelegramCall, count: Int, onOpen: () -> Unit, onCall: () -> Unit) {
     val missed = call.kind == TelegramCallKind.Missed
     Row(Modifier.fillMaxWidth().clickable(onClick = onOpen).heightIn(min = 64.dp).padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        TelegramAvatar(call.peerName, call.photo, 56.dp)
+        TelegramAvatar(call.peerName, call.photo, 50.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(if (count > 1) "${call.peerName} ($count)" else call.peerName, color = if (missed) Fusion.colors.danger else Fusion.colors.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(if (count > 1) "${call.peerName} ($count)" else call.peerName, color = if (missed) Fusion.colors.danger else Fusion.colors.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val icon = when (call.kind) {
                     TelegramCallKind.Incoming -> KiroXIcon.CallIncoming
@@ -170,36 +170,36 @@ internal fun StoriesRow(chats: List<TelegramStoryChat>, myName: String, myPhoto:
     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         // "Моя история" first, as in the old Fusion: own avatar with a "+" badge (or own stories when posted).
         Column(
-            Modifier.padding(start = 12.dp).width(84.dp).clip(RoundedCornerShape(12.dp)).clickable { if (own != null) onOpen(own) else onAddStory() }.padding(vertical = 4.dp),
+            Modifier.padding(start = 8.dp).width(84.dp).clip(RoundedCornerShape(12.dp)).clickable { if (own != null) onOpen(own) else onAddStory() }.padding(vertical = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Box(Modifier.size(70.dp)) {
+            Box(Modifier.size(60.dp)) {
                 Box(
-                    Modifier.size(70.dp).border(if (own?.hasUnread == true) 2.dp else 1.5.dp, if (own?.hasUnread == true) Fusion.colors.accent else Fusion.colors.outlineStrong, CircleShape).padding(4.dp),
+                    Modifier.size(60.dp).border(if (own?.hasUnread == true) 2.dp else 1.5.dp, if (own?.hasUnread == true) Fusion.colors.accent else Fusion.colors.outlineStrong, CircleShape).padding(4.dp),
                     contentAlignment = Alignment.Center
-                ) { TelegramAvatar(myName, myPhoto, 62.dp) }
+                ) { TelegramAvatar(myName, myPhoto, 52.dp) }
                 if (own == null) Box(
-                    Modifier.align(Alignment.BottomEnd).size(26.dp).clip(CircleShape).background(Fusion.colors.accent).border(2.5.dp, Fusion.colors.background, CircleShape),
+                    Modifier.align(Alignment.BottomEnd).size(22.dp).clip(CircleShape).background(Fusion.colors.accent).border(2.5.dp, Fusion.colors.background, CircleShape),
                     contentAlignment = Alignment.Center
-                ) { IconGlyph(KiroXIcon.Add, "Добавить историю", Modifier.size(15.dp), Fusion.colors.onAccent) }
+                ) { IconGlyph(KiroXIcon.Add, "Добавить историю", Modifier.size(13.dp), Fusion.colors.onAccent) }
             }
-            Spacer(Modifier.height(6.dp))
-            Text("Моя история", color = Fusion.colors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(4.dp))
+            Text("Моя история", color = Fusion.colors.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (others.isEmpty()) {
             Column(Modifier.weight(1f).padding(start = 12.dp, end = 16.dp)) {
-                Text("Историй пока нет", color = Fusion.colors.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
-                Text("Нажмите +, чтобы поделиться своей", color = Fusion.colors.textSecondary, fontSize = 15.sp)
+                Text("Историй пока нет", color = Fusion.colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text("Нажмите +, чтобы поделиться своей", color = Fusion.colors.textSecondary, fontSize = 13.sp, maxLines = 2)
             }
         } else LazyRow(Modifier.weight(1f), contentPadding = PaddingValues(start = 4.dp, end = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             items(others, key = { it.chatId }) { chat ->
-                Column(Modifier.width(78.dp).clip(RoundedCornerShape(12.dp)).clickable { onOpen(chat) }.padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(Modifier.width(68.dp).clip(RoundedCornerShape(12.dp)).clickable { onOpen(chat) }.padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(
-                        Modifier.size(70.dp).border(if (chat.hasUnread) 2.dp else 1.dp, if (chat.hasUnread) Fusion.colors.accent else Fusion.colors.outlineStrong, CircleShape).padding(4.dp),
+                        Modifier.size(60.dp).border(if (chat.hasUnread) 2.dp else 1.dp, if (chat.hasUnread) Fusion.colors.accent else Fusion.colors.outlineStrong, CircleShape).padding(4.dp),
                         contentAlignment = Alignment.Center
-                    ) { TelegramAvatar(chat.title, chat.photo, 62.dp) }
-                    Spacer(Modifier.height(6.dp))
-                    Text(chat.title, color = if (chat.hasUnread) Fusion.colors.textPrimary else Fusion.colors.textSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    ) { TelegramAvatar(chat.title, chat.photo, 52.dp) }
+                    Spacer(Modifier.height(4.dp))
+                    Text(chat.title, color = if (chat.hasUnread) Fusion.colors.textPrimary else Fusion.colors.textSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }

@@ -84,31 +84,31 @@ internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Uni
 @Composable
 private fun ProfileHeader(profile: TelegramUserProfile?, onEdit: () -> Unit, onAccounts: () -> Unit, onAvatar: () -> Unit, onCamera: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(120.dp)) {
-            Box(Modifier.size(120.dp).border(2.dp, Fusion.colors.outlineStrong, CircleShape).padding(5.dp).clip(CircleShape).clickable(onClick = onAvatar), contentAlignment = Alignment.Center) {
-                TelegramAvatar(profile?.name.orEmpty(), profile?.photo, 110.dp)
+        Box(Modifier.size(96.dp)) {
+            Box(Modifier.size(96.dp).border(1.5.dp, Fusion.colors.outlineStrong, CircleShape).padding(4.dp).clip(CircleShape).clickable(onClick = onAvatar), contentAlignment = Alignment.Center) {
+                TelegramAvatar(profile?.name.orEmpty(), profile?.photo, 88.dp)
             }
             Box(
-                Modifier.align(Alignment.BottomEnd).size(40.dp).clip(CircleShape).background(Fusion.colors.surface2).border(3.dp, Fusion.colors.background, CircleShape).clickable(onClick = onCamera),
+                Modifier.align(Alignment.BottomEnd).size(32.dp).clip(CircleShape).background(Fusion.colors.surface2).border(3.dp, Fusion.colors.background, CircleShape).clickable(onClick = onCamera),
                 contentAlignment = Alignment.Center
-            ) { IconGlyph(KiroXIcon.Camera, "Сменить фото", Modifier.size(20.dp), Fusion.colors.textPrimary) }
+            ) { IconGlyph(KiroXIcon.Camera, "Сменить фото", Modifier.size(16.dp), Fusion.colors.textPrimary) }
         }
-        Spacer(Modifier.height(14.dp))
-        Text(profile?.name ?: "Загрузка…", color = Fusion.colors.textPrimary, fontSize = 26.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        profile?.username?.let { Text("@$it", color = Fusion.colors.textSecondary, fontSize = 15.sp) }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(10.dp))
+        Text(profile?.name ?: "Загрузка…", color = Fusion.colors.textPrimary, fontSize = 21.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        profile?.username?.let { Text("@$it", color = Fusion.colors.textSecondary, fontSize = 14.sp) }
+        Spacer(Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Row(
-                Modifier.clip(CircleShape).background(Fusion.colors.surface2).clickable(onClick = onEdit).heightIn(min = 52.dp).padding(horizontal = 24.dp),
+                Modifier.clip(CircleShape).background(Fusion.colors.surface2).clickable(onClick = onEdit).heightIn(min = 44.dp).padding(horizontal = 18.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconGlyph(KiroXIcon.Edit, null, Modifier.size(20.dp), Fusion.colors.textPrimary)
-                Spacer(Modifier.width(10.dp))
-                Text("Редактировать профиль", color = Fusion.colors.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                IconGlyph(KiroXIcon.Edit, null, Modifier.size(17.dp), Fusion.colors.textPrimary)
+                Spacer(Modifier.width(8.dp))
+                Text("Редактировать профиль", color = Fusion.colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             }
-            Spacer(Modifier.width(10.dp))
-            Box(Modifier.size(52.dp).clip(CircleShape).background(Fusion.colors.surface2).clickable(onClick = onAccounts), contentAlignment = Alignment.Center) {
-                IconGlyph(KiroXIcon.Contacts, "Переключить аккаунт", Modifier.size(24.dp), Fusion.colors.textPrimary)
+            Spacer(Modifier.width(8.dp))
+            Box(Modifier.size(44.dp).clip(CircleShape).background(Fusion.colors.surface2).clickable(onClick = onAccounts), contentAlignment = Alignment.Center) {
+                IconGlyph(KiroXIcon.Contacts, "Переключить аккаунт", Modifier.size(20.dp), Fusion.colors.textPrimary)
             }
         }
     }
@@ -117,14 +117,14 @@ private fun ProfileHeader(profile: TelegramUserProfile?, onEdit: () -> Unit, onA
 /** Old Fusion settings row: icon in a rounded tile, large title, chevron. */
 @Composable
 internal fun TileRow(icon: KiroXIcon, title: String, trailing: String? = null, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 72.dp).padding(horizontal = 18.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(Fusion.colors.iconContainer), contentAlignment = Alignment.Center) {
-            IconGlyph(icon, null, Modifier.size(25.dp), Fusion.colors.textPrimary)
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 58.dp).padding(horizontal = 16.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Fusion.colors.iconContainer), contentAlignment = Alignment.Center) {
+            IconGlyph(icon, null, Modifier.size(21.dp), Fusion.colors.textPrimary)
         }
-        Spacer(Modifier.width(18.dp))
-        Text(title, color = Fusion.colors.textPrimary, fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        if (trailing != null) Text(trailing, color = Fusion.colors.textTertiary, fontSize = 14.sp, modifier = Modifier.padding(end = 6.dp))
-        IconGlyph(KiroXIcon.Chevron, null, Modifier.size(20.dp), Fusion.colors.textTertiary)
+        Spacer(Modifier.width(14.dp))
+        Text(title, color = Fusion.colors.textPrimary, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        if (trailing != null) Text(trailing, color = Fusion.colors.textTertiary, fontSize = 13.sp, modifier = Modifier.padding(end = 6.dp))
+        IconGlyph(KiroXIcon.Chevron, null, Modifier.size(17.dp), Fusion.colors.textTertiary)
     }
 }
 
@@ -145,8 +145,8 @@ internal fun CustomizationScreen(
         item {
             Box(Modifier.padding(16.dp).fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Fusion.colors.surface1).border(1.dp, Fusion.colors.outline, RoundedCornerShape(24.dp))) {
                 SeasonalLayer(Modifier.matchParentSize())
-                Column(Modifier.fillMaxWidth().padding(vertical = 32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("kiroX", color = Fusion.colors.textPrimary, fontSize = 38.sp, fontWeight = FontWeight.SemiBold)
+                Column(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("kiroX", color = Fusion.colors.textPrimary, fontSize = 32.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(6.dp))
                     Text(themeName(palette), color = Fusion.colors.textSecondary, fontSize = 14.sp)
                 }
@@ -154,13 +154,13 @@ internal fun CustomizationScreen(
         }
         item { TileRow(KiroXIcon.Palette, "Мои темы", trailing = themeName(palette)) { themeSheet = true } }
         item {
-            Row(Modifier.fillMaxWidth().clickable { onSeasonal(!seasonal) }.heightIn(min = 72.dp).padding(horizontal = 18.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(Fusion.colors.iconContainer), contentAlignment = Alignment.Center) {
-                    IconGlyph(KiroXIcon.Stories, null, Modifier.size(25.dp), Fusion.colors.textPrimary)
+            Row(Modifier.fillMaxWidth().clickable { onSeasonal(!seasonal) }.heightIn(min = 58.dp).padding(horizontal = 16.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Fusion.colors.iconContainer), contentAlignment = Alignment.Center) {
+                    IconGlyph(KiroXIcon.Stories, null, Modifier.size(21.dp), Fusion.colors.textPrimary)
                 }
-                Spacer(Modifier.width(18.dp))
+                Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("Сезонные эффекты", color = Fusion.colors.textPrimary, fontSize = 18.sp)
+                    Text("Сезонные эффекты", color = Fusion.colors.textPrimary, fontSize = 16.sp)
                     Text("Частицы в шапках экранов", color = Fusion.colors.textSecondary, fontSize = 13.sp)
                 }
                 Switch(
@@ -201,20 +201,20 @@ internal fun ProfileTab(profile: TelegramUserProfile?, onOpenSettings: () -> Uni
             }
             item {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    TelegramAvatar(profile?.name.orEmpty(), profile?.photo, 112.dp)
-                    Spacer(Modifier.height(16.dp))
+                    TelegramAvatar(profile?.name.orEmpty(), profile?.photo, 92.dp)
+                    Spacer(Modifier.height(12.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(profile?.name ?: "Загрузка…", color = Fusion.colors.textPrimary, fontSize = 28.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                        Text(profile?.name ?: "Загрузка…", color = Fusion.colors.textPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                         Spacer(Modifier.width(8.dp))
-                        KiroXBadge(Modifier.size(24.dp))
+                        KiroXBadge(Modifier.size(20.dp))
                     }
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(2.dp))
                     Text(
                         listOfNotNull("в сети", "Пользователь KiroX", if (profile?.isPremium == true) "Premium" else null, if (profile?.isVerified == true) "Проверено Telegram" else null).joinToString(" · "),
-                        color = Fusion.colors.textSecondary, fontSize = 15.sp, textAlign = TextAlign.Center
+                        color = Fusion.colors.textSecondary, fontSize = 14.sp, textAlign = TextAlign.Center
                     )
-                    Spacer(Modifier.height(22.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Spacer(Modifier.height(16.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ActionTile(KiroXIcon.Camera, "Выбрать фото", Modifier.weight(1f)) { onNotice("Смена фото — $IN_PROGRESS") }
                         ActionTile(KiroXIcon.Edit, "Изменить", Modifier.weight(1f)) { onNotice("Редактирование профиля — $IN_PROGRESS") }
                         ActionTile(KiroXIcon.Tune, "Настройки", Modifier.weight(1f), onOpenSettings)
@@ -228,34 +228,34 @@ internal fun ProfileTab(profile: TelegramUserProfile?, onOpenSettings: () -> Uni
             profile?.birthday?.takeIf { it.isNotBlank() }?.let { birthday -> item { InfoLine(KiroXIcon.Cake, birthday, "Дата рождения") } }
             item {
                 Row(
-                    Modifier.padding(horizontal = 32.dp, vertical = 16.dp).fillMaxWidth().clip(CircleShape).background(Fusion.colors.surface1).padding(4.dp)
+                    Modifier.padding(horizontal = 40.dp, vertical = 12.dp).fillMaxWidth().clip(CircleShape).background(Fusion.colors.surface1).padding(4.dp)
                 ) {
                     listOf("Публикации" to false, "Архив публикаций" to true).forEach { (title, value) ->
                         Text(
                             title, color = if (archived == value) Fusion.colors.textPrimary else Fusion.colors.textSecondary,
-                            fontSize = 16.sp, fontWeight = if (archived == value) FontWeight.SemiBold else FontWeight.Medium, textAlign = TextAlign.Center, maxLines = 1,
+                            fontSize = 14.sp, fontWeight = if (archived == value) FontWeight.SemiBold else FontWeight.Medium, textAlign = TextAlign.Center, maxLines = 1,
                             modifier = Modifier.weight(1f).clip(CircleShape).background(if (archived == value) Fusion.colors.surface3 else Fusion.colors.surface1)
-                                .clickable { archived = value }.padding(vertical = 10.dp)
+                                .clickable { archived = value }.padding(vertical = 8.dp)
                         )
                     }
                 }
             }
             item {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(if (archived) "Архив пуст" else "Публикаций пока нет…", color = Fusion.colors.textPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(8.dp))
-                    Text("Публикуйте фотографии и видео в своём профиле", color = Fusion.colors.textSecondary, fontSize = 15.sp, textAlign = TextAlign.Center)
+                Column(Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(if (archived) "Архив пуст" else "Публикаций пока нет…", color = Fusion.colors.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(6.dp))
+                    Text("Публикуйте фотографии и видео в своём профиле", color = Fusion.colors.textSecondary, fontSize = 14.sp, textAlign = TextAlign.Center)
                 }
             }
         }
         Row(
             Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp).clip(CircleShape).background(Fusion.colors.surface3)
-                .clickable { onNotice("Публикации в профиле — $IN_PROGRESS") }.heightIn(min = 52.dp).padding(horizontal = 28.dp),
+                .clickable { onNotice("Публикации в профиле — $IN_PROGRESS") }.heightIn(min = 44.dp).padding(horizontal = 22.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconGlyph(KiroXIcon.Camera, null, Modifier.size(22.dp), Fusion.colors.textPrimary)
-            Spacer(Modifier.width(10.dp))
-            Text("Добавить", color = Fusion.colors.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            IconGlyph(KiroXIcon.Camera, null, Modifier.size(19.dp), Fusion.colors.textPrimary)
+            Spacer(Modifier.width(8.dp))
+            Text("Добавить", color = Fusion.colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
         }
     }
     if (confirmLogout) AlertDialog(
@@ -271,23 +271,23 @@ internal fun ProfileTab(profile: TelegramUserProfile?, onOpenSettings: () -> Uni
 @Composable
 private fun ActionTile(icon: KiroXIcon, title: String, modifier: Modifier, onClick: () -> Unit) {
     Column(
-        modifier.heightIn(min = 76.dp).clip(RoundedCornerShape(22.dp)).background(Fusion.colors.surface2).clickable(onClick = onClick).padding(vertical = 12.dp),
+        modifier.heightIn(min = 64.dp).clip(RoundedCornerShape(18.dp)).background(Fusion.colors.surface2).clickable(onClick = onClick).padding(vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center
     ) {
-        IconGlyph(icon, null, Modifier.size(26.dp), Fusion.colors.textPrimary)
-        Spacer(Modifier.height(6.dp))
-        Text(title, color = Fusion.colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        IconGlyph(icon, null, Modifier.size(21.dp), Fusion.colors.textPrimary)
+        Spacer(Modifier.height(5.dp))
+        Text(title, color = Fusion.colors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
 @Composable
 private fun InfoLine(icon: KiroXIcon, value: String, label: String) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        IconGlyph(icon, null, Modifier.size(26.dp), Fusion.colors.textSecondary)
-        Spacer(Modifier.width(22.dp))
+    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 18.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        IconGlyph(icon, null, Modifier.size(22.dp), Fusion.colors.textSecondary)
+        Spacer(Modifier.width(18.dp))
         Column {
-            Text(value, color = Fusion.colors.textPrimary, fontSize = 18.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
-            Text(label, color = Fusion.colors.textSecondary, fontSize = 14.sp)
+            Text(value, color = Fusion.colors.textPrimary, fontSize = 16.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            Text(label, color = Fusion.colors.textSecondary, fontSize = 13.sp)
         }
     }
 }
@@ -327,12 +327,12 @@ internal fun NewMessageScreen(contacts: List<TelegramContact>, onBack: () -> Uni
         } else {
             if (contacts.isEmpty()) item { Text("Контактов пока нет", color = Fusion.colors.textSecondary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp)) }
             items(contacts, key = { it.id }) { contact ->
-                Row(Modifier.fillMaxWidth().clickable { onOpenContact(contact.id) }.heightIn(min = 76.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    TelegramAvatar(contact.name, contact.photo, 56.dp)
-                    Spacer(Modifier.width(14.dp))
+                Row(Modifier.fillMaxWidth().clickable { onOpenContact(contact.id) }.heightIn(min = 66.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    TelegramAvatar(contact.name, contact.photo, 50.dp)
+                    Spacer(Modifier.width(12.dp))
                     Column {
-                        Text(contact.name, color = Fusion.colors.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(TelegramFormat.status(contact.status), color = Fusion.colors.textSecondary, fontSize = 15.sp)
+                        Text(contact.name, color = Fusion.colors.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(TelegramFormat.status(contact.status), color = Fusion.colors.textSecondary, fontSize = 14.sp)
                     }
                 }
             }
@@ -347,24 +347,24 @@ internal fun NewMessageScreen(contacts: List<TelegramContact>, onBack: () -> Uni
 internal fun ScreenTitle(title: String, seasonal: Boolean = true, actions: @Composable RowScope.() -> Unit = {}) {
     Box(Modifier.fillMaxWidth()) {
         if (seasonal) SeasonalLayer(Modifier.matchParentSize())
-        Row(Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(start = 18.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(title, color = Fusion.colors.textPrimary, fontSize = 32.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, color = Fusion.colors.textPrimary, fontSize = 26.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             Row(content = actions)
         }
     }
 }
 
 @Composable
-internal fun TitleAction(icon: KiroXIcon, description: String, size: Dp = 27.dp, onClick: () -> Unit) {
-    Box(Modifier.size(52.dp).clip(CircleShape).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+internal fun TitleAction(icon: KiroXIcon, description: String, size: Dp = 24.dp, onClick: () -> Unit) {
+    Box(Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
         IconGlyph(icon, description, Modifier.size(size), Fusion.colors.textPrimary)
     }
 }
 
 @Composable
 private fun BackTitle(title: String, onBack: () -> Unit) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
         TitleAction(KiroXIcon.Back, "Назад", onClick = onBack)
-        Text(title, color = Fusion.colors.textPrimary, fontSize = 30.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(title, color = Fusion.colors.textPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }

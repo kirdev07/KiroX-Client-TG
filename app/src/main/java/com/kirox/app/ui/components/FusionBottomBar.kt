@@ -43,7 +43,7 @@ fun FusionBottomBar(items: List<FusionNavItem>, selected: Int, onSelect: (Int) -
     Column(modifier.fillMaxWidth().background(Fusion.colors.background)) {
         HorizontalDivider(thickness = FusionSize.hairline, color = Fusion.colors.outline)
         Row(
-            Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars).height(72.dp).selectableGroup(),
+            Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars).height(62.dp).selectableGroup(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             items.forEachIndexed { index, item ->
@@ -70,7 +70,7 @@ fun FusionNavigationRail(items: List<FusionNavItem>, selected: Int, onSelect: (I
 
 @Composable
 private fun DockItem(item: FusionNavItem, active: Boolean, showLabel: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    val pillWidth by animateDpAsState(if (active) 64.dp else 40.dp, spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow), label = "dock_pill")
+    val pillWidth by animateDpAsState(if (active) 56.dp else 36.dp, spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow), label = "dock_pill")
     val pillColor by animateColorAsState(if (active) Fusion.colors.surface3 else Fusion.colors.background, tween(FusionMotion.NORMAL), label = "dock_pill_color")
     val contentColor by animateColorAsState(if (active) Fusion.colors.textPrimary else Fusion.colors.textTertiary, tween(FusionMotion.NORMAL), label = "dock_color")
     Column(
@@ -84,8 +84,8 @@ private fun DockItem(item: FusionNavItem, active: Boolean, showLabel: Boolean, m
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Box(Modifier.width(pillWidth).height(40.dp).clip(CircleShape).background(pillColor), contentAlignment = Alignment.Center) {
-            KiroXIcon(item.icon, null, Modifier.size(26.dp), contentColor)
+        Box(Modifier.width(pillWidth).height(34.dp).clip(CircleShape).background(pillColor), contentAlignment = Alignment.Center) {
+            KiroXIcon(item.icon, null, Modifier.size(23.dp), contentColor)
         }
         if (showLabel) {
             Spacer(Modifier.height(4.dp))
