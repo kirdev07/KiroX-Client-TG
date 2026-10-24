@@ -42,6 +42,13 @@ kiroX создаётся для тех, кому нужен привычный T
 
 **Android · Kotlin · Jetpack Compose · Material 3 · TDLib · Room · DataStore · Gradle**
 
+## Сборка
+
+- Нужен JDK 17+ (AGP 8.13). Если в `PATH` старая Java, укажите JDK из Android Studio:
+  `JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"` или `org.gradle.java.home` в `~/.gradle/gradle.properties`.
+- `API_ID`/`API_HASH` Telegram задаются в `kirox.properties` (`KIROX_API_ID`, `KIROX_API_HASH`) или переменных окружения; файл не коммитится.
+- Проверки: `./gradlew testDebugUnitTest assembleDebug lintDebug`.
+
 ## Автор и статус проекта
 
 **KirDev Studio / kirdev07**  

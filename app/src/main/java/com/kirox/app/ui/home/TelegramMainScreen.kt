@@ -1,5 +1,7 @@
 package com.kirox.app.ui.home
 
+import androidx.compose.runtime.ReadOnlyComposable
+import com.kirox.app.ui.theme.Fusion
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,20 +30,20 @@ import java.util.Date
 import java.util.Locale
 
 private enum class RealSection { Archive, Messages }
-private val RealWhite = Color(0xFFF4F4F4)
-private val RealSecondary = Color(0xFF929296)
-private val RealDivider = Color(0xFF222222)
+private val RealWhite: Color @Composable @ReadOnlyComposable get() = Fusion.colors.textPrimary
+private val RealSecondary: Color @Composable @ReadOnlyComposable get() = Fusion.colors.textSecondary
+private val RealDivider: Color @Composable @ReadOnlyComposable get() = Fusion.colors.outline
 
 @Composable
 fun TelegramMainScreen(mainChats: List<TelegramChatItem>, archiveChats: List<TelegramChatItem>) {
     var section by rememberSaveable { mutableStateOf(RealSection.Messages) }
     var notice by remember { mutableStateOf<String?>(null) }
     Scaffold(
-        containerColor = Color.Black,
+        containerColor = Fusion.colors.background,
         contentWindowInsets = WindowInsets.statusBars,
         bottomBar = { RealBottomDock { notice = "Этот раздел реального аккаунта будет подключён следующим этапом" } }
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).background(Color.Black)) {
+        Column(Modifier.fillMaxSize().padding(padding).background(Fusion.colors.background)) {
             Row(Modifier.fillMaxWidth().heightIn(min = 58.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Чаты", color = RealWhite, fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 listOf(KiroXIcon.Search, KiroXIcon.ReadAll, KiroXIcon.Compose).forEach { icon ->
@@ -68,7 +70,7 @@ fun TelegramMainScreen(mainChats: List<TelegramChatItem>, archiveChats: List<Tel
         }
         notice?.let { message ->
             Box(Modifier.fillMaxSize().padding(padding).padding(20.dp), contentAlignment = Alignment.BottomCenter) {
-                Text(message, color = RealWhite, fontSize = 13.sp, modifier = Modifier.background(Color(0xFF303030)).padding(14.dp))
+                Text(message, color = RealWhite, fontSize = 13.sp, modifier = Modifier.background(Fusion.colors.surface3).padding(14.dp))
             }
             LaunchedEffect(message) { kotlinx.coroutines.delay(1900); notice = null }
         }
@@ -78,7 +80,7 @@ fun TelegramMainScreen(mainChats: List<TelegramChatItem>, archiveChats: List<Tel
 @Composable
 private fun RealChatRow(chat: TelegramChatItem) {
     Row(Modifier.fillMaxWidth().heightIn(min = 76.dp).padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(52.dp).clip(CircleShape).background(Color(0xFF405363)).border(1.dp, Color(0xFF72777C), CircleShape), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(52.dp).clip(CircleShape).background(Fusion.colors.avatar).border(1.dp, Fusion.colors.outlineStrong, CircleShape), contentAlignment = Alignment.Center) {
             Text(chat.title.trim().take(1).uppercase(), color = RealWhite, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.width(12.dp))
@@ -91,8 +93,8 @@ private fun RealChatRow(chat: TelegramChatItem) {
             Spacer(Modifier.height(5.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(chat.preview, color = RealSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                if (chat.unreadCount > 0) Box(Modifier.defaultMinSize(minWidth = 20.dp, minHeight = 20.dp).clip(CircleShape).background(Color.White).padding(horizontal = 5.dp), contentAlignment = Alignment.Center) {
-                    Text(chat.unreadCount.toString(), color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                if (chat.unreadCount > 0) Box(Modifier.defaultMinSize(minWidth = 20.dp, minHeight = 20.dp).clip(CircleShape).background(Fusion.colors.accent).padding(horizontal = 5.dp), contentAlignment = Alignment.Center) {
+                    Text(chat.unreadCount.toString(), color = Fusion.colors.onAccent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -102,7 +104,7 @@ private fun RealChatRow(chat: TelegramChatItem) {
 
 @Composable
 private fun RealBottomDock(onUnavailable: () -> Unit) {
-    Row(Modifier.fillMaxWidth().navigationBarsPadding().heightIn(min = 70.dp).background(Color(0xFF070707)).border(1.dp, RealDivider), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().navigationBarsPadding().heightIn(min = 70.dp).background(Fusion.colors.background).border(1.dp, RealDivider), verticalAlignment = Alignment.CenterVertically) {
         listOf(
             "Контакты" to KiroXIcon.Contacts, "Чаты" to KiroXIcon.Chat,
             "Настройки" to KiroXIcon.Settings, "Профиль" to KiroXIcon.Profile

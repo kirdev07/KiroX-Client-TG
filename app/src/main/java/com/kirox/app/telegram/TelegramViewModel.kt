@@ -2,10 +2,12 @@ package com.kirox.app.telegram
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import com.kirox.app.KiroXApplication
 
 class TelegramViewModel(application: Application) : AndroidViewModel(application) {
-    private val manager = TdlibClientManager(application)
-    val auth = TelegramAuthRepository(manager)
-    val chats = TelegramChatRepository(manager)
-    init { manager.start() }
+    private val services = (application as KiroXApplication).telegram
+    val auth = services.auth
+    val chats = services.chats
+    val users = services.users
+    init { services.client.start() }
 }

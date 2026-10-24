@@ -1,5 +1,7 @@
 package com.kirox.app.ui.home
 
+import androidx.compose.runtime.ReadOnlyComposable
+import com.kirox.app.ui.theme.Fusion
 import android.content.Intent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
@@ -64,10 +66,10 @@ import kotlin.math.sin
 import java.util.Locale
 import kotlinx.coroutines.launch
 
-private val White = Color(0xFFF4F4F4)
-private val Secondary = Color(0xFF929296)
-private val Surface = Color(0xFF151515)
-private val Divider = Color(0xFF222222)
+private val White: Color @Composable @ReadOnlyComposable get() = Fusion.colors.textPrimary
+private val Secondary: Color @Composable @ReadOnlyComposable get() = Fusion.colors.textSecondary
+private val Surface: Color @Composable @ReadOnlyComposable get() = Fusion.colors.surface1
+private val Divider: Color @Composable @ReadOnlyComposable get() = Fusion.colors.outline
 
 private enum class RootTab(val title: String, val icon: KiroXIcon) {
     Contacts("Контакты", KiroXIcon.Contacts), Chats("Чаты", KiroXIcon.Chat), Settings("Настройки", KiroXIcon.Settings), Profile("Профиль", KiroXIcon.Profile)
@@ -117,11 +119,11 @@ fun DemoMainScreen(onExit: () -> Unit, demoViewModel: DemoViewModel = viewModel(
     }
 
     Scaffold(
-        containerColor = Color.Black,
+        containerColor = Fusion.colors.background,
         contentWindowInsets = WindowInsets.statusBars,
         bottomBar = { BottomDock(root, { root = it }, { accountsSheet = true }) }
     ) { scaffoldPadding ->
-        Box(Modifier.fillMaxSize().padding(scaffoldPadding).background(Color.Black)) {
+        Box(Modifier.fillMaxSize().padding(scaffoldPadding).background(Fusion.colors.background)) {
             Box(
                 Modifier.fillMaxSize().pointerInput(root, chatSection, contactSection) {
                     detectHorizontalDragGestures(
@@ -143,7 +145,7 @@ fun DemoMainScreen(onExit: () -> Unit, demoViewModel: DemoViewModel = viewModel(
             }
             notice?.let {
                 Surface(
-                    color = Color(0xFF303030), shape = RoundedCornerShape(12.dp),
+                    color = Fusion.colors.surface3, shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp, start = 20.dp, end = 20.dp)
                 ) {
                     Text(it, color = White, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp))
@@ -161,7 +163,7 @@ fun DemoMainScreen(onExit: () -> Unit, demoViewModel: DemoViewModel = viewModel(
         Row(Modifier.fillMaxWidth().heightIn(min = 58.dp).padding(horizontal = if (compact) 12.dp else 16.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(title, color = White, fontSize = if (compact) 23.sp else 26.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             Row(content = actions)
-            Text("ДЕМО", color = Color.Black, fontSize = 8.sp, fontWeight = FontWeight.Bold,
+            Text("ДЕМО", color = Fusion.colors.onAccent, fontSize = 8.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(start = 3.dp).clip(RoundedCornerShape(8.dp)).background(White).padding(horizontal = 5.dp, vertical = 3.dp))
         }
     }
@@ -194,7 +196,7 @@ fun DemoMainScreen(onExit: () -> Unit, demoViewModel: DemoViewModel = viewModel(
     LazyRow(Modifier.heightIn(min = 86.dp), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         items(stories) { (letter, name) ->
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(57.dp).clickable { onNotice("Истории — в разработке") }) {
-                Box(Modifier.size(50.dp).border(if (letter == "+") 1.dp else 2.dp, if (letter == "+") Color(0xFF666666) else Color(0xFFBDBDBD), CircleShape).clip(CircleShape).background(if (letter == "+") Color.Black else Color(0xFF333438)), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(50.dp).border(if (letter == "+") 1.dp else 2.dp, if (letter == "+") Fusion.colors.outlineStrong else Fusion.colors.textSecondary, CircleShape).clip(CircleShape).background(if (letter == "+") Fusion.colors.onAccent else Fusion.colors.surface3), contentAlignment = Alignment.Center) {
                     if (letter == "+") IconGlyph(KiroXIcon.Add, "Добавить историю", Modifier.size(20.dp), White) else Text(letter, color = White, fontWeight = FontWeight.Bold)
                 }
                 Spacer(Modifier.height(5.dp)); Text(name, color = Secondary, fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -221,7 +223,7 @@ fun DemoMainScreen(onExit: () -> Unit, demoViewModel: DemoViewModel = viewModel(
         Avatar(chat.title.take(1)); Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) { Text(chat.title, color = White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)); if (chat.pinned) { IconGlyph(KiroXIcon.Pin, "Закреплённый чат", Modifier.padding(horizontal = 5.dp).size(14.dp), Secondary) }; Text(formatTime(chat.lastMessageAt), color = Secondary, fontSize = 11.sp) }
-            Spacer(Modifier.height(5.dp)); Row { Text(if (chat.draft.isNotBlank()) "Черновик: ${chat.draft}" else chat.lastMessage, color = if (chat.draft.isNotBlank()) Color(0xFFFF7770) else Secondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)); if (chat.unreadCount > 0) Badge { Text(chat.unreadCount.toString()) } }
+            Spacer(Modifier.height(5.dp)); Row { Text(if (chat.draft.isNotBlank()) "Черновик: ${chat.draft}" else chat.lastMessage, color = if (chat.draft.isNotBlank()) Fusion.colors.danger else Secondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)); if (chat.unreadCount > 0) Badge { Text(chat.unreadCount.toString()) } }
         }
     }
     HorizontalDivider(color = Divider)
@@ -286,7 +288,7 @@ fun DemoMainScreen(onExit: () -> Unit, demoViewModel: DemoViewModel = viewModel(
 }
 
 @Composable private fun SearchBox(value: String, hint: String, onChange: (String) -> Unit) { Row(Modifier.padding(16.dp).fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(14.dp)).background(Surface).padding(horizontal = 14.dp), verticalAlignment = Alignment.CenterVertically) { IconGlyph(KiroXIcon.Search, null, Modifier.size(20.dp), Secondary); Spacer(Modifier.width(10.dp)); BasicTextField(value, onChange, Modifier.weight(1f), textStyle = TextStyle(color = White, fontSize = 14.sp), singleLine = true, cursorBrush = SolidColor(White), decorationBox = { inner -> Box { if (value.isBlank()) Text(hint, color = Secondary, fontSize = 13.sp); inner() } }); if (value.isNotEmpty()) Text("×", color = Secondary, fontSize = 21.sp, modifier = Modifier.clickable { onChange("") }.padding(5.dp)) } }
-@Composable private fun Chip(text: String, selected: Boolean, click: () -> Unit) { Text(text, color = if (selected) Color.Black else Secondary, fontSize = 12.sp, modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(if (selected) White else Surface).clickable(onClick = click).padding(horizontal = 13.dp, vertical = 8.dp)) }
+@Composable private fun Chip(text: String, selected: Boolean, click: () -> Unit) { Text(text, color = if (selected) Fusion.colors.onAccent else Secondary, fontSize = 12.sp, modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(if (selected) White else Surface).clickable(onClick = click).padding(horizontal = 13.dp, vertical = 8.dp)) }
 
 @Composable private fun PersonRow(person: DemoContact, onMessage: () -> Unit, onCall: () -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = 74.dp).padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -294,14 +296,14 @@ fun DemoMainScreen(onExit: () -> Unit, demoViewModel: DemoViewModel = viewModel(
         IconAction(KiroXIcon.Chat, "Написать ${person.name}", onMessage); IconAction(KiroXIcon.Call, "Позвонить ${person.name}", onCall)
     }; HorizontalDivider(color = Divider)
 }
-@Composable private fun CallRow(call: DemoCall, onCall: () -> Unit) { val typeIcon = when (call.kind) { "incoming" -> KiroXIcon.CallIncoming; "outgoing" -> KiroXIcon.CallOutgoing; else -> KiroXIcon.CallMissed }; Row(Modifier.fillMaxWidth().heightIn(min = 68.dp).padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) { Avatar(call.name.take(1), 46); Spacer(Modifier.width(11.dp)); Column(Modifier.weight(1f)) { Text(call.name, color = White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis); Row(verticalAlignment = Alignment.CenterVertically) { IconGlyph(typeIcon, null, Modifier.size(14.dp), if (call.kind == "missed") Color(0xFFFF7770) else Secondary); Spacer(Modifier.width(4.dp)); Text("${callKind(call.kind)} · ${formatTime(call.occurredAt)}", color = if (call.kind == "missed") Color(0xFFFF7770) else Secondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) } }; IconAction(KiroXIcon.Call, "Повторить демонстрационный звонок", onCall) }; HorizontalDivider(color = Divider) }
+@Composable private fun CallRow(call: DemoCall, onCall: () -> Unit) { val typeIcon = when (call.kind) { "incoming" -> KiroXIcon.CallIncoming; "outgoing" -> KiroXIcon.CallOutgoing; else -> KiroXIcon.CallMissed }; Row(Modifier.fillMaxWidth().heightIn(min = 68.dp).padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) { Avatar(call.name.take(1), 46); Spacer(Modifier.width(11.dp)); Column(Modifier.weight(1f)) { Text(call.name, color = White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis); Row(verticalAlignment = Alignment.CenterVertically) { IconGlyph(typeIcon, null, Modifier.size(14.dp), if (call.kind == "missed") Fusion.colors.danger else Secondary); Spacer(Modifier.width(4.dp)); Text("${callKind(call.kind)} · ${formatTime(call.occurredAt)}", color = if (call.kind == "missed") Fusion.colors.danger else Secondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) } }; IconAction(KiroXIcon.Call, "Повторить демонстрационный звонок", onCall) }; HorizontalDivider(color = Divider) }
 
 @Composable private fun AddContactDialog(onDismiss: () -> Unit, onAdd: (String, String) -> Unit) {
     var name by rememberSaveable { mutableStateOf("") }; var status by rememberSaveable { mutableStateOf("") }
     AlertDialog(onDismissRequest = onDismiss, containerColor = Surface, title = { Text("Новый DEMO-контакт", color = White) }, text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) { DemoTextField(name, "Имя", { name = it }); DemoTextField(status, "Статус (необязательно)", { status = it }) } }, confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = { onAdd(name.trim(), status.trim().ifBlank { "добавлен локально" }) }) { Text("Добавить", color = if (name.isNotBlank()) White else Secondary) } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена", color = Secondary) } })
 }
 
-@Composable private fun DemoTextField(value: String, hint: String, onChange: (String) -> Unit) { BasicTextField(value, onChange, Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF242426)).padding(14.dp), textStyle = TextStyle(color = White, fontSize = 14.sp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text), singleLine = true, cursorBrush = SolidColor(White), decorationBox = { inner -> Box { if (value.isBlank()) Text(hint, color = Secondary, fontSize = 14.sp); inner() } }) }
+@Composable private fun DemoTextField(value: String, hint: String, onChange: (String) -> Unit) { BasicTextField(value, onChange, Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).background(Fusion.colors.surface2).padding(14.dp), textStyle = TextStyle(color = White, fontSize = 14.sp), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text), singleLine = true, cursorBrush = SolidColor(White), decorationBox = { inner -> Box { if (value.isBlank()) Text(hint, color = Secondary, fontSize = 14.sp); inner() } }) }
 
 @Composable private fun DemoCallDialog(person: DemoContact, onDismiss: () -> Unit, onStart: () -> Unit) { AlertDialog(onDismissRequest = onDismiss, containerColor = Surface, icon = { IconGlyph(KiroXIcon.Call, null, Modifier.size(28.dp), White) }, title = { Text("Демонстрационный звонок", color = White, textAlign = TextAlign.Center) }, text = { Text("Вызов ${person.name} не соединяется с Telegram. В журнал будет добавлена только локальная запись.", color = Secondary, textAlign = TextAlign.Center) }, confirmButton = { TextButton(onClick = onStart) { Text("Добавить в журнал", color = White) } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена", color = Secondary) } }) }
 
@@ -324,7 +326,7 @@ fun DemoMainScreen(onExit: () -> Unit, demoViewModel: DemoViewModel = viewModel(
         item { Box(Modifier.graphicsLayer { alpha = identityAlpha; translationY = (1f - identityAlpha) * 12.dp.toPx() }) { CenterIdentity(effects, { onEffectsChange(!effects) }, onProfile, onNotice) } }
         items(rows, key = { it.title }) { row -> CompactSettingRow(row.icon, row.title) { if (row.title == "Кастомизация") customization = true else onNotice("${row.title}: функция пока доступна только как демо") } }
     }
-    if (customization) ModalBottomSheet(onDismissRequest = { customization = false }, containerColor = Color(0xFF101010), dragHandle = { BottomSheetDefaults.DragHandle(color = Secondary) }) { Text("Кастомизация", color = White, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp)); Text("ПРОФИЛЬ", color = Secondary, fontSize = 10.sp, letterSpacing = 1.2.sp, modifier = Modifier.padding(start = 20.dp, top = 22.dp, bottom = 8.dp)); Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Показывать отметку KiroX", color = White); Text("Только локальное оформление", color = Secondary, fontSize = 11.sp) }; Switch(showKiroXBadge, onBadgeChange, colors = monoSwitchColors()) }; Spacer(Modifier.navigationBarsPadding().height(20.dp)) }
+    if (customization) ModalBottomSheet(onDismissRequest = { customization = false }, containerColor = Fusion.colors.surface1, dragHandle = { BottomSheetDefaults.DragHandle(color = Secondary) }) { Text("Кастомизация", color = White, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp)); Text("ПРОФИЛЬ", color = Secondary, fontSize = 10.sp, letterSpacing = 1.2.sp, modifier = Modifier.padding(start = 20.dp, top = 22.dp, bottom = 8.dp)); Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text("Показывать отметку KiroX", color = White); Text("Только локальное оформление", color = Secondary, fontSize = 11.sp) }; Switch(showKiroXBadge, onBadgeChange, colors = monoSwitchColors()) }; Spacer(Modifier.navigationBarsPadding().height(20.dp)) }
 }
 
 @Composable private fun CenterIdentity(effects: Boolean, toggleEffects: () -> Unit, openProfile: () -> Unit, notice: (String) -> Unit) {
@@ -332,7 +334,7 @@ fun DemoMainScreen(onExit: () -> Unit, demoViewModel: DemoViewModel = viewModel(
         if (effects) SeasonalParticles(Modifier.matchParentSize())
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(Modifier.size(112.dp), contentAlignment = Alignment.Center) {
-                Box(Modifier.size(96.dp).border(1.5.dp, Color(0xFF77777C), CircleShape).padding(2.dp).clickable(onClick = openProfile), contentAlignment = Alignment.Center) { Avatar("К", 88) }
+                Box(Modifier.size(96.dp).border(1.5.dp, Fusion.colors.outlineStrong, CircleShape).padding(2.dp).clickable(onClick = openProfile), contentAlignment = Alignment.Center) { Avatar("К", 88) }
                 Box(Modifier.align(Alignment.BottomEnd).size(48.dp).clip(CircleShape).clickable { notice("Смена фотографии — демо") }, contentAlignment = Alignment.Center) { Box(Modifier.size(31.dp).clip(CircleShape).background(Surface).border(1.dp, Divider, CircleShape), contentAlignment = Alignment.Center) { IconGlyph(KiroXIcon.Camera, "Сменить фото", Modifier.size(17.dp), White) } }
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 32.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) { Text("Кирилл", color = White, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis); Spacer(Modifier.width(6.dp)); IconGlyph(KiroXIcon.Star, "Демо emoji-статус", Modifier.size(18.dp), White) }
@@ -377,7 +379,7 @@ fun DemoMainScreen(onExit: () -> Unit, demoViewModel: DemoViewModel = viewModel(
 
 @Composable private fun ProfileCompactIdentity(account: DemoAccount, badge: Boolean, collapse: Float, accounts: () -> Unit, notice: (String) -> Unit) {
     Column(Modifier.fillMaxWidth().graphicsLayer { alpha = 1f - collapse * .16f; scaleX = 1f - collapse * .04f; scaleY = 1f - collapse * .04f }.padding(horizontal = 16.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(96.dp).border(1.5.dp, Color(0xFF77777C), CircleShape).padding(2.dp).clickable { notice("Фото профиля и истории — DEMO") }, contentAlignment = Alignment.Center) { Avatar(account.initial, 88) }
+        Box(Modifier.size(96.dp).border(1.5.dp, Fusion.colors.outlineStrong, CircleShape).padding(2.dp).clickable { notice("Фото профиля и истории — DEMO") }, contentAlignment = Alignment.Center) { Avatar(account.initial, 88) }
         Spacer(Modifier.height(7.dp)); Row(Modifier.fillMaxWidth().padding(horizontal = 30.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) { Text(account.name, color = White, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false)); if (badge) { Spacer(Modifier.width(6.dp)); HexBadge(Modifier.size(20.dp)) } }
         account.username?.let { Text(it, color = Secondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
         if (badge) Text("Пользователь KiroX", color = Secondary, fontSize = 11.sp)
@@ -394,7 +396,7 @@ fun DemoMainScreen(onExit: () -> Unit, demoViewModel: DemoViewModel = viewModel(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun AccountsSheet(accounts: List<DemoAccount>, activeId: Long, select: (Long) -> Unit, dismiss: () -> Unit, notice: (String) -> Unit) {
-    ModalBottomSheet(onDismissRequest = dismiss, containerColor = Color(0xFF101010), dragHandle = { BottomSheetDefaults.DragHandle(color = Secondary) }) {
+    ModalBottomSheet(onDismissRequest = dismiss, containerColor = Fusion.colors.surface1, dragHandle = { BottomSheetDefaults.DragHandle(color = Secondary) }) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { Text("Выберите аккаунт", color = White, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); IconAction(KiroXIcon.More, "Управление аккаунтами") { notice("Управление реальными аккаунтами появится с TDLib") } }
         Text("DEMO · изолированные данные", color = Secondary, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
         accounts.forEach { account -> Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).clickable { select(account.accountId) }.padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { Avatar(account.initial, 44); Spacer(Modifier.width(12.dp)); Column(Modifier.weight(1f)) { Text(account.name, color = White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis); account.username?.let { Text(it, color = Secondary, fontSize = 11.sp, maxLines = 1) } }; if (account.accountId == activeId) IconGlyph(KiroXIcon.Check, "Активный аккаунт", Modifier.size(20.dp), White); IconAction(KiroXIcon.More, "Меню аккаунта ${account.name}") { notice("Управление DEMO-аккаунтом недоступно") } }; HorizontalDivider(Modifier.padding(horizontal = 20.dp), color = Divider) }
@@ -406,18 +408,18 @@ fun DemoMainScreen(onExit: () -> Unit, demoViewModel: DemoViewModel = viewModel(
 private fun formatTime(value: Long): String = if (value == 0L) "" else java.text.SimpleDateFormat("HH:mm", Locale.getDefault()).format(java.util.Date(value))
 private fun callKind(value: String) = when (value) { "incoming" -> "Входящий"; "outgoing" -> "Исходящий"; else -> "Пропущенный" }
 
-@Composable private fun monoSwitchColors() = SwitchDefaults.colors(checkedThumbColor = Color.Black, checkedTrackColor = White, checkedBorderColor = White, uncheckedThumbColor = Secondary, uncheckedTrackColor = Surface, uncheckedBorderColor = Color(0xFF555555))
+@Composable private fun monoSwitchColors() = SwitchDefaults.colors(checkedThumbColor = Fusion.colors.onAccent, checkedTrackColor = White, checkedBorderColor = White, uncheckedThumbColor = Secondary, uncheckedTrackColor = Surface, uncheckedBorderColor = Fusion.colors.outlineStrong)
 
 @Composable private fun SectionLabel(text: String) { Text(text, color = Secondary, fontSize = 10.sp, letterSpacing = 1.2.sp, modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)) }
 @Composable private fun Tile(icon: KiroXIcon, text: String, modifier: Modifier, click: () -> Unit) { Column(modifier.heightIn(min = 64.dp).clip(RoundedCornerShape(13.dp)).background(Surface).border(1.dp, Divider, RoundedCornerShape(13.dp)).clickable(onClick = click).padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) { IconGlyph(icon, null, Modifier.size(20.dp), White); Spacer(Modifier.height(4.dp)); Text(text, color = White, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) } }
-@Composable private fun OutlineButton(text: String, icon: KiroXIcon? = null, click: () -> Unit) { Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().heightIn(min = 52.dp).border(1.dp, Color(0xFF363636), RoundedCornerShape(14.dp)).clip(RoundedCornerShape(14.dp)).clickable(onClick = click).padding(horizontal = 14.dp, vertical = 10.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) { if (icon != null) { IconGlyph(icon, null, Modifier.size(20.dp), White); Spacer(Modifier.width(8.dp)) }; Text(text, color = White, fontSize = 14.sp, fontWeight = FontWeight.Medium) } }
+@Composable private fun OutlineButton(text: String, icon: KiroXIcon? = null, click: () -> Unit) { Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().heightIn(min = 52.dp).border(1.dp, Fusion.colors.outline, RoundedCornerShape(14.dp)).clip(RoundedCornerShape(14.dp)).clickable(onClick = click).padding(horizontal = 14.dp, vertical = 10.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) { if (icon != null) { IconGlyph(icon, null, Modifier.size(20.dp), White); Spacer(Modifier.width(8.dp)) }; Text(text, color = White, fontSize = 14.sp, fontWeight = FontWeight.Medium) } }
 
-@Composable private fun Avatar(letter: String, size: Int = 50) { Box(Modifier.size(size.dp).clip(CircleShape).background(Color(0xFF40505C)), contentAlignment = Alignment.Center) { Text(letter, color = White, fontSize = (size * .36f).sp, fontWeight = FontWeight.Bold) } }
-@Composable private fun HexBadge(modifier: Modifier = Modifier.size(24.dp)) { Canvas(modifier.semantics { contentDescription = "Фирменная локальная отметка KiroX" }) { val p = androidx.compose.ui.graphics.Path(); p.moveTo(size.width*.25f, 0f); p.lineTo(size.width*.75f,0f); p.lineTo(size.width,size.height*.5f); p.lineTo(size.width*.75f,size.height); p.lineTo(size.width*.25f,size.height); p.lineTo(0f,size.height*.5f); p.close(); drawPath(p, Color(0xFF444448)); drawLine(Color.White, Offset(size.width*.32f,size.height*.3f), Offset(size.width*.68f,size.height*.7f), 1.6.dp.toPx(), StrokeCap.Round); drawLine(Color.White, Offset(size.width*.68f,size.height*.3f), Offset(size.width*.32f,size.height*.7f), 1.6.dp.toPx(), StrokeCap.Round) } }
+@Composable private fun Avatar(letter: String, size: Int = 50) { Box(Modifier.size(size.dp).clip(CircleShape).background(Fusion.colors.avatar), contentAlignment = Alignment.Center) { Text(letter, color = White, fontSize = (size * .36f).sp, fontWeight = FontWeight.Bold) } }
+@Composable private fun HexBadge(modifier: Modifier = Modifier.size(24.dp)) { val fill = Fusion.colors.surface3; val stroke = Fusion.colors.textPrimary; Canvas(modifier.semantics { contentDescription = "Фирменная локальная отметка KiroX" }) { val p = androidx.compose.ui.graphics.Path(); p.moveTo(size.width*.25f, 0f); p.lineTo(size.width*.75f,0f); p.lineTo(size.width,size.height*.5f); p.lineTo(size.width*.75f,size.height); p.lineTo(size.width*.25f,size.height); p.lineTo(0f,size.height*.5f); p.close(); drawPath(p, fill); drawLine(stroke, Offset(size.width*.32f,size.height*.3f), Offset(size.width*.68f,size.height*.7f), 1.6.dp.toPx(), StrokeCap.Round); drawLine(stroke, Offset(size.width*.68f,size.height*.3f), Offset(size.width*.32f,size.height*.7f), 1.6.dp.toPx(), StrokeCap.Round) } }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable private fun BottomDock(selected: RootTab, onSelect: (RootTab) -> Unit, onProfileLongClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().background(Color(0xFF040404)).border(1.dp, Divider).navigationBarsPadding().heightIn(min = 72.dp).padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().background(Fusion.colors.background).border(1.dp, Divider).navigationBarsPadding().heightIn(min = 72.dp).padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         RootTab.entries.forEach { tab -> Column(Modifier.weight(1f).sizeIn(minWidth = 48.dp, minHeight = 64.dp).clip(RoundedCornerShape(10.dp)).combinedClickable(indication = null, interactionSource = remember { MutableInteractionSource() }, onClick = { onSelect(tab) }, onLongClick = { if (tab == RootTab.Profile) onProfileLongClick() }), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) { IconGlyph(tab.icon, tab.title, Modifier.size(24.dp), if (selected == tab) White else Secondary); Spacer(Modifier.height(3.dp)); Text(tab.title, color = if (selected == tab) White else Secondary, fontSize = 10.sp, maxLines = 1) } }
     }
 }

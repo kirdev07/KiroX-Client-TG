@@ -1,5 +1,7 @@
 package com.kirox.app.ui.start
 
+import androidx.compose.runtime.ReadOnlyComposable
+import com.kirox.app.ui.theme.Fusion
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -40,10 +42,10 @@ import com.kirox.app.phone.PhoneStatus
 import com.kirox.app.ui.icons.KiroXIcon
 import com.kirox.app.ui.icons.KiroXIcon as IconGlyph
 
-internal val KiroXWhite = Color.White
-internal val KiroXSecondary = Color(0xFF8E8E93)
-internal val KiroXSurface = Color(0xFF111113)
-internal val KiroXOutline = Color(0xFF2C2C2E)
+internal val KiroXWhite: Color @Composable @ReadOnlyComposable get() = Fusion.colors.textPrimary
+internal val KiroXSecondary: Color @Composable @ReadOnlyComposable get() = Fusion.colors.textSecondary
+internal val KiroXSurface: Color @Composable @ReadOnlyComposable get() = Fusion.colors.surface1
+internal val KiroXOutline: Color @Composable @ReadOnlyComposable get() = Fusion.colors.outline
 
 @Composable
 fun PhoneLoginScreen(
@@ -58,7 +60,7 @@ fun PhoneLoginScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(Fusion.colors.background)
             .statusBarsPadding()
             .imePadding()
     ) {
@@ -69,7 +71,7 @@ fun PhoneLoginScreen(
             Text(
                 buildAnnotatedString {
                     append("Ваш номер\n")
-                    withStyle(SpanStyle(color = Color(0xFF6F6F73))) { append("телефона") }
+                    withStyle(SpanStyle(color = Fusion.colors.textTertiary)) { append("телефона") }
                 },
                 color = KiroXWhite, fontSize = 34.sp, lineHeight = 38.sp, fontWeight = FontWeight.Bold
             )
@@ -87,7 +89,7 @@ fun PhoneLoginScreen(
             Text("Номер будет автоматически отформатирован\nпод выбранную страну.", color = KiroXSecondary, fontSize = 13.sp, lineHeight = 18.sp)
             Spacer(Modifier.height(8.dp))
             StatusMessage(state.status)
-            if (externalStatus != null) Text(externalStatus, color = Color(0xFFFF6961), fontSize = 13.sp, lineHeight = 18.sp)
+            if (externalStatus != null) Text(externalStatus, color = Fusion.colors.danger, fontSize = 13.sp, lineHeight = 18.sp)
         }
         Column(
             modifier = Modifier.navigationBarsPadding().padding(horizontal = 24.dp, vertical = 20.dp).align(Alignment.BottomCenter),
@@ -126,7 +128,7 @@ internal fun BrandLogo(modifier: Modifier = Modifier) {
     Text(
         text = buildAnnotatedString {
             append("kiro")
-            withStyle(SpanStyle(color = Color(0xFF717176), fontWeight = FontWeight.Light)) { append("X") }
+            withStyle(SpanStyle(color = Fusion.colors.textTertiary, fontWeight = FontWeight.Light)) { append("X") }
         },
         color = KiroXWhite,
         fontSize = 31.sp,
@@ -188,7 +190,7 @@ private fun PhoneNumberField(state: PhoneEntryState) {
             cursorBrush = SolidColor(KiroXWhite),
             decorationBox = { inner ->
                 Box {
-                    if (state.digits.isEmpty()) Text("700 000 00 00", color = Color(0xFF5C5C60), fontSize = 17.sp)
+                    if (state.digits.isEmpty()) Text("700 000 00 00", color = Fusion.colors.textTertiary, fontSize = 17.sp)
                     inner()
                 }
             }
@@ -200,8 +202,8 @@ private fun PhoneNumberField(state: PhoneEntryState) {
 private fun StatusMessage(status: PhoneStatus) {
     when (status) {
         PhoneStatus.Idle -> Spacer(Modifier.height(20.dp))
-        is PhoneStatus.Error -> Text(status.message, color = Color(0xFFFF6961), fontSize = 13.sp, lineHeight = 18.sp)
-        is PhoneStatus.Ready -> Text(status.message, color = Color(0xFFB6B6BA), fontSize = 13.sp, lineHeight = 18.sp)
+        is PhoneStatus.Error -> Text(status.message, color = Fusion.colors.danger, fontSize = 13.sp, lineHeight = 18.sp)
+        is PhoneStatus.Ready -> Text(status.message, color = Fusion.colors.textSecondary, fontSize = 13.sp, lineHeight = 18.sp)
     }
 }
 
@@ -217,8 +219,8 @@ internal fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier
             .clickable(interactionSource = interaction, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Text(text, color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-        IconGlyph(KiroXIcon.Chevron, null, Modifier.align(Alignment.CenterEnd).padding(end = 28.dp).size(22.dp), Color.Black)
+        Text(text, color = Fusion.colors.onAccent, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        IconGlyph(KiroXIcon.Chevron, null, Modifier.align(Alignment.CenterEnd).padding(end = 28.dp).size(22.dp), Fusion.colors.onAccent)
     }
 }
 

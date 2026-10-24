@@ -1,5 +1,6 @@
 package com.kirox.app.ui.country
 
+import com.kirox.app.ui.theme.Fusion
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -45,13 +46,13 @@ fun CountryPickerScreen(state: PhoneEntryState, onBack: () -> Unit) {
 
     BackHandler(onBack = onBack)
     Box(
-        Modifier.fillMaxSize().background(Color.Black).statusBarsPadding().navigationBarsPadding()
+        Modifier.fillMaxSize().background(Fusion.colors.background).statusBarsPadding().navigationBarsPadding()
     ) {
         Column(
-            Modifier.fillMaxSize().padding(top = 8.dp).clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)).background(Color(0xFF0B0B0C))
+            Modifier.fillMaxSize().padding(top = 8.dp).clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)).background(Fusion.colors.background)
         ) {
             Box(Modifier.fillMaxWidth().height(34.dp), contentAlignment = Alignment.Center) {
-                Box(Modifier.width(46.dp).height(5.dp).clip(RoundedCornerShape(99.dp)).background(Color(0xFF5A5A5D)))
+                Box(Modifier.width(46.dp).height(5.dp).clip(RoundedCornerShape(99.dp)).background(Fusion.colors.textTertiary))
             }
             Row(
                 Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 24.dp),
@@ -116,10 +117,11 @@ private fun AutoDetectRow(detected: Country?, onClick: () -> Unit) {
         Modifier.padding(horizontal = 20.dp, vertical = 8.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(KiroXSurface).clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        val glyph = KiroXWhite
         Canvas(Modifier.size(22.dp)) {
-            drawCircle(KiroXWhite, radius = size.minDimension * .36f, style = androidx.compose.ui.graphics.drawscope.Stroke(1.5.dp.toPx()))
-            drawLine(KiroXWhite, Offset(size.width / 2, 0f), Offset(size.width / 2, size.height * .2f), 1.5.dp.toPx())
-            drawLine(KiroXWhite, Offset(size.width / 2, size.height * .8f), Offset(size.width / 2, size.height), 1.5.dp.toPx())
+            drawCircle(glyph, radius = size.minDimension * .36f, style = androidx.compose.ui.graphics.drawscope.Stroke(1.5.dp.toPx()))
+            drawLine(glyph, Offset(size.width / 2, 0f), Offset(size.width / 2, size.height * .2f), 1.5.dp.toPx())
+            drawLine(glyph, Offset(size.width / 2, size.height * .8f), Offset(size.width / 2, size.height), 1.5.dp.toPx())
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
@@ -139,7 +141,7 @@ private fun SectionTitle(text: String) {
 private fun CountryRow(country: Country, selected: Country, onSelect: (Country) -> Unit, onBack: () -> Unit) {
     val active = country.regionCode == selected.regionCode
     Row(
-        Modifier.fillMaxWidth().background(if (active) Color(0xFF151517) else Color.Transparent).clickable { onSelect(country); onBack() }.padding(horizontal = 24.dp, vertical = 13.dp),
+        Modifier.fillMaxWidth().background(if (active) Fusion.colors.surface1 else Color.Transparent).clickable { onSelect(country); onBack() }.padding(horizontal = 24.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(country.flag, fontSize = 24.sp)
@@ -158,16 +160,18 @@ private fun CountryRow(country: Country, selected: Country, onSelect: (Country) 
 
 @Composable
 private fun BackButton(onClick: () -> Unit) {
+    val glyph = KiroXWhite
     Canvas(Modifier.size(32.dp).clickable(onClick = onClick).padding(6.dp)) {
-        drawLine(KiroXWhite, Offset(size.width * .68f, size.height * .1f), Offset(size.width * .28f, size.height * .5f), 2.dp.toPx())
-        drawLine(KiroXWhite, Offset(size.width * .28f, size.height * .5f), Offset(size.width * .68f, size.height * .9f), 2.dp.toPx())
+        drawLine(glyph, Offset(size.width * .68f, size.height * .1f), Offset(size.width * .28f, size.height * .5f), 2.dp.toPx())
+        drawLine(glyph, Offset(size.width * .28f, size.height * .5f), Offset(size.width * .68f, size.height * .9f), 2.dp.toPx())
     }
 }
 
 @Composable
 private fun SearchIcon() {
+    val glyph = KiroXSecondary
     Canvas(Modifier.size(20.dp)) {
-        drawCircle(KiroXSecondary, radius = size.minDimension * .3f, center = Offset(size.width * .43f, size.height * .43f), style = androidx.compose.ui.graphics.drawscope.Stroke(1.5.dp.toPx()))
-        drawLine(KiroXSecondary, Offset(size.width * .65f, size.height * .65f), Offset(size.width * .88f, size.height * .88f), 1.5.dp.toPx())
+        drawCircle(glyph, radius = size.minDimension * .3f, center = Offset(size.width * .43f, size.height * .43f), style = androidx.compose.ui.graphics.drawscope.Stroke(1.5.dp.toPx()))
+        drawLine(glyph, Offset(size.width * .65f, size.height * .65f), Offset(size.width * .88f, size.height * .88f), 1.5.dp.toPx())
     }
 }

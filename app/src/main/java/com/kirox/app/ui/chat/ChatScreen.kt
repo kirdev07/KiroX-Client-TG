@@ -1,5 +1,7 @@
 package com.kirox.app.ui.chat
 
+import androidx.compose.runtime.ReadOnlyComposable
+import com.kirox.app.ui.theme.Fusion
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -51,9 +53,9 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
 
-private val ChatWhite = Color(0xFFF4F4F4)
-private val ChatSecondary = Color(0xFF99999E)
-private val ChatDivider = Color(0xFF242426)
+private val ChatWhite: Color @Composable @ReadOnlyComposable get() = Fusion.colors.textPrimary
+private val ChatSecondary: Color @Composable @ReadOnlyComposable get() = Fusion.colors.textSecondary
+private val ChatDivider: Color @Composable @ReadOnlyComposable get() = Fusion.colors.surface2
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -124,7 +126,7 @@ fun DemoChatScreen(chatId: Long, demoViewModel: DemoViewModel, onBack: () -> Uni
             )
         }
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding).background(Color.Black)) {
+        Box(Modifier.fillMaxSize().padding(padding).background(Fusion.colors.background)) {
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
@@ -138,12 +140,12 @@ fun DemoChatScreen(chatId: Long, demoViewModel: DemoViewModel, onBack: () -> Uni
                 }
             }
             notice?.let { message ->
-                Surface(color = Color(0xFF303033), shape = RoundedCornerShape(12.dp), modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp)) {
+                Surface(color = Fusion.colors.surface3, shape = RoundedCornerShape(12.dp), modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp)) {
                     Text(message, color = ChatWhite, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp))
                 }
                 LaunchedEffect(message) { kotlinx.coroutines.delay(1800); notice = null }
             }
-            DropdownMenu(expanded = overflow, onDismissRequest = { overflow = false }, modifier = Modifier.align(Alignment.TopEnd).background(Color(0xFF19191B))) {
+            DropdownMenu(expanded = overflow, onDismissRequest = { overflow = false }, modifier = Modifier.align(Alignment.TopEnd).background(Fusion.colors.surface2)) {
                 listOf("Поиск", "Очистить историю", if (muted) "Включить уведомления" else "Отключить уведомления").forEach { label -> DropdownMenuItem(text = { Text(label, color = ChatWhite) }, onClick = {
                     overflow = false
                     when (label) {
@@ -173,7 +175,7 @@ fun DemoChatScreen(chatId: Long, demoViewModel: DemoViewModel, onBack: () -> Uni
         selected = null
     }) }
     if (profile) PeerProfileSheet(peer, { profile = false }, { notice = it })
-    if (confirmClear) AlertDialog(onDismissRequest = { confirmClear = false }, containerColor = Color(0xFF171719), title = { Text("Очистить историю?", color = ChatWhite) }, text = { Text("Будут удалены только локальные DEMO-сообщения.", color = ChatSecondary) }, confirmButton = { TextButton(onClick = { demoViewModel.clear(chatId); confirmClear = false }) { Text("Очистить", color = Color(0xFFFF8580)) } }, dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Отмена", color = ChatWhite) } })
+    if (confirmClear) AlertDialog(onDismissRequest = { confirmClear = false }, containerColor = Fusion.colors.surface2, title = { Text("Очистить историю?", color = ChatWhite) }, text = { Text("Будут удалены только локальные DEMO-сообщения.", color = ChatSecondary) }, confirmButton = { TextButton(onClick = { demoViewModel.clear(chatId); confirmClear = false }) { Text("Очистить", color = Fusion.colors.danger) } }, dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Отмена", color = ChatWhite) } })
 }
 
 private fun toMessageUi(item: DemoMessageWithReactions): MessageUi = with(item.message) {
@@ -190,11 +192,11 @@ private fun toDemoMessage(item: MessageUi) = DemoMessage(messageId = item.id, ac
 @Composable
 private fun ChatHeader(peer: ChatPeerUi, onBack: () -> Unit, onProfile: () -> Unit, onOverflow: () -> Unit) {
     val narrow = LocalConfiguration.current.screenWidthDp < 360
-    Surface(color = Color.Black, tonalElevation = 0.dp, modifier = Modifier.statusBarsPadding()) {
+    Surface(color = Fusion.colors.background, tonalElevation = 0.dp, modifier = Modifier.statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             ChatIconButton(KiroXIcon.Back, "Назад", onBack)
             Row(Modifier.weight(1f).height(56.dp).clickable(onClick = onProfile).padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(40.dp).border(1.dp, Color(0xFF737378), CircleShape).clip(CircleShape).background(Color(0xFF343C43)), contentAlignment = Alignment.Center) { Text(peer.initial, color = ChatWhite, fontWeight = FontWeight.Bold) }
+                Box(Modifier.size(40.dp).border(1.dp, Fusion.colors.outlineStrong, CircleShape).clip(CircleShape).background(Fusion.colors.avatar), contentAlignment = Alignment.Center) { Text(peer.initial, color = ChatWhite, fontWeight = FontWeight.Bold) }
                 Spacer(Modifier.width(9.dp))
                 Column(Modifier.weight(1f)) {
                     Text(peer.name, color = ChatWhite, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -211,8 +213,8 @@ private fun ChatHeader(peer: ChatPeerUi, onBack: () -> Unit, onProfile: () -> Un
 
 @Composable
 private fun ChatSearchField(value: String, onChange: (String) -> Unit, onClose: () -> Unit) {
-    Row(Modifier.fillMaxWidth().background(Color.Black).padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        TextField(value = value, onValueChange = onChange, modifier = Modifier.weight(1f).heightIn(min = 48.dp), singleLine = true, placeholder = { Text("Поиск в переписке", color = ChatSecondary) }, leadingIcon = { IconGlyph(KiroXIcon.Search, null, Modifier.size(20.dp), ChatSecondary) }, colors = TextFieldDefaults.colors(focusedContainerColor = Color(0xFF171719), unfocusedContainerColor = Color(0xFF171719), focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent, focusedTextColor = ChatWhite, unfocusedTextColor = ChatWhite), shape = RoundedCornerShape(16.dp))
+    Row(Modifier.fillMaxWidth().background(Fusion.colors.background).padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        TextField(value = value, onValueChange = onChange, modifier = Modifier.weight(1f).heightIn(min = 48.dp), singleLine = true, placeholder = { Text("Поиск в переписке", color = ChatSecondary) }, leadingIcon = { IconGlyph(KiroXIcon.Search, null, Modifier.size(20.dp), ChatSecondary) }, colors = TextFieldDefaults.colors(focusedContainerColor = Fusion.colors.surface2, unfocusedContainerColor = Fusion.colors.surface2, focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent, focusedTextColor = ChatWhite, unfocusedTextColor = ChatWhite), shape = RoundedCornerShape(16.dp))
         Text("×", color = ChatSecondary, fontSize = 24.sp, modifier = Modifier.clickable(onClick = onClose).padding(12.dp))
     }
 }
@@ -222,7 +224,7 @@ private fun ChatSearchField(value: String, onChange: (String) -> Unit, onClose: 
 private fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAppearance, pinned: Boolean = false, onLongClick: () -> Unit, onReply: () -> Unit) {
     if (message.direction == MessageDirection.System) {
         Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-            Text(message.text, color = ChatSecondary, fontSize = 11.sp, modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0xFF19191B)).padding(horizontal = 12.dp, vertical = 5.dp))
+            Text(message.text, color = ChatSecondary, fontSize = 11.sp, modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Fusion.colors.surface2).padding(horizontal = 12.dp, vertical = 5.dp))
         }
         return
     }
@@ -242,7 +244,7 @@ private fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatApp
                 .padding(horizontal = 12.dp, vertical = 9.dp)
         ) {
             if (pinned) { Row(verticalAlignment = Alignment.CenterVertically) { IconGlyph(KiroXIcon.Pin, null, Modifier.size(13.dp), ChatSecondary); Spacer(Modifier.width(4.dp)); Text("Закреплено", color = ChatSecondary, fontSize = 10.sp) }; Spacer(Modifier.height(4.dp)) }
-            message.forwardedFrom?.let { Text("Переслано от $it", color = Color(0xFFC8C8CC), fontSize = 11.sp, fontWeight = FontWeight.SemiBold); Spacer(Modifier.height(4.dp)) }
+            message.forwardedFrom?.let { Text("Переслано от $it", color = Fusion.colors.textPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold); Spacer(Modifier.height(4.dp)) }
             message.quote?.let { QuoteBlock(it); Spacer(Modifier.height(6.dp)) }
             when (message.kind) {
                 MessageKind.Photo, MessageKind.Video -> MediaPlaceholder(message.kind)
@@ -256,23 +258,23 @@ private fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatApp
                 if (outgoing) { Spacer(Modifier.width(4.dp)); Text(deliveryGlyph(message.delivery), color = ChatSecondary, fontSize = 10.sp) }
             }
             if (message.reactions.isNotEmpty()) {
-                Row(Modifier.padding(top = 5.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) { message.reactions.forEach { reaction -> Text("${reaction.emoji} ${reaction.count}", color = ChatWhite, fontSize = 11.sp, modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(if (reaction.selected) Color(0xFF4B4C50) else Color(0xFF29292C)).padding(horizontal = 8.dp, vertical = 4.dp)) } }
+                Row(Modifier.padding(top = 5.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) { message.reactions.forEach { reaction -> Text("${reaction.emoji} ${reaction.count}", color = ChatWhite, fontSize = 11.sp, modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(if (reaction.selected) Fusion.colors.surface3 else Fusion.colors.surface3).padding(horizontal = 8.dp, vertical = 4.dp)) } }
             }
         }
     }
 }
 
 @Composable private fun QuoteBlock(quote: QuoteUi) { Row(Modifier.fillMaxWidth()) { Box(Modifier.width(2.dp).height(36.dp).background(ChatWhite)); Spacer(Modifier.width(7.dp)); Column { Text(quote.author, color = ChatWhite, fontSize = 11.sp, fontWeight = FontWeight.SemiBold); Text(quote.text, color = ChatSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) } } }
-@Composable private fun MediaPlaceholder(kind: MessageKind) { Box(Modifier.fillMaxWidth().height(132.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF292A2D)), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { IconGlyph(if (kind == MessageKind.Video) KiroXIcon.Video else KiroXIcon.Media, null, Modifier.size(28.dp), ChatSecondary); Text(if (kind == MessageKind.Video) "Видео" else "Фото", color = ChatSecondary, fontSize = 12.sp) } } }
+@Composable private fun MediaPlaceholder(kind: MessageKind) { Box(Modifier.fillMaxWidth().height(132.dp).clip(RoundedCornerShape(12.dp)).background(Fusion.colors.surface3), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { IconGlyph(if (kind == MessageKind.Video) KiroXIcon.Video else KiroXIcon.Media, null, Modifier.size(28.dp), ChatSecondary); Text(if (kind == MessageKind.Video) "Видео" else "Фото", color = ChatSecondary, fontSize = 12.sp) } } }
 @Composable private fun VoiceMessage(duration: String) { Row(verticalAlignment = Alignment.CenterVertically) { IconGlyph(KiroXIcon.Send, null, Modifier.size(28.dp), ChatWhite); Spacer(Modifier.width(9.dp)); Box(Modifier.width(120.dp).height(2.dp).background(ChatSecondary)); Spacer(Modifier.width(8.dp)); Text(duration, color = ChatSecondary, fontSize = 11.sp) } }
-@Composable private fun DocumentMessage(text: String) { Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(42.dp).clip(CircleShape).background(Color(0xFF3B3C40)), contentAlignment = Alignment.Center) { IconGlyph(KiroXIcon.File, null, Modifier.size(22.dp), ChatWhite) }; Spacer(Modifier.width(9.dp)); Text(text, color = ChatWhite, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) } }
+@Composable private fun DocumentMessage(text: String) { Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(42.dp).clip(CircleShape).background(Fusion.colors.surface3), contentAlignment = Alignment.Center) { IconGlyph(KiroXIcon.File, null, Modifier.size(22.dp), ChatWhite) }; Spacer(Modifier.width(9.dp)); Text(text, color = ChatWhite, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) } }
 private fun deliveryGlyph(state: DeliveryState) = when (state) { DeliveryState.Sending -> "◷"; DeliveryState.Sent -> "✓"; DeliveryState.Delivered, DeliveryState.Read -> "✓✓"; DeliveryState.Failed -> "!" }
 
 @Composable
 private fun ChatComposer(value: TextFieldValue, reply: MessageUi?, editing: MessageUi?, onValueChange: (TextFieldValue) -> Unit, onCancelContext: () -> Unit, onAttach: () -> Unit, onEmoji: () -> Unit, onSend: () -> Unit, onMic: () -> Unit, appearance: ChatAppearance) {
-    Surface(color = Color.Black) {
+    Surface(color = Fusion.colors.background) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
-            AnimatedVisibility(reply != null || editing != null) { (editing ?: reply)?.let { context -> Row(Modifier.fillMaxWidth().background(Color(0xFF121214)).padding(horizontal = 14.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.width(2.dp).height(34.dp).background(ChatWhite)); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(if (editing != null) "Редактирование сообщения" else "Ответ: ${context.author}", color = ChatWhite, fontSize = 11.sp); Text(context.text, color = ChatSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }; Text("×", color = ChatSecondary, fontSize = 22.sp, modifier = Modifier.clickable(onClick = onCancelContext).padding(8.dp)) } } }
+            AnimatedVisibility(reply != null || editing != null) { (editing ?: reply)?.let { context -> Row(Modifier.fillMaxWidth().background(Fusion.colors.surface1).padding(horizontal = 14.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.width(2.dp).height(34.dp).background(ChatWhite)); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(if (editing != null) "Редактирование сообщения" else "Ответ: ${context.author}", color = ChatWhite, fontSize = 11.sp); Text(context.text, color = ChatSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }; Text("×", color = ChatSecondary, fontSize = 22.sp, modifier = Modifier.clickable(onClick = onCancelContext).padding(8.dp)) } } }
             Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 6.dp), verticalAlignment = Alignment.Bottom) {
                 ChatIconButton(KiroXIcon.Attach, "Вложения", onAttach)
                 Surface(color = Color(appearance.inputColor), shape = RoundedCornerShape(22.dp), modifier = Modifier.weight(1f)) {
@@ -289,29 +291,29 @@ private fun ChatComposer(value: TextFieldValue, reply: MessageUi?, editing: Mess
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun AttachmentSheet(onDismiss: () -> Unit, onPick: (String) -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF111113), contentColor = ChatWhite) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Fusion.colors.surface1, contentColor = ChatWhite) {
         Text("Вложения", fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
         val actions = listOf(KiroXIcon.Media to "Галерея", KiroXIcon.Camera to "Камера", KiroXIcon.File to "Документ", KiroXIcon.Music to "Музыка", KiroXIcon.Contacts to "Контакт", KiroXIcon.Location to "Местоположение")
-        actions.chunked(3).forEach { row -> Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) { row.forEach { (icon, title) -> Column(Modifier.weight(1f).clickable { onPick(title) }.padding(vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) { Box(Modifier.size(48.dp).clip(CircleShape).background(Color(0xFF242427)), contentAlignment = Alignment.Center) { IconGlyph(icon, null, Modifier.size(24.dp), ChatWhite) }; Spacer(Modifier.height(7.dp)); Text(title, color = ChatWhite, fontSize = 12.sp, maxLines = 1) } } } }
+        actions.chunked(3).forEach { row -> Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) { row.forEach { (icon, title) -> Column(Modifier.weight(1f).clickable { onPick(title) }.padding(vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) { Box(Modifier.size(48.dp).clip(CircleShape).background(Fusion.colors.surface2), contentAlignment = Alignment.Center) { IconGlyph(icon, null, Modifier.size(24.dp), ChatWhite) }; Spacer(Modifier.height(7.dp)); Text(title, color = ChatWhite, fontSize = 12.sp, maxLines = 1) } } } }
         Text("Отправка файлов в DEMO недоступна", color = ChatSecondary, fontSize = 11.sp, modifier = Modifier.padding(20.dp)); Spacer(Modifier.navigationBarsPadding())
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun MessageActionsSheet(message: MessageUi, onDismiss: () -> Unit, onReply: () -> Unit, onReaction: (String) -> Unit, onAction: (String) -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF111113), contentColor = ChatWhite) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Fusion.colors.surface1, contentColor = ChatWhite) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceAround) { listOf("♡", "👍", "🔥", "🙂", "👏").forEach { emoji -> Text(emoji, fontSize = 23.sp, modifier = Modifier.clip(CircleShape).clickable { onReaction(emoji) }.padding(9.dp)) } }
         val actions = buildList { add(KiroXIcon.Reply to "Ответить"); if (message.kind == MessageKind.Text) add(KiroXIcon.Copy to "Копировать"); add(KiroXIcon.Forward to "Переслать"); add(KiroXIcon.Pin to "Закрепить"); if (message.canEdit) add(KiroXIcon.Edit to "Редактировать"); if (message.canDelete) add(KiroXIcon.Delete to "Удалить"); add(KiroXIcon.Check to "Выбрать") }
-        actions.forEach { (icon, title) -> Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable { if (title == "Ответить") onReply() else onAction(title) }.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { IconGlyph(icon, null, Modifier.size(22.dp), ChatWhite); Spacer(Modifier.width(16.dp)); Text(title, color = if (title == "Удалить") Color(0xFFFF8580) else ChatWhite, fontSize = 15.sp) } }
+        actions.forEach { (icon, title) -> Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable { if (title == "Ответить") onReply() else onAction(title) }.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { IconGlyph(icon, null, Modifier.size(22.dp), ChatWhite); Spacer(Modifier.width(16.dp)); Text(title, color = if (title == "Удалить") Fusion.colors.danger else ChatWhite, fontSize = 15.sp) } }
         Spacer(Modifier.navigationBarsPadding())
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable private fun PeerProfileSheet(peer: ChatPeerUi, onDismiss: () -> Unit, onNotice: (String) -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color(0xFF111113), contentColor = ChatWhite) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Fusion.colors.surface1, contentColor = ChatWhite) {
         Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(Modifier.size(88.dp).border(1.dp, Color(0xFF77777B), CircleShape).clip(CircleShape).background(Color(0xFF343C43)), contentAlignment = Alignment.Center) { Text(peer.initial, color = ChatWhite, fontSize = 30.sp, fontWeight = FontWeight.Bold) }
+            Box(Modifier.size(88.dp).border(1.dp, Fusion.colors.textTertiary, CircleShape).clip(CircleShape).background(Fusion.colors.avatar), contentAlignment = Alignment.Center) { Text(peer.initial, color = ChatWhite, fontSize = 30.sp, fontWeight = FontWeight.Bold) }
             Spacer(Modifier.height(12.dp)); Text(peer.name, color = ChatWhite, fontSize = 21.sp, fontWeight = FontWeight.Bold); Text(peer.status, color = ChatSecondary, fontSize = 13.sp)
             Spacer(Modifier.height(18.dp)); OutlinedButton(onClick = { onNotice("Полный профиль будет подключён к реальным данным") }) { Text("Открыть профиль", color = ChatWhite) }
             Text("DEMO · локальные данные", color = ChatSecondary, fontSize = 11.sp, modifier = Modifier.padding(16.dp)); Spacer(Modifier.navigationBarsPadding())

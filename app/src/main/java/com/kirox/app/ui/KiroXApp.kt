@@ -1,5 +1,6 @@
 package com.kirox.app.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -10,8 +11,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -26,39 +27,47 @@ import com.kirox.app.telegram.TelegramAuthState
 import com.kirox.app.telegram.TelegramViewModel
 import com.kirox.app.ui.auth.TelegramAuthStepScreen
 import com.kirox.app.ui.home.TelegramMainScreen
+import com.kirox.app.ui.navigation.BackStack
+import com.kirox.app.ui.navigation.NavGraph
+import com.kirox.app.ui.navigation.Screen
+import com.kirox.app.ui.theme.Fusion
+import com.kirox.app.ui.theme.FusionMotion
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-
-private enum class Destination { Phone, Countries, TelegramAuth, TelegramHome, DemoCode, DemoHome }
 
 @Composable
 fun KiroXApp() {
     val context = LocalContext.current
     val telegramViewModel: TelegramViewModel = viewModel()
     val telegramAuth by telegramViewModel.auth.state.collectAsStateWithLifecycle()
+    val authRevision by telegramViewModel.auth.revision.collectAsStateWithLifecycle()
+    val telegramBlocked by telegramViewModel.auth.blocked.collectAsStateWithLifecycle()
     val telegramBusy by telegramViewModel.auth.busy.collectAsStateWithLifecycle()
     val telegramError by telegramViewModel.auth.error.collectAsStateWithLifecycle()
     val mainChats by telegramViewModel.chats.mainChats.collectAsStateWithLifecycle()
     val archiveChats by telegramViewModel.chats.archiveChats.collectAsStateWithLifecycle()
     var phoneState by remember { mutableStateOf<PhoneEntryState?>(null) }
-    var splashVisible by remember { mutableStateOf(true) }
-    var destination by remember { mutableStateOf(Destination.Phone) }
+    var splashVisible by rememberSaveable { mutableStateOf(true) }
+    val stack = rememberSaveable(saver = BackStack.Saver) { BackStack(listOf(Screen.Phone)) }
 
     LaunchedEffect(Unit) {
         phoneState = withContext(Dispatchers.Default) { PhoneEntryState.create(context) }
     }
 
-    LaunchedEffect(telegramAuth) {
-        if (destination == Destination.DemoCode || destination == Destination.DemoHome || destination == Destination.Countries) return@LaunchedEffect
-        destination = when (telegramAuth) {
-            TelegramAuthState.Ready -> Destination.TelegramHome
-            TelegramAuthState.WaitPhoneNumber, is TelegramAuthState.Blocked, TelegramAuthState.Initializing -> Destination.Phone
-            TelegramAuthState.Closing -> Destination.Phone
-            else -> Destination.TelegramAuth
+    // TDLib drives the graph: Ready opens main, auth steps open the auth step screen.
+    LaunchedEffect(authRevision) {
+        val inDemo = Screen.DemoCode in stack || Screen.DemoHome in stack
+        when (telegramAuth) {
+            TelegramAuthState.Ready -> stack.resetTo(Screen.Chats)
+            TelegramAuthState.WaitPhoneNumber, TelegramAuthState.Initializing, TelegramAuthState.Closing, is TelegramAuthState.Blocked ->
+                if (stack.current.graph == NavGraph.Main || stack.current == Screen.AuthStep) stack.resetTo(Screen.Phone)
+            else -> if (!inDemo) stack.resetTo(Screen.Phone, Screen.AuthStep)
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    BackHandler(enabled = stack.canPop) { stack.pop() }
+
+    Box(Modifier.fillMaxSize().background(Fusion.colors.background)) {
         Crossfade(
             targetState = splashVisible || phoneState == null,
             animationSpec = tween(0),
@@ -73,35 +82,35 @@ fun KiroXApp() {
             } else {
                 val state = requireNotNull(phoneState)
                 AnimatedContent(
-                    targetState = destination,
+                    targetState = stack.current,
                     transitionSpec = {
-                        if (targetState != Destination.Phone) {
-                            slideInHorizontally(tween(280)) { it } togetherWith slideOutHorizontally(tween(280)) { -it / 4 }
+                        if (stack.forward) {
+                            slideInHorizontally(tween(FusionMotion.SLOW)) { it } togetherWith slideOutHorizontally(tween(FusionMotion.SLOW)) { -it / 4 }
                         } else {
-                            slideInHorizontally(tween(280)) { -it / 4 } togetherWith slideOutHorizontally(tween(280)) { it }
+                            slideInHorizontally(tween(FusionMotion.SLOW)) { -it / 4 } togetherWith slideOutHorizontally(tween(FusionMotion.SLOW)) { it }
                         }
                     },
-                    label = "phone_navigation"
+                    label = "navigation"
                 ) { screen ->
                     when (screen) {
-                        Destination.Phone -> PhoneLoginScreen(
+                        Screen.Phone -> PhoneLoginScreen(
                             state,
-                            onChooseCountry = { destination = Destination.Countries },
-                            onDemoMode = { destination = Destination.DemoCode },
+                            onChooseCountry = { stack.push(Screen.Countries) },
+                            onDemoMode = { stack.push(Screen.DemoCode) },
                             onContinue = telegramViewModel.auth::phone,
-                            externalStatus = (telegramAuth as? TelegramAuthState.Blocked)?.message ?: telegramError,
+                            externalStatus = telegramBlocked ?: (telegramAuth as? TelegramAuthState.Blocked)?.message ?: telegramError,
                             busy = telegramBusy
                         )
-                        Destination.Countries -> CountryPickerScreen(state, onBack = { destination = Destination.Phone })
-                        Destination.DemoCode -> DemoCodeScreen(
+                        Screen.Countries -> CountryPickerScreen(state, onBack = { stack.pop() })
+                        Screen.DemoCode -> DemoCodeScreen(
                             codeLength = DemoAuth.codeLength,
                             onVerify = DemoAuth::verify,
-                            onSuccess = { destination = Destination.DemoHome },
-                            onExit = { destination = Destination.Phone }
+                            onSuccess = { stack.replaceTop(Screen.DemoHome) },
+                            onExit = { stack.pop() }
                         )
-                        Destination.DemoHome -> DemoMainScreen(onExit = { destination = Destination.Phone })
-                        Destination.TelegramAuth -> TelegramAuthStepScreen(telegramAuth, telegramViewModel.auth, telegramBusy, telegramError)
-                        Destination.TelegramHome -> TelegramMainScreen(mainChats, archiveChats)
+                        Screen.DemoHome -> DemoMainScreen(onExit = { stack.resetTo(Screen.Phone) })
+                        Screen.AuthStep -> TelegramAuthStepScreen(telegramAuth, telegramViewModel.auth, telegramBusy, telegramError)
+                        Screen.Chats -> TelegramMainScreen(mainChats, archiveChats)
                     }
                 }
             }

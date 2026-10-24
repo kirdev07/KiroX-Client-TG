@@ -45,6 +45,11 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    lint {
+        // Generated TDLib bindings (5 MB) exceed lint's file size limit; the code is not ours to fix.
+        disable += "LintError"
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true

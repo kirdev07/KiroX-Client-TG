@@ -1,5 +1,6 @@
 package com.kirox.app.ui.auth
 
+import com.kirox.app.ui.theme.Fusion
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -51,14 +52,14 @@ fun TelegramAuthStepScreen(state: TelegramAuthState, repository: TelegramAuthRep
         else -> "Подождите…"
     }
     Column(
-        Modifier.fillMaxSize().background(Color.Black).statusBarsPadding().navigationBarsPadding()
+        Modifier.fillMaxSize().background(Fusion.colors.background).statusBarsPadding().navigationBarsPadding()
             .imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 28.dp)
     ) {
-        Text("kiroX", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Light)
+        Text("kiroX", color = Fusion.colors.textPrimary, fontSize = 30.sp, fontWeight = FontWeight.Light)
         Spacer(Modifier.height(56.dp))
-        Text(title, color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+        Text(title, color = Fusion.colors.textPrimary, fontSize = 32.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
-        Text(description, color = Color(0xFF96969B), fontSize = 15.sp, lineHeight = 21.sp)
+        Text(description, color = Fusion.colors.textSecondary, fontSize = 15.sp, lineHeight = 21.sp)
         Spacer(Modifier.height(32.dp))
         if (state !is TelegramAuthState.WaitOtherDevice) {
             AuthField(
@@ -88,7 +89,7 @@ fun TelegramAuthStepScreen(state: TelegramAuthState, repository: TelegramAuthRep
         }
         if (error != null) {
             Spacer(Modifier.height(12.dp))
-            Text(error, color = Color(0xFFFF6961), fontSize = 13.sp)
+            Text(error, color = Fusion.colors.danger, fontSize = 13.sp)
         }
         Spacer(Modifier.height(24.dp))
         if (state !is TelegramAuthState.WaitOtherDevice) {
@@ -107,13 +108,13 @@ fun TelegramAuthStepScreen(state: TelegramAuthState, repository: TelegramAuthRep
             Spacer(Modifier.height(10.dp))
             Text(
                 if (state.timeout > 0) "Повторная отправка будет доступна через ${state.timeout} с" else "Отправить код повторно",
-                color = if (state.timeout > 0) Color(0xFF77777C) else Color.White,
+                color = if (state.timeout > 0) Fusion.colors.textTertiary else Fusion.colors.textPrimary,
                 modifier = Modifier.heightIn(min = 48.dp).wrapContentHeight().clickable(enabled = state.timeout <= 0 && !busy) { repository.resend() }
             )
         }
         if (busy) {
             Spacer(Modifier.height(20.dp))
-            CircularProgressIndicator(Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
+            CircularProgressIndicator(Modifier.size(22.dp), color = Fusion.colors.textPrimary, strokeWidth = 2.dp)
         }
     }
 }
@@ -122,12 +123,12 @@ fun TelegramAuthStepScreen(state: TelegramAuthState, repository: TelegramAuthRep
 private fun AuthField(value: String, onValueChange: (String) -> Unit, hint: String, numeric: Boolean = false, password: Boolean = false) {
     BasicTextField(
         value, onValueChange,
-        Modifier.fillMaxWidth().heightIn(min = 58.dp).clip(RoundedCornerShape(17.dp)).background(Color(0xFF111113))
-            .border(1.dp, Color(0xFF303034), RoundedCornerShape(17.dp)).padding(horizontal = 16.dp, vertical = 18.dp),
-        textStyle = TextStyle(Color.White, 17.sp), cursorBrush = SolidColor(Color.White), singleLine = true,
+        Modifier.fillMaxWidth().heightIn(min = 58.dp).clip(RoundedCornerShape(17.dp)).background(Fusion.colors.surface1)
+            .border(1.dp, Fusion.colors.outline, RoundedCornerShape(17.dp)).padding(horizontal = 16.dp, vertical = 18.dp),
+        textStyle = TextStyle(Fusion.colors.textPrimary, 17.sp), cursorBrush = SolidColor(Fusion.colors.textPrimary), singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = if (numeric) KeyboardType.NumberPassword else if (password) KeyboardType.Password else KeyboardType.Text),
         visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-        decorationBox = { inner -> Box { if (value.isEmpty()) Text(hint, color = Color(0xFF66666B), fontSize = 16.sp); inner() } }
+        decorationBox = { inner -> Box { if (value.isEmpty()) Text(hint, color = Fusion.colors.textTertiary, fontSize = 16.sp); inner() } }
     )
 }
 
@@ -135,7 +136,7 @@ private fun AuthField(value: String, onValueChange: (String) -> Unit, hint: Stri
 private fun AuthButton(text: String, disabled: Boolean, onClick: () -> Unit) {
     Box(
         Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(18.dp))
-            .background(if (disabled) Color(0xFF858589) else Color.White).clickable(enabled = !disabled, onClick = onClick),
+            .background(if (disabled) Fusion.colors.textSecondary else Fusion.colors.accent).clickable(enabled = !disabled, onClick = onClick),
         contentAlignment = Alignment.Center
-    ) { Text(text, color = Color.Black, fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
+    ) { Text(text, color = Fusion.colors.onAccent, fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
 }

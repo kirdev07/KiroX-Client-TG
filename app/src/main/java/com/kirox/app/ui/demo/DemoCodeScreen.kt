@@ -1,5 +1,6 @@
 package com.kirox.app.ui.demo
 
+import com.kirox.app.ui.theme.Fusion
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -71,7 +72,7 @@ fun DemoCodeScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(Fusion.colors.background)
             .statusBarsPadding()
             .navigationBarsPadding()
             .imePadding()
@@ -119,7 +120,7 @@ fun DemoCodeScreen(
                                 .border(
                                     1.dp,
                                     when {
-                                        hasError -> Color(0xFFFF6961)
+                                        hasError -> Fusion.colors.danger
                                         active -> KiroXWhite
                                         else -> KiroXOutline
                                     },
@@ -135,7 +136,7 @@ fun DemoCodeScreen(
         )
         Spacer(Modifier.height(14.dp))
         AnimatedVisibility(hasError, enter = fadeIn(), exit = fadeOut()) {
-            Text("Неверный код. Проверьте цифры и попробуйте снова.", color = Color(0xFFFF6961), fontSize = 13.sp)
+            Text("Неверный код. Проверьте цифры и попробуйте снова.", color = Fusion.colors.danger, fontSize = 13.sp)
         }
         Spacer(Modifier.height(18.dp))
         Text("Тестовый код: 12345", color = KiroXSecondary, fontSize = 13.sp)
@@ -148,10 +149,10 @@ fun DemoCodeScreen(
 @Composable
 internal fun DemoBadge() {
     Box(
-        Modifier.clip(RoundedCornerShape(50)).background(Color.White).padding(horizontal = 12.dp, vertical = 7.dp),
+        Modifier.clip(RoundedCornerShape(50)).background(Fusion.colors.accent).padding(horizontal = 12.dp, vertical = 7.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text("ДЕМО-РЕЖИМ", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = .8.sp)
+        Text("ДЕМО-РЕЖИМ", color = Fusion.colors.onAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = .8.sp)
     }
 }
 
