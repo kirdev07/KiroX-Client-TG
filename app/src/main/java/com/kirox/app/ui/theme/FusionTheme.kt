@@ -87,6 +87,9 @@ val LocalLightEffects = staticCompositionLocalOf { false }
 /** Corner radius of chat bubbles in dp (KiroX «Форма пузырей»). */
 val LocalBubbleRadius = staticCompositionLocalOf { 16f }
 
+/** Chat look from KiroX settings: bubbles, text size, wallpaper, density. */
+val LocalChatStyle = staticCompositionLocalOf { com.kirox.app.settings.ChatStyle() }
+
 /** A Fusion duration scaled by the user's animation level. */
 @Composable
 @ReadOnlyComposable

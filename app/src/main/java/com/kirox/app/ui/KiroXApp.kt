@@ -79,6 +79,9 @@ fun KiroXApp() {
     val motionLevel by settings.motion.collectAsStateWithLifecycle()
     val effectsQuality by settings.effectsQuality.collectAsStateWithLifecycle()
     val effectScene by settings.effectScene.collectAsStateWithLifecycle()
+    val chatTextSize by settings.chatTextSize.collectAsStateWithLifecycle()
+    val chatWallpaper by settings.chatWallpaper.collectAsStateWithLifecycle()
+    val chatDensity by settings.chatDensity.collectAsStateWithLifecycle()
     val weakDevice = remember { com.kirox.app.settings.prefersLightEffects(context) }
     val scope = rememberCoroutineScope()
     fun openChat(id: Long) { openChatId = id; telegramViewModel.messages.open(id); stack.push(Screen.Conversation) }
@@ -153,6 +156,12 @@ fun KiroXApp() {
                                 onBubbleShape = settings::setBubbleShape,
                                 motion = motionLevel,
                                 onMotion = settings::setMotion,
+                                chatTextSize = chatTextSize,
+                                onChatTextSize = settings::setChatTextSize,
+                                chatWallpaper = chatWallpaper,
+                                onChatWallpaper = settings::setChatWallpaper,
+                                chatDensity = chatDensity,
+                                onChatDensity = settings::setChatDensity,
                                 effectScene = effectScene,
                                 onEffectScene = settings::setEffectScene,
                                 effectsQuality = effectsQuality,

@@ -73,8 +73,10 @@ fun TelegramChatScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
-    val bubbleRadius = com.kirox.app.ui.theme.LocalBubbleRadius.current
-    val appearance = remember(bubbleRadius) { ChatAppearance(bubbleRadiusDp = bubbleRadius) }
+    val style = com.kirox.app.ui.theme.LocalChatStyle.current
+    val appearance = remember(style) {
+        ChatAppearance(bubbleRadiusDp = style.bubbleRadiusDp, textScale = style.textScale, messageSpacingDp = style.density.spacingDp, bubblePaddingDp = style.density.paddingDp)
+    }
     var input by rememberSaveable(history.chatId, stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
     var replyTo by remember(history.chatId) { mutableStateOf<MessageUi?>(null) }
     var editing by remember(history.chatId) { mutableStateOf<MessageUi?>(null) }
@@ -152,7 +154,8 @@ fun TelegramChatScreen(
             )
         }
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding).background(Fusion.colors.background)) {
+        Box(Modifier.fillMaxSize().padding(padding)) {
+            com.kirox.app.ui.components.ChatWallpaperLayer(style.wallpaper, Modifier.matchParentSize())
             if (history.messages.isEmpty()) {
                 Box(Modifier.fillMaxSize(), Alignment.Center) {
                     if (history.reachedStart) Text("Сообщений пока нет", color = Fusion.colors.textSecondary)

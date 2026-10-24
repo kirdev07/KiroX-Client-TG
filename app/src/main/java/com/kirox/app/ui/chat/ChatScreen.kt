@@ -108,7 +108,7 @@ internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAp
                 .clip(RoundedCornerShape(appearance.bubbleRadiusDp.dp))
                 .background(Color(if (outgoing) appearance.outgoingColor else appearance.incomingColor))
                 .combinedClickable(onClick = {}, onLongClick = onLongClick)
-                .padding(horizontal = 12.dp, vertical = 9.dp)
+                .padding(horizontal = 12.dp, vertical = appearance.bubblePaddingDp.dp)
         ) {
             if (showAuthor && !outgoing && !grouped) { Text(message.author, color = ChatWhite, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis); Spacer(Modifier.height(3.dp)) }
             if (pinned) { Row(verticalAlignment = Alignment.CenterVertically) { IconGlyph(KiroXIcon.Pin, null, Modifier.size(13.dp), ChatSecondary); Spacer(Modifier.width(4.dp)); Text("Закреплено", color = ChatSecondary, fontSize = 10.sp) }; Spacer(Modifier.height(4.dp)) }

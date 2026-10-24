@@ -196,13 +196,19 @@ internal fun ThemesScreen(palette: FusionPalette, onPalette: (FusionPalette) -> 
     }
 }
 
-/** Chat appearance: live chat preview and bubble shape. */
+/** Chat appearance: live preview, bubble shape, text size, wallpaper and density. */
 @Composable
-internal fun ChatStyleScreen(bubbleShape: com.kirox.app.settings.BubbleShape, onBubbleShape: (com.kirox.app.settings.BubbleShape) -> Unit, onBack: () -> Unit) {
+internal fun ChatStyleScreen(
+    bubbleShape: com.kirox.app.settings.BubbleShape, onBubbleShape: (com.kirox.app.settings.BubbleShape) -> Unit,
+    textSize: com.kirox.app.settings.ChatTextSize, onTextSize: (com.kirox.app.settings.ChatTextSize) -> Unit,
+    wallpaper: com.kirox.app.settings.ChatWallpaper, onWallpaper: (com.kirox.app.settings.ChatWallpaper) -> Unit,
+    density: com.kirox.app.settings.ChatDensity, onDensity: (com.kirox.app.settings.ChatDensity) -> Unit,
+    onBack: () -> Unit
+) {
     BackHandler(onBack = onBack)
     LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { BackTitle("Чаты", onBack) }
-        item { LivePreview(bubbleShape.radiusDp) }
+        item { LivePreview(bubbleShape.radiusDp, textSize.scale, wallpaper, density) }
         item { SectionCaption("Пузыри сообщений") }
         item {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -211,15 +217,53 @@ internal fun ChatStyleScreen(bubbleShape: com.kirox.app.settings.BubbleShape, on
                 }
             }
         }
+        item { SectionCaption("Обои") }
+        item {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                com.kirox.app.settings.ChatWallpaper.entries.forEach { option ->
+                    OptionCard(option == wallpaper, Modifier.weight(1f), onClick = { onWallpaper(option) }) {
+                        Box(Modifier.fillMaxWidth().height(54.dp).clip(RoundedCornerShape(8.dp))) {
+                            com.kirox.app.ui.components.ChatWallpaperLayer(option, Modifier.matchParentSize(), patternScale = 0.45f)
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Text(option.title, color = if (option == wallpaper) Fusion.colors.textPrimary else Fusion.colors.textSecondary, fontSize = 12.sp,
+                            fontWeight = if (option == wallpaper) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1)
+                    }
+                }
+            }
+        }
+        item { SectionCaption("Размер текста") }
+        item { PillSegment(com.kirox.app.settings.ChatTextSize.entries, textSize, { it.title }, onTextSize) }
+        item { SectionCaption("Плотность") }
+        item { PillSegment(com.kirox.app.settings.ChatDensity.entries, density, { it.title }, onDensity) }
     }
 }
 
-/** A small chat mock that redraws instantly with the chosen theme and bubble shape. */
 @Composable
-private fun LivePreview(radius: Float) {
+private fun <T> PillSegment(options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
+    Row(Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(CircleShape).background(Fusion.colors.surface1).padding(3.dp)) {
+        options.forEach { option ->
+            val active = option == selected
+            Text(
+                label(option), color = if (active) Fusion.colors.textPrimary else Fusion.colors.textSecondary,
+                fontSize = 13.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium, textAlign = TextAlign.Center, maxLines = 1,
+                modifier = Modifier.weight(1f).clip(CircleShape).background(if (active) Fusion.colors.surface3 else Fusion.colors.surface1)
+                    .clickable { onSelect(option) }.padding(vertical = 8.dp)
+            )
+        }
+    }
+}
+
+/** A small chat mock that redraws instantly with the chosen theme and chat settings. */
+@Composable
+private fun LivePreview(
+    radius: Float,
+    textScale: Float = 1f,
+    wallpaper: com.kirox.app.settings.ChatWallpaper = com.kirox.app.settings.ChatWallpaper.None,
+    density: com.kirox.app.settings.ChatDensity = com.kirox.app.settings.ChatDensity.Normal
+) {
     Column(
-        Modifier.padding(16.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Fusion.colors.background)
-            .border(1.dp, Fusion.colors.outline, RoundedCornerShape(20.dp))
+        Modifier.padding(16.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp)).border(1.dp, Fusion.colors.outline, RoundedCornerShape(20.dp))
     ) {
         Row(Modifier.fillMaxWidth().background(Fusion.colors.surface1).padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(32.dp).clip(CircleShape).background(Fusion.colors.avatar), contentAlignment = Alignment.Center) {
@@ -231,11 +275,15 @@ private fun LivePreview(radius: Float) {
                 Text("в сети", color = Fusion.colors.textSecondary, fontSize = 12.sp)
             }
         }
-        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Привет! Как тебе новый kiroX?", color = Fusion.colors.textPrimary, fontSize = 14.sp,
-                modifier = Modifier.clip(RoundedCornerShape(radius.dp)).background(Fusion.colors.surface2).padding(horizontal = 12.dp, vertical = 8.dp))
-            Text("Чисто и быстро 👌", color = Fusion.colors.textPrimary, fontSize = 14.sp,
-                modifier = Modifier.align(Alignment.End).clip(RoundedCornerShape(radius.dp)).background(Fusion.colors.surface3).padding(horizontal = 12.dp, vertical = 8.dp))
+        Box(Modifier.fillMaxWidth()) {
+            com.kirox.app.ui.components.ChatWallpaperLayer(wallpaper, Modifier.matchParentSize())
+            Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(density.spacingDp.dp + 2.dp)) {
+                listOf("Привет! Как тебе новый kiroX?" to false, "Чисто и быстро 👌" to true, "Обои и размер текста тоже меняются" to false).forEach { (text, mine) ->
+                    Text(text, color = Fusion.colors.textPrimary, fontSize = (14f * textScale).sp,
+                        modifier = Modifier.align(if (mine) Alignment.End else Alignment.Start).clip(RoundedCornerShape(radius.dp))
+                            .background(if (mine) Fusion.colors.surface3 else Fusion.colors.surface2).padding(horizontal = 12.dp, vertical = density.paddingDp.dp))
+                }
+            }
         }
     }
 }

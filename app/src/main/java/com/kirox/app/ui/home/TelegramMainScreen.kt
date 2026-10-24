@@ -97,6 +97,12 @@ fun TelegramMainScreen(
     onBubbleShape: (com.kirox.app.settings.BubbleShape) -> Unit,
     motion: com.kirox.app.settings.MotionLevel,
     onMotion: (com.kirox.app.settings.MotionLevel) -> Unit,
+    chatTextSize: com.kirox.app.settings.ChatTextSize,
+    onChatTextSize: (com.kirox.app.settings.ChatTextSize) -> Unit,
+    chatWallpaper: com.kirox.app.settings.ChatWallpaper,
+    onChatWallpaper: (com.kirox.app.settings.ChatWallpaper) -> Unit,
+    chatDensity: com.kirox.app.settings.ChatDensity,
+    onChatDensity: (com.kirox.app.settings.ChatDensity) -> Unit,
     effectScene: com.kirox.app.settings.EffectScene,
     onEffectScene: (com.kirox.app.settings.EffectScene) -> Unit,
     effectsQuality: com.kirox.app.settings.EffectsQuality,
@@ -140,7 +146,10 @@ fun TelegramMainScreen(
                         onBack = { sub = SubScreen.None }
                     )
                     subScreen == SubScreen.Themes -> ThemesScreen(palette, onPalette, onBack = { sub = SubScreen.Customization })
-                    subScreen == SubScreen.ChatStyle -> ChatStyleScreen(bubbleShape, onBubbleShape, onBack = { sub = SubScreen.Customization })
+                    subScreen == SubScreen.ChatStyle -> ChatStyleScreen(
+                        bubbleShape, onBubbleShape, chatTextSize, onChatTextSize, chatWallpaper, onChatWallpaper, chatDensity, onChatDensity,
+                        onBack = { sub = SubScreen.Customization }
+                    )
                     subScreen == SubScreen.Animations -> AnimationsScreen(
                         motion, onMotion, seasonal, onSeasonal, effectScene, onEffectScene, effectsQuality, onEffectsQuality, weakDevice,
                         onBack = { sub = SubScreen.Customization }

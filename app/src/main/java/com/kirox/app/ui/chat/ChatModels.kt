@@ -50,6 +50,7 @@ data class ChatAppearance(
     val textScale: Float = 1f,
     val bubbleRadiusDp: Float = 18f,
     val messageSpacingDp: Float = 4f,
+    val bubblePaddingDp: Float = 9f,
     val inputColor: Long = 0xFF171719,
     val backgroundColor: Long = 0xFF000000,
     val animationSpeed: Float = 1f

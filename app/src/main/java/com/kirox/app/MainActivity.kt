@@ -30,10 +30,14 @@ class MainActivity : ComponentActivity() {
             val seasonal by settings.seasonalEffects.collectAsStateWithLifecycle()
             val quality by settings.effectsQuality.collectAsStateWithLifecycle()
             val scene by settings.effectScene.collectAsStateWithLifecycle()
+            val textSize by settings.chatTextSize.collectAsStateWithLifecycle()
+            val wallpaper by settings.chatWallpaper.collectAsStateWithLifecycle()
+            val density by settings.chatDensity.collectAsStateWithLifecycle()
+            val chatStyle = com.kirox.app.settings.ChatStyle(bubbles.radiusDp, textSize.scale, wallpaper, density)
             val weakDevice = remember { prefersLightEffects(this@MainActivity) }
             val lightEffects = quality == EffectsQuality.Light || (quality == EffectsQuality.Auto && weakDevice)
             FusionTheme(palette) {
-                CompositionLocalProvider(LocalMotionFactor provides motion.factor, LocalBubbleRadius provides bubbles.radiusDp, LocalSeasonalEffects provides seasonal, LocalLightEffects provides lightEffects, LocalEffectScene provides scene) {
+                CompositionLocalProvider(LocalMotionFactor provides motion.factor, LocalBubbleRadius provides bubbles.radiusDp, LocalSeasonalEffects provides seasonal, LocalLightEffects provides lightEffects, LocalEffectScene provides scene, com.kirox.app.ui.theme.LocalChatStyle provides chatStyle) {
                     KiroXApp()
                 }
             }
