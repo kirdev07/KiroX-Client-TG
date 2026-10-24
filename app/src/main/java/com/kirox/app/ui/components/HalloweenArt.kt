@@ -329,12 +329,12 @@ fun DrawScope.drawSpider(corner: Offset, radius: Float, flip: Boolean, spiderDro
 
 // ---------- Sprite cache: static parts are drawn once into bitmaps, then only moved ----------
 
-private class SpriteKey(val kind: String, val a: Int, val b: Int, val flag: Boolean) {
+internal class SpriteKey(val kind: String, val a: Int, val b: Int, val flag: Boolean) {
     override fun equals(other: Any?) = other is SpriteKey && other.kind == kind && other.a == a && other.b == b && other.flag == flag
     override fun hashCode() = ((kind.hashCode() * 31 + a) * 31 + b) * 31 + flag.hashCode()
 }
 
-private object SpriteCache {
+internal object SpriteCache {
     private val map = object : LinkedHashMap<SpriteKey, androidx.compose.ui.graphics.ImageBitmap>(32, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<SpriteKey, androidx.compose.ui.graphics.ImageBitmap>?) = size > 160
     }

@@ -37,7 +37,8 @@ data class ChatStyle(
 /** Decorative animation in headers, previews and on the splash screen. */
 enum class EffectScene(val title: String, val subtitle: String) {
     Main("Основная", "Мерцающие частицы kiroX"),
-    Halloween("Хэллоуин", "Тыквы в костюмах, летучие мыши, паутина")
+    Halloween("Хэллоуин", "Тыквы в костюмах, летучие мыши, паутина"),
+    Winter("Зима", "Снежинки, сугробы с ёлками и иней")
 }
 
 /** Detail of decorative effects. [Auto] picks [Light] on weak devices and in battery saver. */
@@ -110,8 +111,11 @@ class KiroXSettingsRepository(context: Context) {
 
     fun setEffectScene(value: EffectScene) { scope.launch { store.edit { it[sceneKey] = value.name } } }
 
-    private fun defaultScene() =
-        if (com.kirox.app.ui.components.currentSeason() == com.kirox.app.ui.components.Season.Halloween) EffectScene.Halloween else EffectScene.Main
+    private fun defaultScene() = when (com.kirox.app.ui.components.currentSeason()) {
+        com.kirox.app.ui.components.Season.Halloween -> EffectScene.Halloween
+        com.kirox.app.ui.components.Season.Winter -> EffectScene.Winter
+        else -> EffectScene.Main
+    }
 
     fun setEffectsQuality(value: EffectsQuality) { scope.launch { store.edit { it[qualityKey] = value.name } } }
 

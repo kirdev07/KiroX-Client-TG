@@ -110,6 +110,7 @@ fun SeasonalLayer(
         when (chosen) {
             com.kirox.app.settings.EffectScene.Halloween -> halloween(time, mode, freeZone ?: freeZoneFraction?.let { (size.width * it.start)..(size.width * it.endInclusive) }, light)
             com.kirox.app.settings.EffectScene.Main -> sparkles(time, mode, light)
+            com.kirox.app.settings.EffectScene.Winter -> winter(time, mode, light, freeZone ?: freeZoneFraction?.let { (size.width * it.start)..(size.width * it.endInclusive) })
         }
     }
 }
@@ -179,13 +180,40 @@ private fun DrawScope.halloween(t: Float, mode: SeasonalMode, freeZone: ClosedFl
     }
 }
 
-private fun DrawScope.snow(t: Float, mode: SeasonalMode, light: Boolean) {
-    repeat((if (mode == SeasonalMode.Header) 16 else 40) / (if (light) 3 else 1)) { i ->
-        val seed = (i * 7919 % 1000) / 1000f
-        val x = size.width * ((i * 37 % 101) / 100f) + sin(t * 0.8f + i) * 10f
-        val y = size.height * ((t * (0.05f + seed * 0.05f) + seed) % 1f)
-        drawCircle(Color.White.copy(alpha = 0.35f + seed * 0.4f), 1.6f + seed * 2.6f, Offset(x, y))
+/**
+ * Winter: frost in the top corners, snowflakes of four shapes in three depth layers
+ * (far ones small, faint and slow), and snowdrifts with snowy firs along the bottom of large scenes.
+ */
+private fun DrawScope.winter(t: Float, mode: SeasonalMode, light: Boolean, freeZone: ClosedFloatingPointRange<Float>?) {
+    val header = mode == SeasonalMode.Header
+    val frost = if (header) minOf(size.height * 1.1f, 56.dp.toPx()) else minOf(size.width, size.height) * 0.32f
+    drawFrostCached(Offset.Zero, frost, flip = false)
+    drawFrostCached(Offset(size.width, 0f), frost * 0.85f, flip = true)
+
+    val driftHeight = when (mode) {
+        SeasonalMode.Header -> 0f
+        SeasonalMode.Splash -> size.height * 0.2f
+        else -> size.height * 0.34f
     }
+    val count = when (mode) { SeasonalMode.Header -> 10; SeasonalMode.Splash -> 42; else -> 26 } / (if (light) 2 else 1)
+    val baseR = (if (header) 3.dp else 5.dp).toPx()
+    repeat(count) { i ->
+        val seed = (i * 7919 % 1000) / 1000f
+        val layer = i % 3 // 0 far, 1 middle, 2 near
+        val r = baseR * (0.7f + layer * 0.55f) * (0.85f + seed * 0.3f)
+        val speed = 0.05f + layer * 0.035f + seed * 0.02f
+        val fall = (t * speed + seed) % 1f
+        val y = -r + fall * (size.height + 2 * r)
+        // In headers flakes fall only through the free gap, never over the title or buttons.
+        val left = if (header && freeZone != null) freeZone.start else 0f
+        val span = if (header && freeZone != null) (freeZone.endInclusive - freeZone.start).coerceAtLeast(0f) else size.width
+        if (span <= 0f) return@repeat
+        val x = left + span * ((i * 37 % 101) / 100f) + sin(t * 0.8f + seed * 6.283f) * (if (header) 3f else 6f + layer * 5f)
+        val shape = FlakeShape.entries[i % FlakeShape.entries.size]
+        val rotation = if (light) 0f else (t * (20f + seed * 40f) * (if (i % 2 == 0) 1f else -1f)) % 360f
+        drawFlakeCached(Offset(x, y), r, shape, rotation, alpha = 0.45f + layer * 0.22f)
+    }
+    if (driftHeight > 0f) drawDriftsCached(size.width, driftHeight, withTrees = !light)
 }
 
 /** The main kiroX animation: slow drifting, twinkling white particles (as on the splash screen). */
