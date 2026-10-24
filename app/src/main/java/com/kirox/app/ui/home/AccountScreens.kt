@@ -132,27 +132,22 @@ internal fun TileRow(icon: KiroXIcon, title: String, trailing: String? = null, o
 internal fun CustomizationScreen(
     palette: FusionPalette, onPalette: (FusionPalette) -> Unit,
     seasonal: Boolean, onSeasonal: (Boolean) -> Unit,
-    onBack: () -> Unit, onNotice: (String) -> Unit
+    bubbleShape: com.kirox.app.settings.BubbleShape, onBubbleShape: (com.kirox.app.settings.BubbleShape) -> Unit,
+    motion: com.kirox.app.settings.MotionLevel, onMotion: (com.kirox.app.settings.MotionLevel) -> Unit,
+    onBack: () -> Unit
 ) {
     var themeSheet by rememberSaveable { mutableStateOf(false) }
     BackHandler(onBack = onBack)
-    val entries = listOf(
-        KiroXIcon.Chats to "Главный экран", KiroXIcon.Tune to "Нижняя панель", KiroXIcon.Chat to "Chat Studio",
-        KiroXIcon.Profile to "Профили", KiroXIcon.Star to "Анимация запуска", KiroXIcon.Photo to "Обои"
-    )
     LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { BackTitle("Кастомизация", onBack) }
+        item { BubblePreview(bubbleShape.radiusDp) }
+        item { TileRow(KiroXIcon.Palette, "Тема", trailing = themeName(palette)) { themeSheet = true } }
         item {
-            Box(Modifier.padding(16.dp).fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Fusion.colors.surface1).border(1.dp, Fusion.colors.outline, RoundedCornerShape(24.dp))) {
-                SeasonalLayer(Modifier.matchParentSize())
-                Column(Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("kiroX", color = Fusion.colors.textPrimary, fontSize = 32.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(6.dp))
-                    Text(themeName(palette), color = Fusion.colors.textSecondary, fontSize = 14.sp)
-                }
-            }
+            SegmentRow(KiroXIcon.Chat, "Форма пузырей", com.kirox.app.settings.BubbleShape.entries, bubbleShape, { it.title }, onBubbleShape)
         }
-        item { TileRow(KiroXIcon.Palette, "Мои темы", trailing = themeName(palette)) { themeSheet = true } }
+        item {
+            SegmentRow(KiroXIcon.Star, "Анимации", com.kirox.app.settings.MotionLevel.entries, motion, { it.title }, onMotion)
+        }
         item {
             Row(Modifier.fillMaxWidth().clickable { onSeasonal(!seasonal) }.heightIn(min = 58.dp).padding(horizontal = 16.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Fusion.colors.iconContainer), contentAlignment = Alignment.Center) {
@@ -169,9 +164,48 @@ internal fun CustomizationScreen(
                 )
             }
         }
-        items(entries, key = { it.second }) { (icon, title) -> TileRow(icon, title) { onNotice("«$title» — $IN_PROGRESS") } }
     }
     if (themeSheet) ThemeSheet(palette, onSelect = onPalette, onDismiss = { themeSheet = false })
+}
+
+/** Two sample bubbles that follow the chosen shape and theme. */
+@Composable
+private fun BubblePreview(radius: Float) {
+    Column(
+        Modifier.padding(16.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Fusion.colors.surface1)
+            .border(1.dp, Fusion.colors.outline, RoundedCornerShape(20.dp)).padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text("Привет! Как тебе новый kiroX?", color = Fusion.colors.textPrimary, fontSize = 15.sp,
+            modifier = Modifier.clip(RoundedCornerShape(radius.dp)).background(Fusion.colors.surface2).padding(horizontal = 12.dp, vertical = 8.dp))
+        Text("Чисто и быстро 👌", color = Fusion.colors.textPrimary, fontSize = 15.sp,
+            modifier = Modifier.align(Alignment.End).clip(RoundedCornerShape(radius.dp)).background(Fusion.colors.surface3).padding(horizontal = 12.dp, vertical = 8.dp))
+    }
+}
+
+@Composable
+private fun <T> SegmentRow(icon: KiroXIcon, title: String, options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Fusion.colors.iconContainer), contentAlignment = Alignment.Center) {
+                IconGlyph(icon, null, Modifier.size(21.dp), Fusion.colors.textPrimary)
+            }
+            Spacer(Modifier.width(14.dp))
+            Text(title, color = Fusion.colors.textPrimary, fontSize = 16.sp)
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth().clip(CircleShape).background(Fusion.colors.surface1).padding(3.dp)) {
+            options.forEach { option ->
+                val active = option == selected
+                Text(
+                    label(option), color = if (active) Fusion.colors.textPrimary else Fusion.colors.textSecondary,
+                    fontSize = 14.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium, textAlign = TextAlign.Center, maxLines = 1,
+                    modifier = Modifier.weight(1f).clip(CircleShape).background(if (active) Fusion.colors.surface3 else Fusion.colors.surface1)
+                        .clickable { onSelect(option) }.padding(vertical = 8.dp)
+                )
+            }
+        }
+    }
 }
 
 private fun themeName(palette: FusionPalette) = if (palette == FusionPalette.GraphiteDark) "Graphite Dark" else "AMOLED Black"

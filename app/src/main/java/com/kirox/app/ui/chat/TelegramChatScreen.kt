@@ -73,7 +73,8 @@ fun TelegramChatScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
-    val appearance = remember { ChatAppearance() }
+    val bubbleRadius = com.kirox.app.ui.theme.LocalBubbleRadius.current
+    val appearance = remember(bubbleRadius) { ChatAppearance(bubbleRadiusDp = bubbleRadius) }
     var input by rememberSaveable(history.chatId, stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
     var replyTo by remember(history.chatId) { mutableStateOf<MessageUi?>(null) }
     var editing by remember(history.chatId) { mutableStateOf<MessageUi?>(null) }

@@ -31,6 +31,9 @@ import com.kirox.app.ui.icons.KiroXIcon
 import com.kirox.app.ui.theme.Fusion
 import com.kirox.app.ui.theme.FusionMotion
 import com.kirox.app.ui.theme.FusionSize
+import com.kirox.app.ui.theme.LocalMotionFactor
+import com.kirox.app.ui.theme.motionMs
+import androidx.compose.animation.core.snap
 
 data class FusionNavItem(val title: String, val icon: KiroXIcon)
 
@@ -70,9 +73,15 @@ fun FusionNavigationRail(items: List<FusionNavItem>, selected: Int, onSelect: (I
 
 @Composable
 private fun DockItem(item: FusionNavItem, active: Boolean, showLabel: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    val pillWidth by animateDpAsState(if (active) 56.dp else 36.dp, spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow), label = "dock_pill")
-    val pillColor by animateColorAsState(if (active) Fusion.colors.surface3 else Fusion.colors.background, tween(FusionMotion.NORMAL), label = "dock_pill_color")
-    val contentColor by animateColorAsState(if (active) Fusion.colors.textPrimary else Fusion.colors.textTertiary, tween(FusionMotion.NORMAL), label = "dock_color")
+    val moving = LocalMotionFactor.current > 0f
+    val colorMs = motionMs(FusionMotion.NORMAL)
+    val pillWidth by animateDpAsState(
+        if (active) 56.dp else 36.dp,
+        if (moving) spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow) else snap(),
+        label = "dock_pill"
+    )
+    val pillColor by animateColorAsState(if (active) Fusion.colors.surface3 else Fusion.colors.background, tween(colorMs), label = "dock_pill_color")
+    val contentColor by animateColorAsState(if (active) Fusion.colors.textPrimary else Fusion.colors.textTertiary, tween(colorMs), label = "dock_color")
     Column(
         modifier.semantics { contentDescription = item.title }.selectable(
             selected = active,

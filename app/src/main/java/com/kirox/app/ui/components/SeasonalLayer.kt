@@ -49,7 +49,8 @@ fun currentSeason(calendar: Calendar = Calendar.getInstance()): Season {
 fun SeasonalLayer(modifier: Modifier = Modifier) {
     if (!LocalSeasonalEffects.current) return
     val context = LocalContext.current
-    val animate = remember { Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f }
+    val systemAnimations = remember { Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f }
+    val animate = systemAnimations && com.kirox.app.ui.theme.LocalMotionFactor.current > 0f
     val season = remember { currentSeason() }
     val phase = if (animate) {
         val transition = rememberInfiniteTransition(label = "seasonal")

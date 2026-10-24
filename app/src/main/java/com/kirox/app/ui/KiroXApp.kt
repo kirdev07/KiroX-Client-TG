@@ -42,6 +42,7 @@ import com.kirox.app.ui.navigation.NavGraph
 import com.kirox.app.ui.navigation.Screen
 import com.kirox.app.ui.theme.Fusion
 import com.kirox.app.ui.theme.FusionMotion
+import com.kirox.app.ui.theme.motionMs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -74,6 +75,8 @@ fun KiroXApp() {
     val settings = remember { (context.applicationContext as com.kirox.app.KiroXApplication).settings }
     val palette by settings.palette.collectAsStateWithLifecycle()
     val seasonal by settings.seasonalEffects.collectAsStateWithLifecycle()
+    val bubbleShape by settings.bubbleShape.collectAsStateWithLifecycle()
+    val motionLevel by settings.motion.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     fun openChat(id: Long) { openChatId = id; telegramViewModel.messages.open(id); stack.push(Screen.Conversation) }
 
@@ -107,13 +110,14 @@ fun KiroXApp() {
                 )
             } else {
                 val state = requireNotNull(phoneState)
+                val slide = motionMs(FusionMotion.SLOW)
                 AnimatedContent(
                     targetState = stack.current,
                     transitionSpec = {
                         if (stack.forward) {
-                            slideInHorizontally(tween(FusionMotion.SLOW)) { it } togetherWith slideOutHorizontally(tween(FusionMotion.SLOW)) { -it / 4 }
+                            slideInHorizontally(tween(slide)) { it } togetherWith slideOutHorizontally(tween(slide)) { -it / 4 }
                         } else {
-                            slideInHorizontally(tween(FusionMotion.SLOW)) { -it / 4 } togetherWith slideOutHorizontally(tween(FusionMotion.SLOW)) { it }
+                            slideInHorizontally(tween(slide)) { -it / 4 } togetherWith slideOutHorizontally(tween(slide)) { it }
                         }
                     },
                     label = "navigation"
@@ -142,6 +146,10 @@ fun KiroXApp() {
                                 onPalette = settings::setPalette,
                                 seasonal = seasonal,
                                 onSeasonal = settings::setSeasonalEffects,
+                                bubbleShape = bubbleShape,
+                                onBubbleShape = settings::setBubbleShape,
+                                motion = motionLevel,
+                                onMotion = settings::setMotion,
                                 onOpenSavedMessages = { scope.launch { runCatching { telegramViewModel.users.savedMessagesChatId() }.onSuccess(::openChat) } },
                                 onLogOut = telegramViewModel.auth::logOut
                             )

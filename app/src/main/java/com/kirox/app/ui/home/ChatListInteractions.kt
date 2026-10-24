@@ -67,6 +67,7 @@ internal fun SwipeableChatRow(chat: TelegramChatItem, onSwipeRight: () -> Unit, 
     val haptics = LocalHapticFeedback.current
     val threshold = with(LocalDensity.current) { 88.dp.toPx() }
     var armed by remember(chat.id) { mutableStateOf(false) }
+    val returnMs = com.kirox.app.ui.theme.motionMs(FusionMotion.NORMAL)
     Box(Modifier.fillMaxWidth()) {
         val value = offset.value
         if (value != 0f) {
@@ -98,7 +99,7 @@ internal fun SwipeableChatRow(chat: TelegramChatItem, onSwipeRight: () -> Unit, 
                 onDragStopped = {
                     if (abs(offset.value) >= threshold) { if (offset.value > 0) onSwipeRight() else onSwipeLeft() }
                     armed = false
-                    offset.animateTo(0f, tween(FusionMotion.NORMAL))
+                    offset.animateTo(0f, tween(returnMs))
                 }
             )
         ) { content() }

@@ -17,12 +17,18 @@ import kotlinx.coroutines.launch
 
 private val Context.kiroxSettings by preferencesDataStore("kirox_settings")
 
+enum class BubbleShape(val title: String, val radiusDp: Float) { Soft("Мягкие", 22f), Medium("Средние", 16f), Strict("Строгие", 6f) }
+
+enum class MotionLevel(val title: String, val factor: Float) { Normal("Обычные", 1f), Reduced("Меньше", 0.5f), Off("Выкл.", 0f) }
+
 /** Local KiroX preferences (never Telegram data). */
 class KiroXSettingsRepository(context: Context) {
     private val store = context.applicationContext.kiroxSettings
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val paletteKey = stringPreferencesKey("palette")
     private val seasonalKey = androidx.datastore.preferences.core.booleanPreferencesKey("seasonal_effects")
+    private val bubbleKey = stringPreferencesKey("bubble_shape")
+    private val motionKey = stringPreferencesKey("motion")
 
     val palette: StateFlow<FusionPalette> = store.data
         .catch { emit(androidx.datastore.preferences.core.emptyPreferences()) }
@@ -38,6 +44,19 @@ class KiroXSettingsRepository(context: Context) {
     fun setSeasonalEffects(enabled: Boolean) {
         scope.launch { store.edit { it[seasonalKey] = enabled } }
     }
+
+    val bubbleShape: StateFlow<BubbleShape> = store.data
+        .catch { emit(androidx.datastore.preferences.core.emptyPreferences()) }
+        .map { prefs -> BubbleShape.entries.firstOrNull { it.name == prefs[bubbleKey] } ?: BubbleShape.Medium }
+        .stateIn(scope, SharingStarted.Eagerly, BubbleShape.Medium)
+
+    val motion: StateFlow<MotionLevel> = store.data
+        .catch { emit(androidx.datastore.preferences.core.emptyPreferences()) }
+        .map { prefs -> MotionLevel.entries.firstOrNull { it.name == prefs[motionKey] } ?: MotionLevel.Normal }
+        .stateIn(scope, SharingStarted.Eagerly, MotionLevel.Normal)
+
+    fun setBubbleShape(value: BubbleShape) { scope.launch { store.edit { it[bubbleKey] = value.name } } }
+    fun setMotion(value: MotionLevel) { scope.launch { store.edit { it[motionKey] = value.name } } }
 
     fun setPalette(value: FusionPalette) {
         scope.launch { store.edit { it[paletteKey] = value.name } }

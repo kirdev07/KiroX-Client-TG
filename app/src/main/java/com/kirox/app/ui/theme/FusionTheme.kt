@@ -53,6 +53,17 @@ object FusionMotion { const val FAST = 120; const val NORMAL = 200; const val SL
 
 private val LocalFusionColors = staticCompositionLocalOf { FusionColors.Amoled }
 
+/** User animation level: 1 = normal, 0.5 = reduced, 0 = off. Multiplies every Fusion duration. */
+val LocalMotionFactor = staticCompositionLocalOf { 1f }
+
+/** Corner radius of chat bubbles in dp (KiroX «Форма пузырей»). */
+val LocalBubbleRadius = staticCompositionLocalOf { 16f }
+
+/** A Fusion duration scaled by the user's animation level. */
+@Composable
+@ReadOnlyComposable
+fun motionMs(base: Int): Int = (base * LocalMotionFactor.current).toInt()
+
 object Fusion {
     val colors: FusionColors @Composable @ReadOnlyComposable get() = LocalFusionColors.current
 }
