@@ -85,7 +85,10 @@ fun TelegramAuthStepScreen(state: TelegramAuthState, repository: TelegramAuthRep
         Modifier.fillMaxSize().background(Fusion.colors.background).statusBarsPadding().navigationBarsPadding()
             .imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 28.dp)
     ) {
-        Text("kiroX", color = Fusion.colors.textPrimary, fontSize = 30.sp, fontWeight = FontWeight.Light)
+        Box(Modifier.fillMaxWidth().height(56.dp)) {
+            com.kirox.app.ui.components.SeasonalLayer(Modifier.matchParentSize(), freeZoneFraction = 0.4f..0.98f)
+            Text("kiroX", color = Fusion.colors.textPrimary, fontSize = 30.sp, fontWeight = FontWeight.Light, modifier = Modifier.align(Alignment.CenterStart))
+        }
         Spacer(Modifier.height(56.dp))
         Text(title, color = Fusion.colors.textPrimary, fontSize = 32.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))

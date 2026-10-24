@@ -64,6 +64,8 @@ fun PhoneLoginScreen(
             .statusBarsPadding()
             .imePadding()
     ) {
+        // Seasonal strip to the right of the logo; the form below stays clean.
+        com.kirox.app.ui.components.SeasonalLayer(Modifier.fillMaxWidth().height(96.dp), freeZoneFraction = 0.42f..0.96f)
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 180.dp)) {
             Spacer(Modifier.height(18.dp))
             BrandLogo()

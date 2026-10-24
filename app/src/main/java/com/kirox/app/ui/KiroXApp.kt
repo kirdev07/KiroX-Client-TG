@@ -77,6 +77,8 @@ fun KiroXApp() {
     val seasonal by settings.seasonalEffects.collectAsStateWithLifecycle()
     val bubbleShape by settings.bubbleShape.collectAsStateWithLifecycle()
     val motionLevel by settings.motion.collectAsStateWithLifecycle()
+    val effectsQuality by settings.effectsQuality.collectAsStateWithLifecycle()
+    val weakDevice = remember { com.kirox.app.settings.prefersLightEffects(context) }
     val scope = rememberCoroutineScope()
     fun openChat(id: Long) { openChatId = id; telegramViewModel.messages.open(id); stack.push(Screen.Conversation) }
 
@@ -150,6 +152,9 @@ fun KiroXApp() {
                                 onBubbleShape = settings::setBubbleShape,
                                 motion = motionLevel,
                                 onMotion = settings::setMotion,
+                                effectsQuality = effectsQuality,
+                                onEffectsQuality = settings::setEffectsQuality,
+                                weakDevice = weakDevice,
                                 onOpenSavedMessages = { scope.launch { runCatching { telegramViewModel.users.savedMessagesChatId() }.onSuccess(::openChat) } },
                                 onLogOut = telegramViewModel.auth::logOut
                             )

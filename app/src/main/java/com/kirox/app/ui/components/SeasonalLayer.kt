@@ -25,7 +25,7 @@ val LocalSeasonalEffects = staticCompositionLocalOf { true }
 enum class Season { Halloween, Winter, Plain }
 
 /** [Header] is a light strip behind screen titles; [Showcase] is the full scene for previews and splash. */
-enum class SeasonalMode { Header, Showcase }
+enum class SeasonalMode { Header, Showcase, Splash }
 
 fun currentSeason(calendar: Calendar = Calendar.getInstance()): Season {
     val month = calendar.get(Calendar.MONTH)
@@ -56,6 +56,15 @@ private val ShowcaseLanterns = listOf(
     Lantern(0.62f, 0.26f, 0.5f, PumpkinFace.Happy, PumpkinCostume.None, 0.15f)
 )
 
+/** Launch screen: a small parade under the logo, leaving the centre and the bottom copy clear. */
+private val SplashLanterns = listOf(
+    Lantern(0.22f, 0.66f, 0.85f, PumpkinFace.Happy, PumpkinCostume.WitchHat, 0.2f),
+    Lantern(0.50f, 0.68f, 1.0f, PumpkinFace.Classic, PumpkinCostume.None, 0.55f),
+    Lantern(0.78f, 0.66f, 0.85f, PumpkinFace.Cute, PumpkinCostume.Vampire, 0.85f),
+    Lantern(0.30f, 0.31f, 0.5f, PumpkinFace.Sleepy, PumpkinCostume.None, 0.4f),
+    Lantern(0.72f, 0.33f, 0.5f, PumpkinFace.Spooky, PumpkinCostume.TopHat, 0.7f)
+)
+
 /**
  * Seasonal decoration: around Halloween, jack-o'-lanterns with carved faces (some in costumes),
  * bats and a cobweb with a spider; snow in winter; a few drifting dots otherwise.
@@ -67,61 +76,77 @@ fun SeasonalLayer(
     mode: SeasonalMode = SeasonalMode.Header,
     force: Boolean = false,
     /** Free horizontal gap (px) for header pumpkins, so they never cover the title or buttons. */
-    freeZone: ClosedFloatingPointRange<Float>? = null
+    freeZone: ClosedFloatingPointRange<Float>? = null,
+    /** The same gap as fractions of the width, for headers with fixed layouts. */
+    freeZoneFraction: ClosedFloatingPointRange<Float>? = null
 ) {
     if (!force && !LocalSeasonalEffects.current) return
     val context = LocalContext.current
     val systemAnimations = remember { Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f }
     val speed = LocalMotionFactor.current
     val animate = systemAnimations && speed > 0f
+    val light = com.kirox.app.ui.theme.LocalLightEffects.current
     val season = remember { currentSeason() }
-    val time by produceState(2.3f, animate, speed) {
+    val time by produceState(2.3f, animate, speed, light) {
         if (!animate) return@produceState
         var last = withFrameNanos { it }
+        var accumulated = 0f
         while (true) {
             withFrameNanos { now ->
-                value += (now - last) / 1_000_000_000f * speed
+                val step = (now - last) / 1_000_000_000f * speed
                 last = now
+                // Light mode redraws at ~30 fps instead of every frame.
+                accumulated += step
+                if (!light || accumulated >= 1f / 30f) { value += accumulated; accumulated = 0f }
             }
         }
     }
     Canvas(modifier) {
         when (season) {
-            Season.Halloween -> halloween(time, mode, freeZone)
-            Season.Winter -> snow(time, mode)
+            Season.Halloween -> halloween(time, mode, freeZone ?: freeZoneFraction?.let { (size.width * it.start)..(size.width * it.endInclusive) }, light)
+            Season.Winter -> snow(time, mode, light)
             Season.Plain -> dots(time)
         }
     }
 }
 
-private fun DrawScope.halloween(t: Float, mode: SeasonalMode, freeZone: ClosedFloatingPointRange<Float>?) {
-    val showcase = mode == SeasonalMode.Showcase
-    val webRadius = if (showcase) size.height * 0.55f else minOf(size.height * 1.1f, 64.dp.toPx())
+private fun DrawScope.halloween(t: Float, mode: SeasonalMode, freeZone: ClosedFloatingPointRange<Float>?, light: Boolean) {
+    val showcase = mode != SeasonalMode.Header
+    val webRadius = when (mode) {
+        SeasonalMode.Showcase -> size.height * 0.55f
+        SeasonalMode.Splash -> size.width * 0.42f
+        SeasonalMode.Header -> minOf(size.height * 1.1f, 64.dp.toPx())
+    }
     val drop = (sin(t * 0.7f) * 0.5f + 0.5f)
     drawCobweb(Offset.Zero, webRadius, flip = false, spiderDrop = drop)
     drawCobweb(Offset(size.width, 0f), webRadius * 0.85f, flip = true, spiderDrop = 1f - drop)
 
     // Bats cross the scene on slow, slightly wavy paths.
-    val bats = if (showcase) 3 else 2
+    val bats = when { light && !showcase -> 0; light -> 1; showcase -> 3; else -> 2 }
     repeat(bats) { i ->
         val period = 11f + i * 4f
         val p = ((t + i * 3.7f) % period) / period
         val x = -40f + (size.width + 80f) * p
-        val y = size.height * (0.18f + 0.18f * i) + sin(t * 1.6f + i) * size.height * 0.06f
+        val y = size.height * (if (mode == SeasonalMode.Splash) 0.12f + 0.1f * i else 0.18f + 0.18f * i) + sin(t * 1.6f + i) * size.height * 0.03f
         val span = (if (showcase) 34.dp else 20.dp).toPx() * (1f - i * 0.15f)
         drawBat(Offset(x, y), span, flap = sin(t * 9f + i * 2f))
     }
 
-    val base = (if (showcase) 26.dp else 10.dp).toPx()
-    val placed: List<Pair<Lantern, Float>> = if (showcase) ShowcaseLanterns.map { it to size.width * it.x } else {
+    val base = when (mode) {
+        SeasonalMode.Showcase -> 26.dp
+        SeasonalMode.Splash -> 34.dp
+        SeasonalMode.Header -> 10.dp
+    }.toPx()
+    val placed: List<Pair<Lantern, Float>> = if (showcase) (if (mode == SeasonalMode.Splash) SplashLanterns else ShowcaseLanterns).map { it to size.width * it.x } else {
         // Fit as many header pumpkins as the free gap allows (none if it is too narrow).
         val zone = freeZone ?: return
         val slot = base * 3.4f
-        val count = ((zone.endInclusive - zone.start) / slot).toInt().coerceIn(0, HeaderLanterns.size)
+        val count = ((zone.endInclusive - zone.start) / slot).toInt().coerceIn(0, if (light) 1 else HeaderLanterns.size)
         val start = zone.start + ((zone.endInclusive - zone.start) - count * slot) / 2 + slot / 2
         HeaderLanterns.take(count).mapIndexed { i, l -> l to start + i * slot }
     }
-    placed.forEach { (l, cx) ->
+    val shown = if (light && showcase) placed.filter { it.first.size >= 0.8f } else placed
+    shown.forEach { (l, cx) ->
         val bob = sin(t * 1.3f + l.seed * 6f) * base * 0.12f
         val glow = (0.75f + 0.25f * sin(t * 7f + l.seed * 11f) * sin(t * 2.3f + l.seed * 5f)).coerceIn(0f, 1f)
         // Blink for ~0.2 s every few seconds, each pumpkin at its own moment.
@@ -132,11 +157,12 @@ private fun DrawScope.halloween(t: Float, mode: SeasonalMode, freeZone: ClosedFl
             r = base * l.size,
             face = l.face, costume = l.costume,
             glow = glow, blink = blink,
-            rotationDeg = sin(t * 0.9f + l.seed * 4f) * 6f
+            rotationDeg = sin(t * 0.9f + l.seed * 4f) * 6f,
+            flat = light
         )
     }
     // A few embers drifting up.
-    repeat(if (showcase) 10 else 5) { i ->
+    repeat(if (light) 0 else if (showcase) 10 else 5) { i ->
         val seed = (i * 7919 % 1000) / 1000f
         val y = size.height * (1f - ((t * 0.08f + seed) % 1f))
         val x = size.width * ((i * 37 % 101) / 100f) + sin(t + i) * 6f
@@ -144,8 +170,8 @@ private fun DrawScope.halloween(t: Float, mode: SeasonalMode, freeZone: ClosedFl
     }
 }
 
-private fun DrawScope.snow(t: Float, mode: SeasonalMode) {
-    repeat(if (mode == SeasonalMode.Showcase) 40 else 16) { i ->
+private fun DrawScope.snow(t: Float, mode: SeasonalMode, light: Boolean) {
+    repeat((if (mode == SeasonalMode.Header) 16 else 40) / (if (light) 3 else 1)) { i ->
         val seed = (i * 7919 % 1000) / 1000f
         val x = size.width * ((i * 37 % 101) / 100f) + sin(t * 0.8f + i) * 10f
         val y = size.height * ((t * (0.05f + seed * 0.05f) + seed) % 1f)

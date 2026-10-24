@@ -56,6 +56,9 @@ private val LocalFusionColors = staticCompositionLocalOf { FusionColors.Amoled }
 /** User animation level: 1 = normal, 0.5 = reduced, 0 = off. Multiplies every Fusion duration. */
 val LocalMotionFactor = staticCompositionLocalOf { 1f }
 
+/** True when decorative effects must be light (fewer particles, flat colours, ~30 fps). */
+val LocalLightEffects = staticCompositionLocalOf { false }
+
 /** Corner radius of chat bubbles in dp (KiroX «Форма пузырей»). */
 val LocalBubbleRadius = staticCompositionLocalOf { 16f }
 

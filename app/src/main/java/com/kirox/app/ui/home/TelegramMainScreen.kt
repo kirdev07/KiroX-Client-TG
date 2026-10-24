@@ -68,7 +68,7 @@ private enum class MainTab(val item: FusionNavItem) {
     Settings(FusionNavItem("Настройки", KiroXIcon.Tune)),
     Profile(FusionNavItem("Профиль", KiroXIcon.ProfileCircle))
 }
-private enum class SubScreen { None, NewMessage, Customization }
+private enum class SubScreen { None, NewMessage, Customization, Animations }
 private enum class RealChatSection { Archive, Messages }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -97,6 +97,9 @@ fun TelegramMainScreen(
     onBubbleShape: (com.kirox.app.settings.BubbleShape) -> Unit,
     motion: com.kirox.app.settings.MotionLevel,
     onMotion: (com.kirox.app.settings.MotionLevel) -> Unit,
+    effectsQuality: com.kirox.app.settings.EffectsQuality,
+    onEffectsQuality: (com.kirox.app.settings.EffectsQuality) -> Unit,
+    weakDevice: Boolean,
     onLogOut: () -> Unit
 ) = androidx.compose.runtime.CompositionLocalProvider(com.kirox.app.ui.components.LocalSeasonalEffects provides seasonal) {
     var tab by rememberSaveable { mutableStateOf(MainTab.Chats) }
@@ -125,7 +128,16 @@ fun TelegramMainScreen(
             AnimatedContent(tab to sub, transitionSpec = { fadeIn(tween(fadeInMs)) togetherWith fadeOut(tween(fadeOutMs)) }, label = "main_tabs") { (current, subScreen) ->
                 when {
                     subScreen == SubScreen.NewMessage -> NewMessageScreen(contacts, onBack = { sub = SubScreen.None }, onOpenContact = { sub = SubScreen.None; onOpenContact(it) }, onOpenSaved = { sub = SubScreen.None; onOpenSavedMessages() }, onNotice = showNotice)
-                    subScreen == SubScreen.Customization -> CustomizationScreen(palette, onPalette, seasonal, onSeasonal, bubbleShape, onBubbleShape, motion, onMotion, onBack = { sub = SubScreen.None })
+                    subScreen == SubScreen.Customization -> CustomizationScreen(
+                        palette, onPalette, bubbleShape, onBubbleShape,
+                        animationsSummary = motion.title,
+                        onOpenAnimations = { sub = SubScreen.Animations },
+                        onBack = { sub = SubScreen.None }
+                    )
+                    subScreen == SubScreen.Animations -> AnimationsScreen(
+                        motion, onMotion, seasonal, onSeasonal, effectsQuality, onEffectsQuality, weakDevice,
+                        onBack = { sub = SubScreen.Customization }
+                    )
                     current == MainTab.Chats -> ChatsTab(lists, chatActions, connection, onOpenChat, storyChats, profile, { viewingStoriesOf = it.chatId }, onNewMessage = { sub = SubScreen.NewMessage }) { notice = it }
                     current == MainTab.Contacts -> ContactsTab(contacts, contactsLoading, onOpenContact, calls, onLoadCalls, onOpenChat, showNotice)
                     current == MainTab.Settings -> SettingsTab(profile, onOpenProfile = { tab = MainTab.Profile }, onOpenCustomization = { sub = SubScreen.Customization }, onNotice = showNotice)

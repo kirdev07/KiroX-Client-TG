@@ -19,6 +19,9 @@ private val Context.kiroxSettings by preferencesDataStore("kirox_settings")
 
 enum class BubbleShape(val title: String, val radiusDp: Float) { Soft("Мягкие", 22f), Medium("Средние", 16f), Strict("Строгие", 6f) }
 
+/** Detail of decorative effects. [Auto] picks [Light] on weak devices and in battery saver. */
+enum class EffectsQuality(val title: String) { Auto("Авто"), Full("Высокое"), Light("Лёгкое") }
+
 enum class MotionLevel(val title: String, val factor: Float) { Normal("Обычные", 1f), Reduced("Меньше", 0.5f), Off("Выкл.", 0f) }
 
 /** Local KiroX preferences (never Telegram data). */
@@ -29,6 +32,7 @@ class KiroXSettingsRepository(context: Context) {
     private val seasonalKey = androidx.datastore.preferences.core.booleanPreferencesKey("seasonal_effects")
     private val bubbleKey = stringPreferencesKey("bubble_shape")
     private val motionKey = stringPreferencesKey("motion")
+    private val qualityKey = stringPreferencesKey("effects_quality")
 
     val palette: StateFlow<FusionPalette> = store.data
         .catch { emit(androidx.datastore.preferences.core.emptyPreferences()) }
@@ -54,6 +58,13 @@ class KiroXSettingsRepository(context: Context) {
         .catch { emit(androidx.datastore.preferences.core.emptyPreferences()) }
         .map { prefs -> MotionLevel.entries.firstOrNull { it.name == prefs[motionKey] } ?: MotionLevel.Normal }
         .stateIn(scope, SharingStarted.Eagerly, MotionLevel.Normal)
+
+    val effectsQuality: StateFlow<EffectsQuality> = store.data
+        .catch { emit(androidx.datastore.preferences.core.emptyPreferences()) }
+        .map { prefs -> EffectsQuality.entries.firstOrNull { it.name == prefs[qualityKey] } ?: EffectsQuality.Auto }
+        .stateIn(scope, SharingStarted.Eagerly, EffectsQuality.Auto)
+
+    fun setEffectsQuality(value: EffectsQuality) { scope.launch { store.edit { it[qualityKey] = value.name } } }
 
     fun setBubbleShape(value: BubbleShape) { scope.launch { store.edit { it[bubbleKey] = value.name } } }
     fun setMotion(value: MotionLevel) { scope.launch { store.edit { it[motionKey] = value.name } } }

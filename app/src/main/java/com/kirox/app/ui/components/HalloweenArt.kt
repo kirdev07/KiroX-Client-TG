@@ -36,16 +36,18 @@ private val Glow = Color(0xFFFFD36B)
  */
 fun DrawScope.drawPumpkin(
     center: Offset, r: Float, face: PumpkinFace, costume: PumpkinCostume,
-    glow: Float = 1f, blink: Float = 0f, rotationDeg: Float = 0f, alpha: Float = 1f
+    glow: Float = 1f, blink: Float = 0f, rotationDeg: Float = 0f, alpha: Float = 1f,
+    /** Light mode: solid colours instead of gradients, no inner glow halo. */
+    flat: Boolean = false
 ) {
     translate(center.x, center.y) {
         rotate(rotationDeg, pivot = Offset.Zero) {
             if (costume == PumpkinCostume.Vampire) drawVampireCape(r, alpha)
             if (costume == PumpkinCostume.Ghost) drawGhostSheet(r, alpha, glow) else {
                 drawStem(r, alpha)
-                drawBody(r, alpha)
+                drawBody(r, alpha, flat)
                 if (costume == PumpkinCostume.Vampire) drawVampireHair(r, alpha)
-                drawFace(r, face, glow, blink, alpha, fangs = costume == PumpkinCostume.Vampire)
+                drawFace(r, face, glow, blink, alpha, fangs = costume == PumpkinCostume.Vampire, flat = flat)
             }
             when (costume) {
                 PumpkinCostume.WitchHat -> drawWitchHat(r, alpha)
@@ -57,7 +59,7 @@ fun DrawScope.drawPumpkin(
     }
 }
 
-private fun DrawScope.drawBody(r: Float, alpha: Float) {
+private fun DrawScope.drawBody(r: Float, alpha: Float, flat: Boolean) {
     val w = r * 1.25f
     val h = r
     // Ribs: outer pair, inner pair, centre — each a gradient oval, outer ones darker.
@@ -69,7 +71,8 @@ private fun DrawScope.drawBody(r: Float, alpha: Float) {
             colors = listOf(PumpkinLight.copy(alpha = alpha), PumpkinMid.copy(alpha = alpha), PumpkinDark.copy(alpha = alpha)),
             center = Offset(dx * w - rw * 0.25f, -h * 0.35f), radius = rw * 1.6f
         )
-        drawOval(brush, topLeft = Offset(left, -h), size = Size(rw * 2, h * 2))
+        if (flat) drawOval((if (index < 2) PumpkinDark else PumpkinMid).copy(alpha = alpha), topLeft = Offset(left, -h), size = Size(rw * 2, h * 2))
+        else drawOval(brush, topLeft = Offset(left, -h), size = Size(rw * 2, h * 2))
         if (index < 4) drawOval(PumpkinGroove.copy(alpha = alpha * 0.55f), topLeft = Offset(left, -h), size = Size(rw * 2, h * 2), style = Stroke(r * 0.04f))
     }
     // Soft top highlight.
@@ -102,9 +105,9 @@ private fun DrawScope.carve(path: Path, glow: Float, alpha: Float) {
     drawPath(path, Color(0xFFFF8A1F).copy(alpha = alpha * 0.35f), style = Stroke(1.2f))
 }
 
-private fun DrawScope.drawFace(r: Float, face: PumpkinFace, glow: Float, blink: Float, alpha: Float, fangs: Boolean) {
+private fun DrawScope.drawFace(r: Float, face: PumpkinFace, glow: Float, blink: Float, alpha: Float, fangs: Boolean, flat: Boolean = false) {
     // Warm inner light spilling over the face.
-    drawCircle(Brush.radialGradient(listOf(Glow.copy(alpha = alpha * 0.22f * glow), Color.Transparent), center = Offset(0f, r * 0.05f), radius = r * 0.9f), r * 0.9f, Offset(0f, r * 0.05f))
+    if (!flat) drawCircle(Brush.radialGradient(listOf(Glow.copy(alpha = alpha * 0.22f * glow), Color.Transparent), center = Offset(0f, r * 0.05f), radius = r * 0.9f), r * 0.9f, Offset(0f, r * 0.05f))
     val eyeOpen = (1f - blink).coerceIn(0.08f, 1f)
     when (face) {
         PumpkinFace.Classic -> {
@@ -219,7 +222,7 @@ private fun DrawScope.drawBow(r: Float, alpha: Float) {
 private fun DrawScope.drawVampireCape(r: Float, alpha: Float) {
     val cape = Path().apply {
         moveTo(-r * 1.25f, r * 0.2f); lineTo(-r * 0.7f, -r * 1.05f); lineTo(0f, -r * 0.55f); lineTo(r * 0.7f, -r * 1.05f); lineTo(r * 1.25f, r * 0.2f)
-        lineTo(r * 1.1f, r * 1.1f); lineTo(-r * 1.1f, r * 1.1f); close()
+        lineTo(r * 0.9f, r * 0.7f); lineTo(-r * 0.9f, r * 0.7f); close()
     }
     drawPath(cape, Color(0xFF111111).copy(alpha = alpha))
     drawPath(Path().apply { moveTo(-r * 1.05f, r * 0.15f); lineTo(-r * 0.65f, -r * 0.88f); lineTo(-r * 0.25f, -r * 0.5f); close() }, Color(0xFF9E1B23).copy(alpha = alpha))

@@ -133,32 +133,141 @@ internal fun TileRow(icon: KiroXIcon, title: String, trailing: String? = null, o
 @Composable
 internal fun CustomizationScreen(
     palette: FusionPalette, onPalette: (FusionPalette) -> Unit,
-    seasonal: Boolean, onSeasonal: (Boolean) -> Unit,
     bubbleShape: com.kirox.app.settings.BubbleShape, onBubbleShape: (com.kirox.app.settings.BubbleShape) -> Unit,
-    motion: com.kirox.app.settings.MotionLevel, onMotion: (com.kirox.app.settings.MotionLevel) -> Unit,
+    animationsSummary: String,
+    onOpenAnimations: () -> Unit,
     onBack: () -> Unit
 ) {
-    var themeSheet by rememberSaveable { mutableStateOf(false) }
     BackHandler(onBack = onBack)
     LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { BackTitle("Кастомизация", onBack) }
-        item { BubblePreview(bubbleShape.radiusDp) }
+        item { LivePreview(bubbleShape.radiusDp) }
+        item { SectionCaption("Тема") }
         item {
-            Box(
-                Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(210.dp).clip(RoundedCornerShape(20.dp))
-                    .background(Fusion.colors.surface1).border(1.dp, Fusion.colors.outline, RoundedCornerShape(20.dp))
-            ) {
-                SeasonalLayer(Modifier.matchParentSize(), mode = com.kirox.app.ui.components.SeasonalMode.Showcase, force = true)
-                Text("Сезонная анимация", color = Fusion.colors.textSecondary, fontSize = 12.sp, modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp))
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ThemeCard(FusionPalette.AmoledBlack, palette == FusionPalette.AmoledBlack, Modifier.weight(1f)) { onPalette(FusionPalette.AmoledBlack) }
+                ThemeCard(FusionPalette.GraphiteDark, palette == FusionPalette.GraphiteDark, Modifier.weight(1f)) { onPalette(FusionPalette.GraphiteDark) }
             }
         }
-        item { TileRow(KiroXIcon.Palette, "Тема", trailing = themeName(palette)) { themeSheet = true } }
+        item { SectionCaption("Пузыри сообщений") }
         item {
-            SegmentRow(KiroXIcon.Chat, "Форма пузырей", com.kirox.app.settings.BubbleShape.entries, bubbleShape, { it.title }, onBubbleShape)
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                com.kirox.app.settings.BubbleShape.entries.forEach { shape ->
+                    BubbleCard(shape, shape == bubbleShape, Modifier.weight(1f)) { onBubbleShape(shape) }
+                }
+            }
         }
+        item { SectionCaption("Движение") }
+        item { TileRow(KiroXIcon.Star, "Анимации", trailing = animationsSummary, onClick = onOpenAnimations) }
+    }
+}
+
+/** A small chat mock that redraws instantly with the chosen theme and bubble shape. */
+@Composable
+private fun LivePreview(radius: Float) {
+    Column(
+        Modifier.padding(16.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Fusion.colors.background)
+            .border(1.dp, Fusion.colors.outline, RoundedCornerShape(20.dp))
+    ) {
+        Row(Modifier.fillMaxWidth().background(Fusion.colors.surface1).padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(32.dp).clip(CircleShape).background(Fusion.colors.avatar), contentAlignment = Alignment.Center) {
+                Text("K", color = Fusion.colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.width(10.dp))
+            Column {
+                Text("kiroX", color = Fusion.colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text("в сети", color = Fusion.colors.textSecondary, fontSize = 12.sp)
+            }
+        }
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Привет! Как тебе новый kiroX?", color = Fusion.colors.textPrimary, fontSize = 14.sp,
+                modifier = Modifier.clip(RoundedCornerShape(radius.dp)).background(Fusion.colors.surface2).padding(horizontal = 12.dp, vertical = 8.dp))
+            Text("Чисто и быстро 👌", color = Fusion.colors.textPrimary, fontSize = 14.sp,
+                modifier = Modifier.align(Alignment.End).clip(RoundedCornerShape(radius.dp)).background(Fusion.colors.surface3).padding(horizontal = 12.dp, vertical = 8.dp))
+        }
+    }
+}
+
+@Composable
+private fun SectionCaption(text: String) {
+    Text(text.uppercase(), color = Fusion.colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium, letterSpacing = 1.sp,
+        modifier = Modifier.padding(start = 20.dp, top = 14.dp, bottom = 8.dp))
+}
+
+/** Selectable card: thick outline and a check when chosen. */
+@Composable
+private fun OptionCard(selected: Boolean, modifier: Modifier, onClick: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier.clip(RoundedCornerShape(16.dp)).background(Fusion.colors.surface1)
+            .border(if (selected) 2.dp else 1.dp, if (selected) Fusion.colors.accent else Fusion.colors.outline, RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick).padding(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        content = content
+    )
+}
+
+@Composable
+private fun ThemeCard(palette: FusionPalette, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val colors = if (palette == FusionPalette.GraphiteDark) com.kirox.app.ui.theme.FusionColors.Graphite else com.kirox.app.ui.theme.FusionColors.Amoled
+    OptionCard(selected, modifier, onClick) {
+        // Mini screen painted with that theme's own colours.
+        Column(
+            Modifier.fillMaxWidth().height(70.dp).clip(RoundedCornerShape(10.dp)).background(colors.background).padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Box(Modifier.fillMaxWidth(0.7f).height(12.dp).clip(RoundedCornerShape(6.dp)).background(colors.surface2))
+            Box(Modifier.fillMaxWidth(0.55f).height(12.dp).clip(RoundedCornerShape(6.dp)).background(colors.surface3).align(Alignment.End))
+            Box(Modifier.fillMaxWidth(0.45f).height(12.dp).clip(RoundedCornerShape(6.dp)).background(colors.surface2))
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (selected) { IconGlyph(KiroXIcon.Check, null, Modifier.size(15.dp), Fusion.colors.textPrimary); Spacer(Modifier.width(4.dp)) }
+            Text(themeName(palette), color = if (selected) Fusion.colors.textPrimary else Fusion.colors.textSecondary, fontSize = 14.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun BubbleCard(shape: com.kirox.app.settings.BubbleShape, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    OptionCard(selected, modifier, onClick) {
+        Box(Modifier.fillMaxWidth().height(44.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxWidth(0.8f).height(30.dp).clip(RoundedCornerShape((shape.radiusDp * 0.75f).dp)).background(Fusion.colors.surface3))
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(shape.title, color = if (selected) Fusion.colors.textPrimary else Fusion.colors.textSecondary, fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1)
+    }
+}
+
+/** Everything about motion in one place: interface animations, seasonal effects and effect quality for weak phones. */
+@Composable
+internal fun AnimationsScreen(
+    motion: com.kirox.app.settings.MotionLevel, onMotion: (com.kirox.app.settings.MotionLevel) -> Unit,
+    seasonal: Boolean, onSeasonal: (Boolean) -> Unit,
+    quality: com.kirox.app.settings.EffectsQuality, onQuality: (com.kirox.app.settings.EffectsQuality) -> Unit,
+    weakDevice: Boolean,
+    onBack: () -> Unit
+) {
+    BackHandler(onBack = onBack)
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
+        item { BackTitle("Анимации", onBack) }
         item {
-            SegmentRow(KiroXIcon.Star, "Анимации", com.kirox.app.settings.MotionLevel.entries, motion, { it.title }, onMotion)
+            // Live preview: follows the speed, the light mode and the seasonal switch right away.
+            Box(
+                Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().height(200.dp).clip(RoundedCornerShape(20.dp))
+                    .background(Fusion.colors.surface1).border(1.dp, Fusion.colors.outline, RoundedCornerShape(20.dp))
+            ) {
+                if (seasonal) SeasonalLayer(Modifier.matchParentSize(), mode = com.kirox.app.ui.components.SeasonalMode.Showcase, force = true)
+                Text(
+                    if (seasonal) "Предпросмотр" else "Сезонные эффекты выключены",
+                    color = Fusion.colors.textSecondary, fontSize = 12.sp,
+                    modifier = Modifier.align(if (seasonal) Alignment.BottomCenter else Alignment.Center).padding(8.dp)
+                )
+            }
         }
+        item { SegmentRow(KiroXIcon.Star, "Анимации интерфейса", com.kirox.app.settings.MotionLevel.entries, motion, { it.title }, onMotion) }
+        item { Hint("Переходы между экранами, вкладки, нижняя панель и свайпы. «Выкл.» убирает движение полностью.") }
         item {
             Row(Modifier.fillMaxWidth().clickable { onSeasonal(!seasonal) }.heightIn(min = 58.dp).padding(horizontal = 16.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Fusion.colors.iconContainer), contentAlignment = Alignment.Center) {
@@ -167,7 +276,7 @@ internal fun CustomizationScreen(
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
                     Text("Сезонные эффекты", color = Fusion.colors.textPrimary, fontSize = 16.sp)
-                    Text("Частицы в шапках экранов", color = Fusion.colors.textSecondary, fontSize = 13.sp)
+                    Text("Хэллоуин, зима — в шапках и на экране загрузки", color = Fusion.colors.textSecondary, fontSize = 13.sp)
                 }
                 Switch(
                     seasonal, onSeasonal,
@@ -175,23 +284,20 @@ internal fun CustomizationScreen(
                 )
             }
         }
+        item { SegmentRow(KiroXIcon.Devices, "Качество эффектов", com.kirox.app.settings.EffectsQuality.entries, quality, { it.title }, onQuality) }
+        item {
+            Hint(
+                "Лёгкое: меньше частиц, без градиентов, 30 кадров в секунду — для слабых телефонов и экономии батареи. " +
+                    "Авто включает его само на слабых телефонах и в режиме энергосбережения" +
+                    if (quality == com.kirox.app.settings.EffectsQuality.Auto) (if (weakDevice) " (сейчас: лёгкое)." else " (сейчас: высокое).") else "."
+            )
+        }
     }
-    if (themeSheet) ThemeSheet(palette, onSelect = onPalette, onDismiss = { themeSheet = false })
 }
 
-/** Two sample bubbles that follow the chosen shape and theme. */
 @Composable
-private fun BubblePreview(radius: Float) {
-    Column(
-        Modifier.padding(16.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Fusion.colors.surface1)
-            .border(1.dp, Fusion.colors.outline, RoundedCornerShape(20.dp)).padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text("Привет! Как тебе новый kiroX?", color = Fusion.colors.textPrimary, fontSize = 15.sp,
-            modifier = Modifier.clip(RoundedCornerShape(radius.dp)).background(Fusion.colors.surface2).padding(horizontal = 12.dp, vertical = 8.dp))
-        Text("Чисто и быстро 👌", color = Fusion.colors.textPrimary, fontSize = 15.sp,
-            modifier = Modifier.align(Alignment.End).clip(RoundedCornerShape(radius.dp)).background(Fusion.colors.surface3).padding(horizontal = 12.dp, vertical = 8.dp))
-    }
+private fun Hint(text: String) {
+    Text(text, color = Fusion.colors.textTertiary, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(start = 70.dp, end = 16.dp, bottom = 10.dp))
 }
 
 @Composable
@@ -231,6 +337,8 @@ internal fun ProfileTab(profile: TelegramUserProfile?, onOpenSettings: () -> Uni
     Box(Modifier.fillMaxSize()) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
             item {
+                Box(Modifier.fillMaxWidth()) {
+                SeasonalLayer(Modifier.matchParentSize(), freeZoneFraction = 0.2f..0.8f)
                 Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     TitleAction(KiroXIcon.Qr, "QR-код профиля") { onNotice("QR-код профиля — $IN_PROGRESS") }
                     Spacer(Modifier.weight(1f))
@@ -242,6 +350,7 @@ internal fun ProfileTab(profile: TelegramUserProfile?, onOpenSettings: () -> Uni
                             DropdownMenuItem(text = { Text("Выйти из аккаунта", color = Fusion.colors.danger) }, onClick = { menu = false; confirmLogout = true })
                         }
                     }
+                }
                 }
             }
             item {
