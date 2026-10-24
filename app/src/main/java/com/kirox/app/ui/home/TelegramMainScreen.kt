@@ -68,7 +68,7 @@ private enum class MainTab(val item: FusionNavItem) {
     Settings(FusionNavItem("Настройки", KiroXIcon.Tune)),
     Profile(FusionNavItem("Профиль", KiroXIcon.ProfileCircle))
 }
-private enum class SubScreen { None, NewMessage, Customization, Animations }
+private enum class SubScreen { None, NewMessage, Customization, Themes, ChatStyle, Animations }
 private enum class RealChatSection { Archive, Messages }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -131,11 +131,16 @@ fun TelegramMainScreen(
                 when {
                     subScreen == SubScreen.NewMessage -> NewMessageScreen(contacts, onBack = { sub = SubScreen.None }, onOpenContact = { sub = SubScreen.None; onOpenContact(it) }, onOpenSaved = { sub = SubScreen.None; onOpenSavedMessages() }, onNotice = showNotice)
                     subScreen == SubScreen.Customization -> CustomizationScreen(
-                        palette, onPalette, bubbleShape, onBubbleShape,
+                        palette, bubbleShape,
                         animationsSummary = if (seasonal) effectScene.title else "Выкл.",
+                        animationsOn = seasonal,
+                        onOpenThemes = { sub = SubScreen.Themes },
+                        onOpenChats = { sub = SubScreen.ChatStyle },
                         onOpenAnimations = { sub = SubScreen.Animations },
                         onBack = { sub = SubScreen.None }
                     )
+                    subScreen == SubScreen.Themes -> ThemesScreen(palette, onPalette, onBack = { sub = SubScreen.Customization })
+                    subScreen == SubScreen.ChatStyle -> ChatStyleScreen(bubbleShape, onBubbleShape, onBack = { sub = SubScreen.Customization })
                     subScreen == SubScreen.Animations -> AnimationsScreen(
                         motion, onMotion, seasonal, onSeasonal, effectScene, onEffectScene, effectsQuality, onEffectsQuality, weakDevice,
                         onBack = { sub = SubScreen.Customization }

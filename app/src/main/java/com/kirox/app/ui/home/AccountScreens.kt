@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -131,25 +132,77 @@ internal fun TileRow(icon: KiroXIcon, title: String, trailing: String? = null, o
     }
 }
 
+/** Customization hub: three clear sections, each with its current value. */
 @Composable
 internal fun CustomizationScreen(
-    palette: FusionPalette, onPalette: (FusionPalette) -> Unit,
-    bubbleShape: com.kirox.app.settings.BubbleShape, onBubbleShape: (com.kirox.app.settings.BubbleShape) -> Unit,
+    palette: FusionPalette,
+    bubbleShape: com.kirox.app.settings.BubbleShape,
     animationsSummary: String,
+    animationsOn: Boolean,
+    onOpenThemes: () -> Unit,
+    onOpenChats: () -> Unit,
     onOpenAnimations: () -> Unit,
     onBack: () -> Unit
 ) {
     BackHandler(onBack = onBack)
     LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { BackTitle("Кастомизация", onBack) }
-        item { LivePreview(bubbleShape.radiusDp) }
-        item { SectionCaption("Тема") }
-        item {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ThemeCard(FusionPalette.AmoledBlack, palette == FusionPalette.AmoledBlack, Modifier.weight(1f)) { onPalette(FusionPalette.AmoledBlack) }
-                ThemeCard(FusionPalette.GraphiteDark, palette == FusionPalette.GraphiteDark, Modifier.weight(1f)) { onPalette(FusionPalette.GraphiteDark) }
+        item { StyleBanner(palette.title, animationsSummary, animationsOn) }
+        item { TileRow(KiroXIcon.Palette, "Темы", trailing = palette.title, onClick = onOpenThemes) }
+        item { TileRow(KiroXIcon.Chat, "Чаты", trailing = bubbleShape.title, onClick = onOpenChats) }
+        item { TileRow(KiroXIcon.Star, "Анимации", trailing = animationsSummary, onClick = onOpenAnimations) }
+    }
+}
+
+/** kiroX logo over the chosen animation, with the current theme and animation under it. */
+@Composable
+private fun StyleBanner(theme: String, animation: String, animationsOn: Boolean) {
+    Box(
+        Modifier.padding(16.dp).fillMaxWidth().height(150.dp).clip(RoundedCornerShape(20.dp))
+            .background(Fusion.colors.surface1).border(1.dp, Fusion.colors.outline, RoundedCornerShape(20.dp))
+    ) {
+        if (animationsOn) SeasonalLayer(Modifier.matchParentSize(), mode = com.kirox.app.ui.components.SeasonalMode.Banner, force = true)
+        Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                androidx.compose.ui.text.buildAnnotatedString {
+                    append("kiro")
+                    withStyle(androidx.compose.ui.text.SpanStyle(color = Fusion.colors.textSecondary)) { append("X") }
+                },
+                color = Fusion.colors.textPrimary, fontSize = 36.sp, fontWeight = FontWeight.Light
+            )
+            Text("$theme · $animation", color = Fusion.colors.textSecondary, fontSize = 13.sp)
+        }
+    }
+}
+
+/** Theme picker: a grid of cards, each a small screen painted in that theme. Dark themes only. */
+@Composable
+internal fun ThemesScreen(palette: FusionPalette, onPalette: (FusionPalette) -> Unit, onBack: () -> Unit) {
+    BackHandler(onBack = onBack)
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
+        item { BackTitle("Темы", onBack) }
+        FusionPalette.entries.chunked(2).forEach { pair ->
+            item(key = pair.first().name) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    pair.forEach { option -> ThemeCard(option, option == palette, Modifier.weight(1f)) { onPalette(option) } }
+                    if (pair.size == 1) Spacer(Modifier.weight(1f))
+                }
             }
         }
+        item {
+            Text("Все темы тёмные и с белыми акцентами — в стиле kiroX.", color = Fusion.colors.textTertiary, fontSize = 12.sp,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
+        }
+    }
+}
+
+/** Chat appearance: live chat preview and bubble shape. */
+@Composable
+internal fun ChatStyleScreen(bubbleShape: com.kirox.app.settings.BubbleShape, onBubbleShape: (com.kirox.app.settings.BubbleShape) -> Unit, onBack: () -> Unit) {
+    BackHandler(onBack = onBack)
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
+        item { BackTitle("Чаты", onBack) }
+        item { LivePreview(bubbleShape.radiusDp) }
         item { SectionCaption("Пузыри сообщений") }
         item {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -158,8 +211,6 @@ internal fun CustomizationScreen(
                 }
             }
         }
-        item { SectionCaption("Движение") }
-        item { TileRow(KiroXIcon.Star, "Анимации", trailing = animationsSummary, onClick = onOpenAnimations) }
     }
 }
 
@@ -195,7 +246,7 @@ private fun SectionCaption(text: String) {
         modifier = Modifier.padding(start = 20.dp, top = 14.dp, bottom = 8.dp))
 }
 
-/** Selectable card: thick outline and a check when chosen. */
+/** Selectable card: thick outline when chosen. */
 @Composable
 private fun OptionCard(selected: Boolean, modifier: Modifier, onClick: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     Column(
@@ -209,23 +260,31 @@ private fun OptionCard(selected: Boolean, modifier: Modifier, onClick: () -> Uni
 
 @Composable
 private fun ThemeCard(palette: FusionPalette, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    val colors = if (palette == FusionPalette.GraphiteDark) com.kirox.app.ui.theme.FusionColors.Graphite else com.kirox.app.ui.theme.FusionColors.Amoled
+    val colors = com.kirox.app.ui.theme.FusionColors.of(palette)
     OptionCard(selected, modifier, onClick) {
-        // Mini screen painted with that theme's own colours.
+        // Mini chat painted with that theme's own colours.
         Column(
-            Modifier.fillMaxWidth().height(70.dp).clip(RoundedCornerShape(10.dp)).background(colors.background).padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp)
+            Modifier.fillMaxWidth().height(86.dp).clip(RoundedCornerShape(10.dp)).background(colors.background)
+                .border(1.dp, colors.outline, RoundedCornerShape(10.dp))
         ) {
-            Box(Modifier.fillMaxWidth(0.7f).height(12.dp).clip(RoundedCornerShape(6.dp)).background(colors.surface2))
-            Box(Modifier.fillMaxWidth(0.55f).height(12.dp).clip(RoundedCornerShape(6.dp)).background(colors.surface3).align(Alignment.End))
-            Box(Modifier.fillMaxWidth(0.45f).height(12.dp).clip(RoundedCornerShape(6.dp)).background(colors.surface2))
+            Row(Modifier.fillMaxWidth().background(colors.surface1).padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(12.dp).clip(CircleShape).background(colors.avatar))
+                Spacer(Modifier.width(5.dp))
+                Box(Modifier.width(34.dp).height(6.dp).clip(RoundedCornerShape(3.dp)).background(colors.textSecondary))
+            }
+            Column(Modifier.fillMaxWidth().padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(Modifier.fillMaxWidth(0.7f).height(11.dp).clip(RoundedCornerShape(6.dp)).background(colors.surface2))
+                Box(Modifier.fillMaxWidth(0.55f).height(11.dp).clip(RoundedCornerShape(6.dp)).background(colors.surface3).align(Alignment.End))
+                Box(Modifier.fillMaxWidth(0.45f).height(11.dp).clip(RoundedCornerShape(6.dp)).background(colors.surface2))
+            }
         }
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (selected) { IconGlyph(KiroXIcon.Check, null, Modifier.size(15.dp), Fusion.colors.textPrimary); Spacer(Modifier.width(4.dp)) }
-            Text(themeName(palette), color = if (selected) Fusion.colors.textPrimary else Fusion.colors.textSecondary, fontSize = 14.sp,
+            Text(palette.title, color = if (selected) Fusion.colors.textPrimary else Fusion.colors.textSecondary, fontSize = 14.sp,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1)
         }
+        Text(palette.subtitle, color = Fusion.colors.textTertiary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -367,7 +426,6 @@ private fun <T> SegmentRow(icon: KiroXIcon, title: String, options: List<T>, sel
     }
 }
 
-private fun themeName(palette: FusionPalette) = if (palette == FusionPalette.GraphiteDark) "Graphite Dark" else "AMOLED Black"
 
 // ---------- My profile (old Fusion layout) ----------
 

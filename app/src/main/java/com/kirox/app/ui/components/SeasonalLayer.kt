@@ -28,7 +28,7 @@ val LocalEffectScene = staticCompositionLocalOf { com.kirox.app.settings.EffectS
 enum class Season { Halloween, Winter, Plain }
 
 /** [Header] is a light strip behind screen titles; [Showcase] is the full scene for previews and splash. */
-enum class SeasonalMode { Header, Showcase, Splash }
+enum class SeasonalMode { Header, Showcase, Splash, Banner }
 
 fun currentSeason(calendar: Calendar = Calendar.getInstance()): Season {
     val month = calendar.get(Calendar.MONTH)
@@ -66,6 +66,14 @@ private val SplashLanterns = listOf(
     Lantern(0.78f, 0.66f, 0.85f, PumpkinFace.Cute, PumpkinCostume.Vampire, 0.85f),
     Lantern(0.30f, 0.31f, 0.5f, PumpkinFace.Sleepy, PumpkinCostume.None, 0.4f),
     Lantern(0.72f, 0.33f, 0.5f, PumpkinFace.Spooky, PumpkinCostume.TopHat, 0.7f)
+)
+
+/** Customization banner: lanterns at the sides, the centre stays free for the logo. */
+private val BannerLanterns = listOf(
+    Lantern(0.11f, 0.66f, 1f, PumpkinFace.Classic, PumpkinCostume.WitchHat, 0.15f),
+    Lantern(0.89f, 0.66f, 1f, PumpkinFace.Cute, PumpkinCostume.Vampire, 0.65f),
+    Lantern(0.25f, 0.30f, 0.6f, PumpkinFace.Happy, PumpkinCostume.None, 0.4f),
+    Lantern(0.75f, 0.28f, 0.6f, PumpkinFace.Spooky, PumpkinCostume.TopHat, 0.85f)
 )
 
 /**
@@ -119,6 +127,7 @@ private fun DrawScope.halloween(t: Float, mode: SeasonalMode, freeZone: ClosedFl
     val webRadius = when (mode) {
         SeasonalMode.Showcase -> size.height * 0.55f
         SeasonalMode.Splash -> size.width * 0.42f
+        SeasonalMode.Banner -> size.height * 0.5f
         SeasonalMode.Header -> minOf(size.height * 1.1f, 64.dp.toPx())
     }
     val drop = (sin(t * 0.7f) * 0.5f + 0.5f)
@@ -131,7 +140,7 @@ private fun DrawScope.halloween(t: Float, mode: SeasonalMode, freeZone: ClosedFl
         val period = 11f + i * 4f
         val p = ((t + i * 3.7f) % period) / period
         val x = -40f + (size.width + 80f) * p
-        val y = size.height * (if (mode == SeasonalMode.Splash) 0.12f + 0.1f * i else 0.18f + 0.18f * i) + sin(t * 1.6f + i) * size.height * 0.03f
+        val y = size.height * (when (mode) { SeasonalMode.Splash -> 0.12f + 0.1f * i; SeasonalMode.Banner -> 0.1f + 0.05f * i; else -> 0.18f + 0.18f * i }) + sin(t * 1.6f + i) * size.height * 0.03f
         val span = (if (showcase) 34.dp else 20.dp).toPx() * (1f - i * 0.15f)
         drawBat(Offset(x, y), span, flap = sin(t * 9f + i * 2f))
     }
@@ -139,9 +148,11 @@ private fun DrawScope.halloween(t: Float, mode: SeasonalMode, freeZone: ClosedFl
     val base = when (mode) {
         SeasonalMode.Showcase -> 26.dp
         SeasonalMode.Splash -> 34.dp
+        SeasonalMode.Banner -> 20.dp
         SeasonalMode.Header -> 10.dp
     }.toPx()
-    val placed: List<Pair<Lantern, Float>> = if (showcase) (if (mode == SeasonalMode.Splash) SplashLanterns else ShowcaseLanterns).map { it to size.width * it.x } else {
+    val sceneLanterns = when (mode) { SeasonalMode.Splash -> SplashLanterns; SeasonalMode.Banner -> BannerLanterns; else -> ShowcaseLanterns }
+    val placed: List<Pair<Lantern, Float>> = if (showcase) sceneLanterns.map { it to size.width * it.x } else {
         // Fit as many header pumpkins as the free gap allows (none if it is too narrow).
         val zone = freeZone ?: return
         val slot = base * 3.4f
@@ -185,7 +196,7 @@ private fun DrawScope.snow(t: Float, mode: SeasonalMode, light: Boolean) {
 
 /** The main kiroX animation: slow drifting, twinkling white particles (as on the splash screen). */
 private fun DrawScope.sparkles(t: Float, mode: SeasonalMode, light: Boolean) {
-    val count = when (mode) { SeasonalMode.Header -> 14; SeasonalMode.Showcase -> 34; SeasonalMode.Splash -> 46 } / (if (light) 2 else 1)
+    val count = when (mode) { SeasonalMode.Header -> 14; SeasonalMode.Showcase, SeasonalMode.Banner -> 34; SeasonalMode.Splash -> 46 } / (if (light) 2 else 1)
     repeat(count) { i ->
         val seed = (i * 7919 % 1000) / 1000f
         val speed = 0.45f + (i * 37 % 100) / 80f

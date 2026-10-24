@@ -10,7 +10,13 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
-enum class FusionPalette { AmoledBlack, GraphiteDark }
+/** KiroX themes. All are dark by design: there is deliberately no light theme. */
+enum class FusionPalette(val title: String, val subtitle: String) {
+    AmoledBlack("AMOLED Black", "Чистый чёрный, бережёт заряд"),
+    GraphiteDark("Graphite Dark", "Мягкий тёмно-серый"),
+    Midnight("Полночь", "Глубокий холодный синий"),
+    Espresso("Эспрессо", "Тёплый тёмный")
+}
 
 @Immutable
 data class FusionColors(
@@ -43,6 +49,25 @@ data class FusionColors(
             textTertiary = Color(0xFF858585), accent = Color(0xFFFFFFFF), onAccent = Color(0xFF000000),
             danger = Color(0xFFFF6961), avatar = Color(0xFF465562), iconContainer = Color(0xFF202020)
         )
+        val Midnight = FusionColors(
+            background = Color(0xFF070A10), surface1 = Color(0xFF111723), surface2 = Color(0xFF19202E), surface3 = Color(0xFF263042),
+            outline = Color(0xFF1E2636), outlineStrong = Color(0xFF3F4A60), textPrimary = Color(0xFFFFFFFF), textSecondary = Color(0xFFA7B0C0),
+            textTertiary = Color(0xFF7B8598), accent = Color(0xFFFFFFFF), onAccent = Color(0xFF000000),
+            danger = Color(0xFFFF6961), avatar = Color(0xFF34435C), iconContainer = Color(0xFF151C2A)
+        )
+        val Espresso = FusionColors(
+            background = Color(0xFF0D0A08), surface1 = Color(0xFF1A1512), surface2 = Color(0xFF241D19), surface3 = Color(0xFF342A24),
+            outline = Color(0xFF2A221D), outlineStrong = Color(0xFF54463C), textPrimary = Color(0xFFFFFFFF), textSecondary = Color(0xFFB7AAA0),
+            textTertiary = Color(0xFF8C7F75), accent = Color(0xFFFFFFFF), onAccent = Color(0xFF000000),
+            danger = Color(0xFFFF6961), avatar = Color(0xFF55443A), iconContainer = Color(0xFF1F1915)
+        )
+
+        fun of(palette: FusionPalette) = when (palette) {
+            FusionPalette.AmoledBlack -> Amoled
+            FusionPalette.GraphiteDark -> Graphite
+            FusionPalette.Midnight -> Midnight
+            FusionPalette.Espresso -> Espresso
+        }
     }
 }
 
@@ -74,7 +99,7 @@ object Fusion {
 /** Provides Fusion tokens and a monochrome Material scheme so stock M3 widgets stop using the default purple palette. */
 @Composable
 fun FusionTheme(palette: FusionPalette = FusionPalette.AmoledBlack, content: @Composable () -> Unit) {
-    val colors = if (palette == FusionPalette.GraphiteDark) FusionColors.Graphite else FusionColors.Amoled
+    val colors = FusionColors.of(palette)
     val scheme = darkColorScheme(
         primary = colors.accent, onPrimary = colors.onAccent,
         secondary = colors.textSecondary, onSecondary = colors.onAccent,

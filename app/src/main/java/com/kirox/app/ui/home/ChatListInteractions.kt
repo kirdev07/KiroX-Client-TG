@@ -152,26 +152,3 @@ internal fun ChatSearchResults(query: String, search: suspend (String) -> List<T
 private fun Hint(text: String) {
     Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) { Text(text, color = Fusion.colors.textSecondary, textAlign = TextAlign.Center) }
 }
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-internal fun ThemeSheet(palette: FusionPalette, onSelect: (FusionPalette) -> Unit, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Fusion.colors.surface1) {
-        Text("Тема", color = Fusion.colors.textPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-        listOf(
-            FusionPalette.AmoledBlack to ("AMOLED Black" to "Чистый чёрный фон, экономит заряд на OLED-экранах"),
-            FusionPalette.GraphiteDark to ("Graphite Dark" to "Мягкий тёмно-серый фон")
-        ).forEach { (value, texts) ->
-            Row(Modifier.fillMaxWidth().clickable { onSelect(value) }.heightIn(min = 64.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(palette == value, { onSelect(value) }, colors = RadioButtonDefaults.colors(selectedColor = Fusion.colors.accent, unselectedColor = Fusion.colors.outlineStrong))
-                Spacer(Modifier.width(8.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(texts.first, color = Fusion.colors.textPrimary, fontSize = 15.sp)
-                    Text(texts.second, color = Fusion.colors.textSecondary, fontSize = 12.sp)
-                }
-                Box(Modifier.size(28.dp).clip(CircleShape).background(if (value == FusionPalette.AmoledBlack) FusionColors.Amoled.background else FusionColors.Graphite.background).border(1.dp, Fusion.colors.outline, CircleShape))
-            }
-        }
-        Spacer(Modifier.navigationBarsPadding().height(12.dp))
-    }
-}
