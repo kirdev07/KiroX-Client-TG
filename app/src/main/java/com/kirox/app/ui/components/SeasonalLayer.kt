@@ -25,8 +25,11 @@ val LocalSeasonalEffects = staticCompositionLocalOf { true }
 /** Which decorative animation is chosen. */
 val LocalEffectScene = staticCompositionLocalOf { com.kirox.app.settings.EffectScene.Main }
 
-/** [Header] is a light strip behind screen titles; [Showcase] is the full scene for previews and splash. */
-enum class SeasonalMode { Header, Showcase, Splash, Banner }
+/**
+ * [Header] is a light strip behind screen titles; [Showcase] is the full scene for previews and splash;
+ * [Thumbnail] is the tiny tile in the scene list (drawn like [Header] unless a scene has its own).
+ */
+enum class SeasonalMode { Header, Showcase, Splash, Banner, Thumbnail }
 
 private data class Lantern(val x: Float, val y: Float, val size: Float, val face: PumpkinFace, val costume: PumpkinCostume, val seed: Float)
 
@@ -95,6 +98,7 @@ fun SeasonalLayer(
     Canvas(modifier.graphicsLayer()) {
         // Read the shared clock here, in the draw phase: the scene redraws without recomposing.
         val time = if (animate) clock.time else 2.3f
+        val mode = if (mode == SeasonalMode.Thumbnail && chosen != com.kirox.app.settings.EffectScene.NewYear) SeasonalMode.Header else mode
         when (chosen) {
             com.kirox.app.settings.EffectScene.Halloween -> halloween(time, mode, freeZone ?: freeZoneFraction?.let { (size.width * it.start)..(size.width * it.endInclusive) }, light)
             com.kirox.app.settings.EffectScene.Main, com.kirox.app.settings.EffectScene.Auto -> sparkles(time, mode, light)
@@ -110,7 +114,7 @@ private fun DrawScope.halloween(t: Float, mode: SeasonalMode, freeZone: ClosedFl
         SeasonalMode.Showcase -> size.height * 0.55f
         SeasonalMode.Splash -> size.width * 0.42f
         SeasonalMode.Banner -> size.height * 0.5f
-        SeasonalMode.Header -> minOf(size.height * 1.1f, 64.dp.toPx())
+        SeasonalMode.Header, SeasonalMode.Thumbnail -> minOf(size.height * 1.1f, 64.dp.toPx())
     }
     val drop = (sin(t * 0.7f) * 0.5f + 0.5f)
     drawCobwebCached(Offset.Zero, webRadius, flip = false)
@@ -133,7 +137,7 @@ private fun DrawScope.halloween(t: Float, mode: SeasonalMode, freeZone: ClosedFl
         SeasonalMode.Showcase -> 26.dp
         SeasonalMode.Splash -> 34.dp
         SeasonalMode.Banner -> 20.dp
-        SeasonalMode.Header -> 10.dp
+        SeasonalMode.Header, SeasonalMode.Thumbnail -> 10.dp
     }.toPx()
     val sceneLanterns = when (mode) { SeasonalMode.Splash -> SplashLanterns; SeasonalMode.Banner -> BannerLanterns; else -> ShowcaseLanterns }
     val placed: List<Pair<Lantern, Float>> = if (showcase) sceneLanterns.map { it to size.width * it.x } else {
@@ -210,6 +214,13 @@ private fun DrawScope.winter(t: Float, mode: SeasonalMode, light: Boolean, freeZ
  * firework bursts in the sky and a light snowfall. Headers keep only the garland and a few flakes.
  */
 private fun DrawScope.newYear(t: Float, mode: SeasonalMode, light: Boolean, freeZone: ClosedFloatingPointRange<Float>?) {
+    if (mode == SeasonalMode.Thumbnail) {
+        // List tile: a small decorated tree under a short garland.
+        drawNewYearTree(Offset(size.width / 2, size.height * 0.98f), size.height * 0.78f, t, light)
+        val bulbR = 2.dp.toPx()
+        drawGarland(0f, size.width, -bulbR * 0.5f, bulbR * 1.6f, t, bulbR, light)
+        return
+    }
     val header = mode == SeasonalMode.Header
     val x0 = if (header && freeZone != null) freeZone.start else 0f
     val x1 = if (header && freeZone != null) freeZone.endInclusive else size.width
@@ -240,7 +251,7 @@ private fun DrawScope.newYear(t: Float, mode: SeasonalMode, light: Boolean, free
 
 /** The main kiroX animation: slow drifting, twinkling white particles (as on the splash screen). */
 private fun DrawScope.sparkles(t: Float, mode: SeasonalMode, light: Boolean) {
-    val count = when (mode) { SeasonalMode.Header -> 14; SeasonalMode.Showcase, SeasonalMode.Banner -> 34; SeasonalMode.Splash -> 46 } / (if (light) 2 else 1)
+    val count = when (mode) { SeasonalMode.Header, SeasonalMode.Thumbnail -> 14; SeasonalMode.Showcase, SeasonalMode.Banner -> 34; SeasonalMode.Splash -> 46 } / (if (light) 2 else 1)
     repeat(count) { i ->
         val seed = (i * 7919 % 1000) / 1000f
         val speed = 0.45f + (i * 37 % 100) / 80f

@@ -406,7 +406,7 @@ private fun SceneRow(scene: com.kirox.app.settings.EffectScene, selected: Boolea
         Box(
             Modifier.size(64.dp, 44.dp).clip(RoundedCornerShape(10.dp)).background(Fusion.colors.surface1)
                 .border(if (selected) 1.5.dp else 1.dp, if (selected) Fusion.colors.accent else Fusion.colors.outline, RoundedCornerShape(10.dp))
-        ) { SeasonalLayer(Modifier.matchParentSize(), mode = com.kirox.app.ui.components.SeasonalMode.Header, force = true, scene = scene, freeZoneFraction = 0.05f..0.95f) }
+        ) { SeasonalLayer(Modifier.matchParentSize(), mode = com.kirox.app.ui.components.SeasonalMode.Thumbnail, force = true, scene = scene, freeZoneFraction = 0.05f..0.95f) }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(scene.title, color = Fusion.colors.textPrimary, fontSize = 16.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
