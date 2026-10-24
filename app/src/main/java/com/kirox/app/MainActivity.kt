@@ -9,6 +9,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.CompositionLocalProvider
 import com.kirox.app.ui.KiroXApp
 import com.kirox.app.ui.components.LocalSeasonalEffects
+import com.kirox.app.ui.components.LocalEffectScene
 import com.kirox.app.ui.theme.LocalLightEffects
 import com.kirox.app.settings.EffectsQuality
 import com.kirox.app.settings.prefersLightEffects
@@ -28,10 +29,11 @@ class MainActivity : ComponentActivity() {
             val bubbles by settings.bubbleShape.collectAsStateWithLifecycle()
             val seasonal by settings.seasonalEffects.collectAsStateWithLifecycle()
             val quality by settings.effectsQuality.collectAsStateWithLifecycle()
+            val scene by settings.effectScene.collectAsStateWithLifecycle()
             val weakDevice = remember { prefersLightEffects(this@MainActivity) }
             val lightEffects = quality == EffectsQuality.Light || (quality == EffectsQuality.Auto && weakDevice)
             FusionTheme(palette) {
-                CompositionLocalProvider(LocalMotionFactor provides motion.factor, LocalBubbleRadius provides bubbles.radiusDp, LocalSeasonalEffects provides seasonal, LocalLightEffects provides lightEffects) {
+                CompositionLocalProvider(LocalMotionFactor provides motion.factor, LocalBubbleRadius provides bubbles.radiusDp, LocalSeasonalEffects provides seasonal, LocalLightEffects provides lightEffects, LocalEffectScene provides scene) {
                     KiroXApp()
                 }
             }

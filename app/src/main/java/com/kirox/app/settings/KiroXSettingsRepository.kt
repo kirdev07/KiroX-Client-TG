@@ -19,6 +19,12 @@ private val Context.kiroxSettings by preferencesDataStore("kirox_settings")
 
 enum class BubbleShape(val title: String, val radiusDp: Float) { Soft("Мягкие", 22f), Medium("Средние", 16f), Strict("Строгие", 6f) }
 
+/** Decorative animation in headers, previews and on the splash screen. */
+enum class EffectScene(val title: String, val subtitle: String) {
+    Main("Основная", "Мерцающие частицы kiroX"),
+    Halloween("Хэллоуин", "Тыквы в костюмах, летучие мыши, паутина")
+}
+
 /** Detail of decorative effects. [Auto] picks [Light] on weak devices and in battery saver. */
 enum class EffectsQuality(val title: String) { Auto("Авто"), Full("Высокое"), Light("Лёгкое") }
 
@@ -33,6 +39,7 @@ class KiroXSettingsRepository(context: Context) {
     private val bubbleKey = stringPreferencesKey("bubble_shape")
     private val motionKey = stringPreferencesKey("motion")
     private val qualityKey = stringPreferencesKey("effects_quality")
+    private val sceneKey = stringPreferencesKey("effect_scene")
 
     val palette: StateFlow<FusionPalette> = store.data
         .catch { emit(androidx.datastore.preferences.core.emptyPreferences()) }
@@ -63,6 +70,17 @@ class KiroXSettingsRepository(context: Context) {
         .catch { emit(androidx.datastore.preferences.core.emptyPreferences()) }
         .map { prefs -> EffectsQuality.entries.firstOrNull { it.name == prefs[qualityKey] } ?: EffectsQuality.Auto }
         .stateIn(scope, SharingStarted.Eagerly, EffectsQuality.Auto)
+
+    /** Unset → Halloween during the Halloween season, the main animation otherwise. */
+    val effectScene: StateFlow<EffectScene> = store.data
+        .catch { emit(androidx.datastore.preferences.core.emptyPreferences()) }
+        .map { prefs -> EffectScene.entries.firstOrNull { it.name == prefs[sceneKey] } ?: defaultScene() }
+        .stateIn(scope, SharingStarted.Eagerly, defaultScene())
+
+    fun setEffectScene(value: EffectScene) { scope.launch { store.edit { it[sceneKey] = value.name } } }
+
+    private fun defaultScene() =
+        if (com.kirox.app.ui.components.currentSeason() == com.kirox.app.ui.components.Season.Halloween) EffectScene.Halloween else EffectScene.Main
 
     fun setEffectsQuality(value: EffectsQuality) { scope.launch { store.edit { it[qualityKey] = value.name } } }
 

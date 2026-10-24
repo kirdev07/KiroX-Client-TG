@@ -23,6 +23,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.geometry.Offset
@@ -240,11 +241,12 @@ private fun BubbleCard(shape: com.kirox.app.settings.BubbleShape, selected: Bool
     }
 }
 
-/** Everything about motion in one place: interface animations, seasonal effects and effect quality for weak phones. */
+/** Animations: on/off, which animation, interface speed and effect quality — compact, one tap each. */
 @Composable
 internal fun AnimationsScreen(
     motion: com.kirox.app.settings.MotionLevel, onMotion: (com.kirox.app.settings.MotionLevel) -> Unit,
-    seasonal: Boolean, onSeasonal: (Boolean) -> Unit,
+    enabled: Boolean, onEnabled: (Boolean) -> Unit,
+    scene: com.kirox.app.settings.EffectScene, onScene: (com.kirox.app.settings.EffectScene) -> Unit,
     quality: com.kirox.app.settings.EffectsQuality, onQuality: (com.kirox.app.settings.EffectsQuality) -> Unit,
     weakDevice: Boolean,
     onBack: () -> Unit
@@ -253,44 +255,84 @@ internal fun AnimationsScreen(
     LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { BackTitle("Анимации", onBack) }
         item {
-            // Live preview: follows the speed, the light mode and the seasonal switch right away.
             Box(
-                Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().height(200.dp).clip(RoundedCornerShape(20.dp))
-                    .background(Fusion.colors.surface1).border(1.dp, Fusion.colors.outline, RoundedCornerShape(20.dp))
+                Modifier.padding(horizontal = 16.dp, vertical = 4.dp).fillMaxWidth().height(150.dp).clip(RoundedCornerShape(18.dp))
+                    .background(Fusion.colors.surface1).border(1.dp, Fusion.colors.outline, RoundedCornerShape(18.dp))
             ) {
-                if (seasonal) SeasonalLayer(Modifier.matchParentSize(), mode = com.kirox.app.ui.components.SeasonalMode.Showcase, force = true)
-                Text(
-                    if (seasonal) "Предпросмотр" else "Сезонные эффекты выключены",
-                    color = Fusion.colors.textSecondary, fontSize = 12.sp,
-                    modifier = Modifier.align(if (seasonal) Alignment.BottomCenter else Alignment.Center).padding(8.dp)
-                )
+                if (enabled) SeasonalLayer(Modifier.matchParentSize(), mode = com.kirox.app.ui.components.SeasonalMode.Showcase, force = true, scene = scene)
+                else Text("Анимации выключены", color = Fusion.colors.textSecondary, fontSize = 13.sp, modifier = Modifier.align(Alignment.Center))
             }
         }
-        item { SegmentRow(KiroXIcon.Star, "Анимации интерфейса", com.kirox.app.settings.MotionLevel.entries, motion, { it.title }, onMotion) }
-        item { Hint("Переходы между экранами, вкладки, нижняя панель и свайпы. «Выкл.» убирает движение полностью.") }
         item {
-            Row(Modifier.fillMaxWidth().clickable { onSeasonal(!seasonal) }.heightIn(min = 58.dp).padding(horizontal = 16.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Fusion.colors.iconContainer), contentAlignment = Alignment.Center) {
-                    IconGlyph(KiroXIcon.Stories, null, Modifier.size(21.dp), Fusion.colors.textPrimary)
-                }
-                Spacer(Modifier.width(14.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("Сезонные эффекты", color = Fusion.colors.textPrimary, fontSize = 16.sp)
-                    Text("Хэллоуин, зима — в шапках и на экране загрузки", color = Fusion.colors.textSecondary, fontSize = 13.sp)
-                }
+            Row(Modifier.fillMaxWidth().clickable { onEnabled(!enabled) }.heightIn(min = 52.dp).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Анимации", color = Fusion.colors.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                 Switch(
-                    seasonal, onSeasonal,
+                    enabled, onEnabled,
                     colors = SwitchDefaults.colors(checkedThumbColor = Fusion.colors.onAccent, checkedTrackColor = Fusion.colors.accent, uncheckedThumbColor = Fusion.colors.textTertiary, uncheckedTrackColor = Fusion.colors.surface2, uncheckedBorderColor = Fusion.colors.outlineStrong)
                 )
             }
         }
-        item { SegmentRow(KiroXIcon.Devices, "Качество эффектов", com.kirox.app.settings.EffectsQuality.entries, quality, { it.title }, onQuality) }
+        item { SmallCaption("Анимация") }
+        com.kirox.app.settings.EffectScene.entries.forEach { option ->
+            item(key = option.name) { SceneRow(option, option == scene, enabled) { onScene(option) } }
+        }
+        item { SmallCaption("Настройки") }
+        item { CompactSegment("Скорость интерфейса", com.kirox.app.settings.MotionLevel.entries, motion, { it.title }, onMotion) }
+        item { CompactSegment("Качество эффектов", com.kirox.app.settings.EffectsQuality.entries, quality, { it.title }, onQuality) }
         item {
-            Hint(
-                "Лёгкое: меньше частиц, без градиентов, 30 кадров в секунду — для слабых телефонов и экономии батареи. " +
-                    "Авто включает его само на слабых телефонах и в режиме энергосбережения" +
-                    if (quality == com.kirox.app.settings.EffectsQuality.Auto) (if (weakDevice) " (сейчас: лёгкое)." else " (сейчас: высокое).") else "."
+            Text(
+                "Лёгкое — для слабых телефонов и экономии батареи." +
+                    if (quality == com.kirox.app.settings.EffectsQuality.Auto) (if (weakDevice) " Сейчас: лёгкое." else " Сейчас: высокое.") else "",
+                color = Fusion.colors.textTertiary, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
             )
+        }
+    }
+}
+
+@Composable
+private fun SceneRow(scene: com.kirox.app.settings.EffectScene, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 60.dp).padding(horizontal = 16.dp, vertical = 6.dp)
+            .graphicsLayer { alpha = if (enabled) 1f else 0.5f },
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier.size(64.dp, 44.dp).clip(RoundedCornerShape(10.dp)).background(Fusion.colors.surface1)
+                .border(if (selected) 1.5.dp else 1.dp, if (selected) Fusion.colors.accent else Fusion.colors.outline, RoundedCornerShape(10.dp))
+        ) { SeasonalLayer(Modifier.matchParentSize(), mode = com.kirox.app.ui.components.SeasonalMode.Header, force = true, scene = scene, freeZoneFraction = 0.05f..0.95f) }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(scene.title, color = Fusion.colors.textPrimary, fontSize = 16.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+            Text(scene.subtitle, color = Fusion.colors.textSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Box(
+            Modifier.size(22.dp).clip(CircleShape).border(2.dp, if (selected) Fusion.colors.accent else Fusion.colors.outlineStrong, CircleShape),
+            contentAlignment = Alignment.Center
+        ) { if (selected) Box(Modifier.size(11.dp).clip(CircleShape).background(Fusion.colors.accent)) }
+    }
+}
+
+@Composable
+private fun SmallCaption(text: String) {
+    Text(text.uppercase(), color = Fusion.colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium, letterSpacing = 1.sp,
+        modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 4.dp))
+}
+
+/** Label with a slim segmented control under it. */
+@Composable
+private fun <T> CompactSegment(title: String, options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+        Text(title, color = Fusion.colors.textPrimary, fontSize = 15.sp, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
+        Row(Modifier.fillMaxWidth().clip(CircleShape).background(Fusion.colors.surface1).padding(3.dp)) {
+            options.forEach { option ->
+                val active = option == selected
+                Text(
+                    label(option), color = if (active) Fusion.colors.textPrimary else Fusion.colors.textSecondary,
+                    fontSize = 13.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium, textAlign = TextAlign.Center, maxLines = 1,
+                    modifier = Modifier.weight(1f).clip(CircleShape).background(if (active) Fusion.colors.surface3 else Fusion.colors.surface1)
+                        .clickable { onSelect(option) }.padding(vertical = 7.dp)
+                )
+            }
         }
     }
 }

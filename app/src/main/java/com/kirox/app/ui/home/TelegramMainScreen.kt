@@ -97,6 +97,8 @@ fun TelegramMainScreen(
     onBubbleShape: (com.kirox.app.settings.BubbleShape) -> Unit,
     motion: com.kirox.app.settings.MotionLevel,
     onMotion: (com.kirox.app.settings.MotionLevel) -> Unit,
+    effectScene: com.kirox.app.settings.EffectScene,
+    onEffectScene: (com.kirox.app.settings.EffectScene) -> Unit,
     effectsQuality: com.kirox.app.settings.EffectsQuality,
     onEffectsQuality: (com.kirox.app.settings.EffectsQuality) -> Unit,
     weakDevice: Boolean,
@@ -130,12 +132,12 @@ fun TelegramMainScreen(
                     subScreen == SubScreen.NewMessage -> NewMessageScreen(contacts, onBack = { sub = SubScreen.None }, onOpenContact = { sub = SubScreen.None; onOpenContact(it) }, onOpenSaved = { sub = SubScreen.None; onOpenSavedMessages() }, onNotice = showNotice)
                     subScreen == SubScreen.Customization -> CustomizationScreen(
                         palette, onPalette, bubbleShape, onBubbleShape,
-                        animationsSummary = motion.title,
+                        animationsSummary = if (seasonal) effectScene.title else "Выкл.",
                         onOpenAnimations = { sub = SubScreen.Animations },
                         onBack = { sub = SubScreen.None }
                     )
                     subScreen == SubScreen.Animations -> AnimationsScreen(
-                        motion, onMotion, seasonal, onSeasonal, effectsQuality, onEffectsQuality, weakDevice,
+                        motion, onMotion, seasonal, onSeasonal, effectScene, onEffectScene, effectsQuality, onEffectsQuality, weakDevice,
                         onBack = { sub = SubScreen.Customization }
                     )
                     current == MainTab.Chats -> ChatsTab(lists, chatActions, connection, onOpenChat, storyChats, profile, { viewingStoriesOf = it.chatId }, onNewMessage = { sub = SubScreen.NewMessage }) { notice = it }

@@ -19,8 +19,11 @@ import java.util.Calendar
 import kotlin.math.abs
 import kotlin.math.sin
 
-/** Whether screen headers draw seasonal particles (KiroX setting «Сезонные эффекты»). */
+/** Whether decorative animations are on (KiroX switch in «Анимации»). */
 val LocalSeasonalEffects = staticCompositionLocalOf { true }
+
+/** Which decorative animation is chosen. */
+val LocalEffectScene = staticCompositionLocalOf { com.kirox.app.settings.EffectScene.Main }
 
 enum class Season { Halloween, Winter, Plain }
 
@@ -75,6 +78,8 @@ fun SeasonalLayer(
     modifier: Modifier = Modifier,
     mode: SeasonalMode = SeasonalMode.Header,
     force: Boolean = false,
+    /** Draw this scene instead of the chosen one (previews in the list). */
+    scene: com.kirox.app.settings.EffectScene? = null,
     /** Free horizontal gap (px) for header pumpkins, so they never cover the title or buttons. */
     freeZone: ClosedFloatingPointRange<Float>? = null,
     /** The same gap as fractions of the width, for headers with fixed layouts. */
@@ -86,7 +91,7 @@ fun SeasonalLayer(
     val speed = LocalMotionFactor.current
     val animate = systemAnimations && speed > 0f
     val light = com.kirox.app.ui.theme.LocalLightEffects.current
-    val season = remember { currentSeason() }
+    val chosen = scene ?: LocalEffectScene.current
     val time by produceState(2.3f, animate, speed, light) {
         if (!animate) return@produceState
         var last = withFrameNanos { it }
@@ -102,10 +107,9 @@ fun SeasonalLayer(
         }
     }
     Canvas(modifier) {
-        when (season) {
-            Season.Halloween -> halloween(time, mode, freeZone ?: freeZoneFraction?.let { (size.width * it.start)..(size.width * it.endInclusive) }, light)
-            Season.Winter -> snow(time, mode, light)
-            Season.Plain -> dots(time)
+        when (chosen) {
+            com.kirox.app.settings.EffectScene.Halloween -> halloween(time, mode, freeZone ?: freeZoneFraction?.let { (size.width * it.start)..(size.width * it.endInclusive) }, light)
+            com.kirox.app.settings.EffectScene.Main -> sparkles(time, mode, light)
         }
     }
 }
@@ -179,11 +183,17 @@ private fun DrawScope.snow(t: Float, mode: SeasonalMode, light: Boolean) {
     }
 }
 
-private fun DrawScope.dots(t: Float) {
-    repeat(10) { i ->
+/** The main kiroX animation: slow drifting, twinkling white particles (as on the splash screen). */
+private fun DrawScope.sparkles(t: Float, mode: SeasonalMode, light: Boolean) {
+    val count = when (mode) { SeasonalMode.Header -> 14; SeasonalMode.Showcase -> 34; SeasonalMode.Splash -> 46 } / (if (light) 2 else 1)
+    repeat(count) { i ->
         val seed = (i * 7919 % 1000) / 1000f
-        val x = size.width * ((i * 37 % 101) / 100f) + sin(t + i) * 6f
-        val y = size.height * ((t * 0.04f + seed) % 1f)
-        drawCircle(Color.White.copy(alpha = 0.2f + (i % 3) * 0.1f), 1.5f + (i % 2), Offset(x, y))
+        val speed = 0.45f + (i * 37 % 100) / 80f
+        val x = ((((i * 37 % 101) / 100f) + t * speed * 0.012f) % 1f) * size.width
+        val y = size.height * ((i * 53 % 97) / 96f) + sin((t * speed + seed) * 6.283f) * 8f
+        val twinkle = (0.72f + 0.28f * sin((t * speed + seed) * 9.42f)).coerceIn(0.3f, 1f)
+        val radius = (0.6f + seed * 1.2f) * density
+        drawCircle(Color.White.copy(alpha = (0.2f + seed * 0.6f) * twinkle), radius, Offset(x, y))
+        if (!light && i % 9 == 0) drawCircle(Color.White.copy(alpha = 0.08f * twinkle), radius * 4f, Offset(x, y))
     }
 }
