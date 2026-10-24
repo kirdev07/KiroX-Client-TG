@@ -115,7 +115,7 @@ fun AnimatedSplashScreen2(
             }
         }
 
-        if (com.kirox.app.ui.components.LocalEffectScene.current != com.kirox.app.settings.EffectScene.Main) SeasonalLayer(
+        if (com.kirox.app.ui.components.LocalEffectScene.current.resolved() != com.kirox.app.settings.EffectScene.Main) SeasonalLayer(
             Modifier.fillMaxSize().graphicsLayer { alpha = particleIntro },
             mode = SeasonalMode.Splash
         )

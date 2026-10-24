@@ -16,7 +16,6 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.kirox.app.ui.theme.LocalMotionFactor
-import java.util.Calendar
 import kotlin.math.abs
 import kotlin.math.sin
 
@@ -26,20 +25,8 @@ val LocalSeasonalEffects = staticCompositionLocalOf { true }
 /** Which decorative animation is chosen. */
 val LocalEffectScene = staticCompositionLocalOf { com.kirox.app.settings.EffectScene.Main }
 
-enum class Season { Halloween, Winter, Plain }
-
 /** [Header] is a light strip behind screen titles; [Showcase] is the full scene for previews and splash. */
 enum class SeasonalMode { Header, Showcase, Splash, Banner }
-
-fun currentSeason(calendar: Calendar = Calendar.getInstance()): Season {
-    val month = calendar.get(Calendar.MONTH)
-    val day = calendar.get(Calendar.DAY_OF_MONTH)
-    return when {
-        (month == Calendar.OCTOBER && day >= 10) || (month == Calendar.NOVEMBER && day <= 3) -> Season.Halloween
-        month == Calendar.DECEMBER || month == Calendar.JANUARY || month == Calendar.FEBRUARY -> Season.Winter
-        else -> Season.Plain
-    }
-}
 
 private data class Lantern(val x: Float, val y: Float, val size: Float, val face: PumpkinFace, val costume: PumpkinCostume, val seed: Float)
 
@@ -100,7 +87,8 @@ fun SeasonalLayer(
     val speed = LocalMotionFactor.current
     val animate = systemAnimations && speed > 0f
     val light = com.kirox.app.ui.theme.LocalLightEffects.current
-    val chosen = scene ?: LocalEffectScene.current
+    val picked = scene ?: LocalEffectScene.current
+    val chosen = remember(picked) { picked.resolved() }
     val clock = LocalSceneClock.current
     SubscribeToSceneClock(clock, animate, large = mode != SeasonalMode.Header)
     // Own graphics layer: a scene redraw re-records only this layer, not the screen behind it.
@@ -109,7 +97,7 @@ fun SeasonalLayer(
         val time = if (animate) clock.time else 2.3f
         when (chosen) {
             com.kirox.app.settings.EffectScene.Halloween -> halloween(time, mode, freeZone ?: freeZoneFraction?.let { (size.width * it.start)..(size.width * it.endInclusive) }, light)
-            com.kirox.app.settings.EffectScene.Main -> sparkles(time, mode, light)
+            com.kirox.app.settings.EffectScene.Main, com.kirox.app.settings.EffectScene.Auto -> sparkles(time, mode, light)
             com.kirox.app.settings.EffectScene.NewYear -> newYear(time, mode, light, freeZone ?: freeZoneFraction?.let { (size.width * it.start)..(size.width * it.endInclusive) })
             com.kirox.app.settings.EffectScene.Winter -> winter(time, mode, light, freeZone ?: freeZoneFraction?.let { (size.width * it.start)..(size.width * it.endInclusive) })
         }

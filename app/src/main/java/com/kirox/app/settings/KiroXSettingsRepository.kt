@@ -36,10 +36,26 @@ data class ChatStyle(
 
 /** Decorative animation in headers, previews and on the splash screen. */
 enum class EffectScene(val title: String, val subtitle: String) {
+    Auto("Авто (по дате)", "Сама меняется к праздникам"),
     Main("Основная", "Мерцающие частицы kiroX"),
     Halloween("Хэллоуин", "Тыквы в костюмах, летучие мыши, паутина"),
     Winter("Зима", "Снежинки, сугробы с ёлками и иней"),
-    NewYear("Новый год", "Гирлянда, ёлка с подарками и салют")
+    NewYear("Новый год", "Гирлянда, ёлка с подарками и салют");
+
+    /** The scene to draw: [Auto] turns into the one for today's date. */
+    fun resolved(calendar: java.util.Calendar = java.util.Calendar.getInstance()): EffectScene =
+        if (this == Auto) sceneForDate(calendar.get(java.util.Calendar.MONTH) + 1, calendar.get(java.util.Calendar.DAY_OF_MONTH)) else this
+}
+
+/**
+ * Scene for a date ([month] 1–12): New Year 20 Dec – 7 Jan, Halloween 25–31 Oct,
+ * winter for the rest of December–February, the main animation otherwise. Local date only.
+ */
+fun sceneForDate(month: Int, day: Int): EffectScene = when {
+    (month == 12 && day >= 20) || (month == 1 && day <= 7) -> EffectScene.NewYear
+    month == 10 && day >= 25 -> EffectScene.Halloween
+    month == 12 || month == 1 || month == 2 -> EffectScene.Winter
+    else -> EffectScene.Main
 }
 
 /** Detail of decorative effects. [Auto] picks [Light] on weak devices and in battery saver. */
@@ -94,8 +110,8 @@ class KiroXSettingsRepository(context: Context) {
     /** Unset → Halloween during the Halloween season, the main animation otherwise. */
     val effectScene: StateFlow<EffectScene> = store.data
         .catch { emit(androidx.datastore.preferences.core.emptyPreferences()) }
-        .map { prefs -> EffectScene.entries.firstOrNull { it.name == prefs[sceneKey] } ?: defaultScene() }
-        .stateIn(scope, SharingStarted.Eagerly, defaultScene())
+        .map { prefs -> EffectScene.entries.firstOrNull { it.name == prefs[sceneKey] } ?: EffectScene.Auto }
+        .stateIn(scope, SharingStarted.Eagerly, EffectScene.Auto)
 
     val chatTextSize: StateFlow<ChatTextSize> = enumFlow(textSizeKey, ChatTextSize.Normal)
     val chatWallpaper: StateFlow<ChatWallpaper> = enumFlow(wallpaperKey, ChatWallpaper.None)
@@ -112,11 +128,6 @@ class KiroXSettingsRepository(context: Context) {
 
     fun setEffectScene(value: EffectScene) { scope.launch { store.edit { it[sceneKey] = value.name } } }
 
-    private fun defaultScene() = when (com.kirox.app.ui.components.currentSeason()) {
-        com.kirox.app.ui.components.Season.Halloween -> EffectScene.Halloween
-        com.kirox.app.ui.components.Season.Winter -> EffectScene.Winter
-        else -> EffectScene.Main
-    }
 
     fun setEffectsQuality(value: EffectsQuality) { scope.launch { store.edit { it[qualityKey] = value.name } } }
 
