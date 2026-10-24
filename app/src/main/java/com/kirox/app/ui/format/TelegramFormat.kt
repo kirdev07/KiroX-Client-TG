@@ -40,6 +40,12 @@ object TelegramFormat {
         }
     }
 
+    /** Call duration: 0:42, 3:21, 1:02:03. */
+    fun duration(seconds: Int): String {
+        val h = seconds / 3600; val m = seconds % 3600 / 60; val s = seconds % 60
+        return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
+    }
+
     /** TDLib phone numbers come without "+". */
     fun phone(raw: String): String = if (raw.isBlank()) "" else "+" + raw.trimStart('+')
 

@@ -42,6 +42,8 @@ import com.kirox.app.telegram.TelegramChatListKey
 import com.kirox.app.telegram.TelegramChatLists
 import com.kirox.app.telegram.TelegramConnection
 import com.kirox.app.telegram.TelegramContact
+import com.kirox.app.telegram.TelegramCallsState
+import com.kirox.app.telegram.TelegramStoryChat
 import com.kirox.app.telegram.TelegramUserProfile
 import com.kirox.app.telegram.TelegramUserStatus
 import com.kirox.app.ui.components.FusionBottomBar
@@ -73,10 +75,15 @@ fun TelegramMainScreen(
     connection: TelegramConnection,
     onOpenChat: (Long) -> Unit,
     onOpenContact: (Long) -> Unit,
+    calls: TelegramCallsState,
+    onLoadCalls: () -> Unit,
+    storyChats: List<TelegramStoryChat>,
+    storyActions: TelegramStoryActions,
     onLogOut: () -> Unit
 ) {
     var tab by rememberSaveable { mutableStateOf(MainTab.Chats) }
     var notice by remember { mutableStateOf<String?>(null) }
+    var viewingStoriesOf by rememberSaveable { mutableStateOf<Long?>(null) }
     val keyboardOpen = WindowInsets.isImeVisible
     Scaffold(
         containerColor = Fusion.colors.background,
@@ -88,8 +95,8 @@ fun TelegramMainScreen(
         Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
             AnimatedContent(tab, transitionSpec = { fadeIn(tween(FusionMotion.NORMAL)) togetherWith fadeOut(tween(FusionMotion.FAST)) }, label = "main_tabs") { current ->
                 when (current) {
-                    MainTab.Chats -> ChatsTab(lists, onLoadMore, connection, onOpenChat) { notice = it }
-                    MainTab.Contacts -> ContactsTab(contacts, contactsLoading, onOpenContact)
+                    MainTab.Chats -> ChatsTab(lists, onLoadMore, connection, onOpenChat, storyChats, { viewingStoriesOf = it.chatId }) { notice = it }
+                    MainTab.Contacts -> ContactsTab(contacts, contactsLoading, onOpenContact, calls, onLoadCalls, onOpenChat) { notice = it }
                     MainTab.Settings -> SettingsTab(profile, onLogOut) { notice = it }
                 }
             }
@@ -103,12 +110,22 @@ fun TelegramMainScreen(
             }
         }
     }
+    val storyChat = storyChats.firstOrNull { it.chatId == viewingStoriesOf }
+    if (storyChat != null) StoryViewer(storyChat, storyActions) { viewingStoriesOf = null }
 }
 
 // ---------- Chats ----------
 
 @Composable
-private fun ChatsTab(lists: TelegramChatLists, onLoadMore: (TelegramChatListKey) -> Unit, connection: TelegramConnection, onOpenChat: (Long) -> Unit, onNotice: (String) -> Unit) {
+private fun ChatsTab(
+    lists: TelegramChatLists,
+    onLoadMore: (TelegramChatListKey) -> Unit,
+    connection: TelegramConnection,
+    onOpenChat: (Long) -> Unit,
+    storyChats: List<TelegramStoryChat>,
+    onOpenStories: (TelegramStoryChat) -> Unit,
+    onNotice: (String) -> Unit
+) {
     var section by rememberSaveable { mutableStateOf(RealChatSection.Messages) }
     var folderId by rememberSaveable { mutableStateOf<Int?>(null) }
     if (folderId != null && lists.folders.none { it.id == folderId }) folderId = null
@@ -123,6 +140,7 @@ private fun ChatsTab(lists: TelegramChatLists, onLoadMore: (TelegramChatListKey)
             HeaderAction(KiroXIcon.Search, "Поиск") { onNotice("Поиск по чатам появится позже") }
             HeaderAction(KiroXIcon.Compose, "Новый чат") { onNotice("Новый чат: откройте контакт во вкладке «Контакты»") }
         }
+        if (storyChats.isNotEmpty()) StoriesRow(storyChats, onOpenStories)
         SectionTabs(listOf("Архив" to RealChatSection.Archive, "Сообщения" to RealChatSection.Messages), section) { section = it }
         if (section == RealChatSection.Messages && lists.folders.isNotEmpty()) {
             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -225,14 +243,32 @@ private fun connectionTitle(state: TelegramConnection): String? = when (state) {
 // ---------- Contacts ----------
 
 @Composable
-private fun ContactsTab(contacts: List<TelegramContact>, loading: Boolean, onOpenContact: (Long) -> Unit) {
+private fun ContactsTab(
+    contacts: List<TelegramContact>,
+    loading: Boolean,
+    onOpenContact: (Long) -> Unit,
+    calls: TelegramCallsState,
+    onLoadCalls: () -> Unit,
+    onOpenChat: (Long) -> Unit,
+    onNotice: (String) -> Unit
+) {
+    var showCalls by rememberSaveable { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize()) {
+        Header("Контакты")
+        SectionTabs(listOf("Контакты" to false, "Звонки" to true), showCalls) { showCalls = it }
+        if (showCalls) CallsList(calls, onLoadCalls, onOpenChat) { onNotice("Звонки из KiroX пока недоступны: нужен отдельный VoIP-модуль") }
+        else ContactsList(contacts, loading, onOpenContact)
+    }
+}
+
+@Composable
+private fun ContactsList(contacts: List<TelegramContact>, loading: Boolean, onOpenContact: (Long) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
     val shown = remember(contacts, query) {
         val q = query.trim()
         if (q.isEmpty()) contacts else contacts.filter { it.name.contains(q, ignoreCase = true) || it.username?.contains(q.removePrefix("@"), ignoreCase = true) == true }
     }
     Column(Modifier.fillMaxSize()) {
-        Header("Контакты")
         SearchField(query, "Поиск контактов") { query = it }
         when {
             contacts.isEmpty() && loading -> CenteredProgress()

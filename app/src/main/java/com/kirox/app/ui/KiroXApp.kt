@@ -33,6 +33,9 @@ import com.kirox.app.ui.chat.TelegramChatScreen
 import com.kirox.app.telegram.TelegramChatHistory
 import com.kirox.app.telegram.TelegramMessageRepository
 import kotlinx.coroutines.launch
+import com.kirox.app.telegram.TelegramStory
+import com.kirox.app.telegram.TelegramStoryRepository
+import com.kirox.app.ui.home.TelegramStoryActions
 import com.kirox.app.ui.navigation.BackStack
 import com.kirox.app.ui.navigation.NavGraph
 import com.kirox.app.ui.navigation.Screen
@@ -62,6 +65,9 @@ fun KiroXApp() {
     var openChatId by rememberSaveable { mutableLongStateOf(0L) }
     val history by telegramViewModel.messages.history.collectAsStateWithLifecycle()
     val messageError by telegramViewModel.messages.error.collectAsStateWithLifecycle()
+    val callsState by telegramViewModel.calls.state.collectAsStateWithLifecycle()
+    val storyChats by telegramViewModel.stories.storyChats.collectAsStateWithLifecycle()
+    val storyActions = remember { TelegramStoryActionsImpl(telegramViewModel.stories) }
     val scope = rememberCoroutineScope()
     fun openChat(id: Long) { openChatId = id; telegramViewModel.messages.open(id); stack.push(Screen.Conversation) }
 
@@ -131,6 +137,10 @@ fun KiroXApp() {
                                 chatLists, telegramViewModel.chats::loadMore, contacts, contactsLoading, profile, connection,
                                 onOpenChat = ::openChat,
                                 onOpenContact = { userId -> scope.launch { runCatching { telegramViewModel.chats.privateChatId(userId) }.onSuccess(::openChat) } },
+                                calls = callsState,
+                                onLoadCalls = telegramViewModel.calls::loadMore,
+                                storyChats = storyChats,
+                                storyActions = storyActions,
                                 onLogOut = telegramViewModel.auth::logOut
                             )
                         }
@@ -163,4 +173,10 @@ private class TelegramMessageActions(private val repository: TelegramMessageRepo
     override fun edit(messageId: Long, text: String) = repository.edit(messageId, text)
     override fun delete(messageIds: List<Long>, forEveryone: Boolean) = repository.delete(messageIds, forEveryone)
     override fun forward(toChatId: Long, messageIds: List<Long>) = repository.forward(toChatId, messageIds)
+}
+
+private class TelegramStoryActionsImpl(private val repository: TelegramStoryRepository) : TelegramStoryActions {
+    override suspend fun story(chatId: Long, storyId: Int): TelegramStory? = repository.story(chatId, storyId)
+    override fun open(chatId: Long, storyId: Int) = repository.open(chatId, storyId)
+    override fun close(chatId: Long, storyId: Int) = repository.close(chatId, storyId)
 }

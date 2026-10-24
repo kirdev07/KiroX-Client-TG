@@ -118,4 +118,6 @@ class TelegramServices(context: android.content.Context) {
     val users = TelegramUserRepository(client)
     val connection = TelegramConnectionRepository(client)
     val messages = TelegramMessageRepository(client, chats, users)
+    val calls = TelegramCallRepository(client, chats)
+    val stories = TelegramStoryRepository(client, chats, users)
 }

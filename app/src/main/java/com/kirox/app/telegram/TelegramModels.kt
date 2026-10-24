@@ -118,6 +118,44 @@ data class TelegramChatHistory(
     val reachedStart: Boolean = false
 )
 
+enum class TelegramCallKind { Incoming, Outgoing, Missed, Unanswered }
+
+data class TelegramCall(
+    val messageId: Long,
+    val chatId: Long,
+    val peerName: String,
+    val photo: TelegramFileRef?,
+    val kind: TelegramCallKind,
+    val isVideo: Boolean,
+    val durationSeconds: Int,
+    val date: Int
+)
+
+data class TelegramCallsState(
+    val calls: List<TelegramCall> = emptyList(),
+    val loading: Boolean = false,
+    val complete: Boolean = false
+)
+
+data class TelegramStoryChat(
+    val chatId: Long,
+    val title: String,
+    val photo: TelegramFileRef?,
+    val storyIds: List<Int>,
+    val hasUnread: Boolean,
+    val isSelf: Boolean
+)
+
+data class TelegramStory(
+    val id: Int,
+    val chatId: Long,
+    val date: Int,
+    val image: TelegramFileRef?,
+    val aspect: Float,
+    val isVideo: Boolean,
+    val caption: String
+)
+
 data class TelegramUserProfile(
     val id: Long,
     val name: String,
