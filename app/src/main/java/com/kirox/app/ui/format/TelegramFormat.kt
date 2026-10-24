@@ -40,6 +40,18 @@ object TelegramFormat {
         }
     }
 
+    /** Call log time: "Сегодня 18:42", "Вчера 21:14", "12.10.26 09:30". */
+    fun callTime(unixSeconds: Int, nowMillis: Long = System.currentTimeMillis(), zone: TimeZone = TimeZone.getDefault()): String {
+        if (unixSeconds <= 0) return ""
+        val millis = unixSeconds * 1000L
+        val time = format("HH:mm", millis, zone)
+        return when (daysBetween(millis, nowMillis, zone)) {
+            0 -> "Сегодня $time"
+            1 -> "Вчера $time"
+            else -> "${format("dd.MM.yy", millis, zone)} $time"
+        }
+    }
+
     /** Call duration: 0:42, 3:21, 1:02:03. */
     fun duration(seconds: Int): String {
         val h = seconds / 3600; val m = seconds % 3600 / 60; val s = seconds % 60

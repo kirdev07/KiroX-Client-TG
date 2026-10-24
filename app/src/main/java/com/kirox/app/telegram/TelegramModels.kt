@@ -162,5 +162,9 @@ data class TelegramUserProfile(
     val username: String?,
     val phoneNumber: String,
     val bio: String = "",
-    val photo: TelegramFileRef?
+    val photo: TelegramFileRef?,
+    val isPremium: Boolean = false,
+    val isVerified: Boolean = false,
+    /** "d.MM" or "d.MM.yyyy", empty when hidden or not set. */
+    val birthday: String = ""
 )

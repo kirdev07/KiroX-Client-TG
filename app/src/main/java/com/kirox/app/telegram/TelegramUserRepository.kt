@@ -10,6 +10,7 @@ class TelegramUserRepository(private val client: TelegramClient) {
     private val users = HashMap<Long, TdApi.User>()
     private var myId = 0L
     private var myBio = ""
+    private var myBirthday = ""
     private var contactsLoaded = false
     private var publishScheduled = false
 
@@ -31,13 +32,13 @@ class TelegramUserRepository(private val client: TelegramClient) {
             is TdApi.UpdateAuthorizationState -> when (update.authorizationState) {
                 is TdApi.AuthorizationStateReady -> load()
                 is TdApi.AuthorizationStateClosed -> {
-                    users.clear(); myId = 0; myBio = ""; contactsLoaded = false
+                    users.clear(); myId = 0; myBio = ""; myBirthday = ""; contactsLoaded = false
                     _profile.value = null; _contacts.value = emptyList()
                 }
             }
             is TdApi.UpdateUser -> { users[update.user.id] = update.user; schedulePublish() }
             is TdApi.UpdateUserStatus -> users[update.userId]?.let { it.status = update.status; schedulePublish() }
-            is TdApi.UpdateUserFullInfo -> if (update.userId == myId) { myBio = update.userFullInfo.bio?.text.orEmpty(); schedulePublish() }
+            is TdApi.UpdateUserFullInfo -> if (update.userId == myId) { applyFullInfo(update.userFullInfo); schedulePublish() }
         }
     }
 
@@ -47,7 +48,7 @@ class TelegramUserRepository(private val client: TelegramClient) {
             myId = result.id
             users[result.id] = result
             client.send(TdApi.GetUserFullInfo(result.id)) { info ->
-                if (info is TdApi.UserFullInfo) myBio = info.bio?.text.orEmpty()
+                if (info is TdApi.UserFullInfo) applyFullInfo(info)
                 schedulePublish()
             }
             schedulePublish()
@@ -66,12 +67,23 @@ class TelegramUserRepository(private val client: TelegramClient) {
         publishScheduled = true
         client.post(PUBLISH_DELAY_MS) {
             publishScheduled = false
-            users[myId]?.let { _profile.value = it.toProfile(myBio) }
+            users[myId]?.let { _profile.value = it.toProfile(myBio, myBirthday) }
             if (contactsLoaded) {
                 _contacts.value = users.values.filter { it.isContact && it.id != myId }.map { it.toContact() }
                     .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
             }
         }
+    }
+
+    private fun applyFullInfo(info: TdApi.UserFullInfo) {
+        myBio = info.bio?.text.orEmpty()
+        myBirthday = info.birthdate?.let { formatBirthday(it.day, it.month, it.year) }.orEmpty()
+    }
+
+    /** Id of the signed-in user's own chat (Saved Messages), creating it locally if needed. */
+    suspend fun savedMessagesChatId(): Long {
+        val me = client.query(TdApi.GetMe())
+        return client.query(TdApi.CreatePrivateChat(me.id, false)).id
     }
 
     private companion object { const val PUBLISH_DELAY_MS = 50L }
@@ -84,9 +96,13 @@ internal fun TdApi.User.toContact() = TelegramContact(
     id, displayName(), usernames?.activeUsernames?.firstOrNull(), status.toStatus(), profilePhoto?.small?.toRef()
 )
 
-internal fun TdApi.User.toProfile(bio: String) = TelegramUserProfile(
-    id, displayName(), usernames?.activeUsernames?.firstOrNull(), phoneNumber.orEmpty(), bio, profilePhoto?.small?.toRef()
+internal fun TdApi.User.toProfile(bio: String, birthday: String = "") = TelegramUserProfile(
+    id, displayName(), usernames?.activeUsernames?.firstOrNull(), phoneNumber.orEmpty(), bio, profilePhoto?.small?.toRef(),
+    isPremium = isPremium, isVerified = verificationStatus?.isVerified == true, birthday = birthday
 )
+
+internal fun formatBirthday(day: Int, month: Int, year: Int): String =
+    if (day <= 0 || month <= 0) "" else if (year > 0) "%d.%02d.%d".format(day, month, year) else "%d.%02d".format(day, month)
 
 internal fun TdApi.UserStatus?.toStatus(): TelegramUserStatus = when (this) {
     is TdApi.UserStatusOnline -> TelegramUserStatus.Online

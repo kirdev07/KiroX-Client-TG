@@ -139,6 +139,7 @@ fun KiroXApp() {
                                 storyActions = storyActions,
                                 palette = palette,
                                 onPalette = settings::setPalette,
+                                onOpenSavedMessages = { scope.launch { runCatching { telegramViewModel.users.savedMessagesChatId() }.onSuccess(::openChat) } },
                                 onLogOut = telegramViewModel.auth::logOut
                             )
                         }

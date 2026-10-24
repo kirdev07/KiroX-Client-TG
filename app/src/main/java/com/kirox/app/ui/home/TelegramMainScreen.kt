@@ -47,6 +47,7 @@ import com.kirox.app.telegram.TelegramStoryChat
 import com.kirox.app.telegram.TelegramUserProfile
 import com.kirox.app.telegram.TelegramUserStatus
 import com.kirox.app.ui.components.FusionBottomBar
+import androidx.compose.foundation.border
 import com.kirox.app.ui.components.FusionNavigationRail
 import com.kirox.app.ui.theme.FusionPalette
 import androidx.compose.foundation.combinedClickable
@@ -64,8 +65,10 @@ import kotlinx.coroutines.flow.filter
 private enum class MainTab(val item: FusionNavItem) {
     Contacts(FusionNavItem("Контакты", KiroXIcon.Contacts)),
     Chats(FusionNavItem("Чаты", KiroXIcon.Chat)),
-    Settings(FusionNavItem("Настройки", KiroXIcon.Settings))
+    Settings(FusionNavItem("Настройки", KiroXIcon.Settings)),
+    Profile(FusionNavItem("Профиль", KiroXIcon.Profile))
 }
+private enum class SubScreen { None, NewMessage, Customization }
 private enum class RealChatSection { Archive, Messages }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -87,9 +90,11 @@ fun TelegramMainScreen(
     storyActions: TelegramStoryActions,
     palette: FusionPalette,
     onPalette: (FusionPalette) -> Unit,
+    onOpenSavedMessages: () -> Unit,
     onLogOut: () -> Unit
 ) {
     var tab by rememberSaveable { mutableStateOf(MainTab.Chats) }
+    var sub by rememberSaveable { mutableStateOf(SubScreen.None) }
     var notice by remember { mutableStateOf<UiNotice?>(null) }
     var viewingStoriesOf by rememberSaveable { mutableStateOf<Long?>(null) }
     val keyboardOpen = WindowInsets.isImeVisible
@@ -99,21 +104,24 @@ fun TelegramMainScreen(
     BoxWithConstraints(Modifier.fillMaxSize()) {
     val wide = maxWidth >= 600.dp
     Row(Modifier.fillMaxSize()) {
-    if (wide) FusionNavigationRail(navItems, tab.ordinal, { tab = MainTab.entries[it] })
+    if (wide) FusionNavigationRail(navItems, tab.ordinal, { tab = MainTab.entries[it]; sub = SubScreen.None })
     Scaffold(
         modifier = Modifier.weight(1f),
         containerColor = Fusion.colors.background,
         contentWindowInsets = WindowInsets.statusBars,
         bottomBar = {
-            if (!keyboardOpen && !wide) FusionBottomBar(navItems, tab.ordinal, { tab = MainTab.entries[it] })
+            if (!keyboardOpen && !wide) FusionBottomBar(navItems, tab.ordinal, { tab = MainTab.entries[it]; sub = SubScreen.None })
         }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
-            AnimatedContent(tab, transitionSpec = { fadeIn(tween(FusionMotion.NORMAL)) togetherWith fadeOut(tween(FusionMotion.FAST)) }, label = "main_tabs") { current ->
-                when (current) {
-                    MainTab.Chats -> ChatsTab(lists, chatActions, connection, onOpenChat, storyChats, { viewingStoriesOf = it.chatId }) { notice = it }
-                    MainTab.Contacts -> ContactsTab(contacts, contactsLoading, onOpenContact, calls, onLoadCalls, onOpenChat, showNotice)
-                    MainTab.Settings -> SettingsTab(profile, palette, onPalette, onLogOut, showNotice)
+            AnimatedContent(tab to sub, transitionSpec = { fadeIn(tween(FusionMotion.NORMAL)) togetherWith fadeOut(tween(FusionMotion.FAST)) }, label = "main_tabs") { (current, subScreen) ->
+                when {
+                    subScreen == SubScreen.NewMessage -> NewMessageScreen(contacts, onBack = { sub = SubScreen.None }, onOpenContact = { sub = SubScreen.None; onOpenContact(it) }, onOpenSaved = { sub = SubScreen.None; onOpenSavedMessages() }, onNotice = showNotice)
+                    subScreen == SubScreen.Customization -> CustomizationScreen(palette, onPalette, onBack = { sub = SubScreen.None }, onNotice = showNotice)
+                    current == MainTab.Chats -> ChatsTab(lists, chatActions, connection, onOpenChat, storyChats, { viewingStoriesOf = it.chatId }, onNewMessage = { sub = SubScreen.NewMessage }) { notice = it }
+                    current == MainTab.Contacts -> ContactsTab(contacts, contactsLoading, onOpenContact, calls, onLoadCalls, onOpenChat, showNotice)
+                    current == MainTab.Settings -> SettingsTab(profile, palette, onOpenProfile = { tab = MainTab.Profile }, onOpenCustomization = { sub = SubScreen.Customization }, onNotice = showNotice)
+                    else -> ProfileTab(profile, onOpenSaved = onOpenSavedMessages, onLogOut = onLogOut, onNotice = showNotice)
                 }
             }
             notice?.let { current ->
@@ -147,8 +155,10 @@ private fun ChatsTab(
     onOpenChat: (Long) -> Unit,
     storyChats: List<TelegramStoryChat>,
     onOpenStories: (TelegramStoryChat) -> Unit,
+    onNewMessage: () -> Unit,
     onNotice: (UiNotice) -> Unit
 ) {
+    var confirmReadAll by remember { mutableStateOf(false) }
     var searching by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var menuFor by remember { mutableStateOf<TelegramChatItem?>(null) }
@@ -186,13 +196,26 @@ private fun ChatsTab(
         else -> TelegramChatListKey.Main
     }
     val state = lists[listKey]
+    if (confirmReadAll) {
+        val unread = state.chats.filter { it.unreadCount > 0 || it.isMarkedUnread }
+        AlertDialog(
+            onDismissRequest = { confirmReadAll = false },
+            containerColor = Fusion.colors.surface2,
+            title = { Text("Отметить прочитанным?", color = Fusion.colors.textPrimary) },
+            text = { Text(if (unread.isEmpty()) "В этом разделе нет непрочитанных чатов." else "Чатов в текущем разделе: ${unread.size}. Другие разделы не изменятся.", color = Fusion.colors.textSecondary) },
+            confirmButton = { TextButton(onClick = { unread.forEach { actions.markRead(it.id) }; confirmReadAll = false }, enabled = unread.isNotEmpty()) { Text("Прочитать", color = Fusion.colors.textPrimary) } },
+            dismissButton = { TextButton(onClick = { confirmReadAll = false }) { Text("Отмена", color = Fusion.colors.textSecondary) } }
+        )
+    }
     Column(Modifier.fillMaxSize()) {
-        Header(connectionTitle(connection) ?: "Чаты") {
-            HeaderAction(KiroXIcon.Search, "Поиск") { searching = true }
-            HeaderAction(KiroXIcon.Compose, "Новый чат") { onNotice(UiNotice("Новый чат: откройте контакт во вкладке «Контакты»")) }
+        ScreenTitle(connectionTitle(connection) ?: "Чаты") {
+            TitleAction(KiroXIcon.Search, "Поиск") { searching = true }
+            TitleAction(KiroXIcon.ReadAll, "Отметить всё прочитанным") { confirmReadAll = true }
+            TitleAction(KiroXIcon.Compose, "Новое сообщение", onClick = onNewMessage)
         }
-        if (storyChats.isNotEmpty()) StoriesRow(storyChats, onOpenStories)
-        SectionTabs(listOf("Архив" to RealChatSection.Archive, "Сообщения" to RealChatSection.Messages), section) { section = it }
+        StoriesRow(storyChats, onOpenStories) { onNotice(UiNotice("Публикация историй — В разработке")) }
+        val archiveUnread = lists.archive.chats.count { it.unreadCount > 0 || it.isMarkedUnread }
+        SectionTabs(listOf((if (archiveUnread > 0) "Архив · $archiveUnread" else "Архив") to RealChatSection.Archive, "Сообщения" to RealChatSection.Messages), section) { section = it }
         if (section == RealChatSection.Messages && lists.folders.isNotEmpty()) {
             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item { FolderChip("Все", folderId == null) { folderId = null } }
@@ -309,38 +332,61 @@ private fun ContactsTab(
     onNotice: (String) -> Unit
 ) {
     var showCalls by rememberSaveable { mutableStateOf(false) }
+    var focusSearch by remember { mutableIntStateOf(0) }
+    val noCalls = { onNotice("Звонки из KiroX пока недоступны: нужен отдельный VoIP-модуль") }
     Column(Modifier.fillMaxSize()) {
-        Header("Контакты")
+        ScreenTitle("Контакты") {
+            TitleAction(KiroXIcon.Search, "Поиск контактов") { showCalls = false; focusSearch++ }
+            TitleAction(KiroXIcon.Add, "Добавить контакт") { onNotice("Добавление контакта — В разработке") }
+        }
         SectionTabs(listOf("Контакты" to false, "Звонки" to true), showCalls) { showCalls = it }
-        if (showCalls) CallsList(calls, onLoadCalls, onOpenChat) { onNotice("Звонки из KiroX пока недоступны: нужен отдельный VoIP-модуль") }
-        else ContactsList(contacts, loading, onOpenContact)
+        if (showCalls) CallsList(calls, onLoadCalls, onOpenChat, noCalls)
+        else ContactsList(contacts, loading, focusSearch, onOpenContact, noCalls)
     }
 }
 
 @Composable
-private fun ContactsList(contacts: List<TelegramContact>, loading: Boolean, onOpenContact: (Long) -> Unit) {
+private fun ContactsList(contacts: List<TelegramContact>, loading: Boolean, focusSearch: Int, onOpenContact: (Long) -> Unit, onCall: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var query by rememberSaveable { mutableStateOf("") }
     val shown = remember(contacts, query) {
         val q = query.trim()
         if (q.isEmpty()) contacts else contacts.filter { it.name.contains(q, ignoreCase = true) || it.username?.contains(q.removePrefix("@"), ignoreCase = true) == true }
     }
     Column(Modifier.fillMaxSize()) {
-        SearchField(query, "Поиск контактов") { query = it }
-        when {
-            contacts.isEmpty() && loading -> CenteredProgress()
-            contacts.isEmpty() -> EmptyState("Контактов пока нет")
-            shown.isEmpty() -> EmptyState("Ничего не найдено")
-            else -> LazyColumn(Modifier.fillMaxSize()) {
-                items(shown, key = { it.id }) { contact -> ContactRow(contact) { onOpenContact(contact.id) } }
+        SearchField(query, "Поиск контактов", focusTrigger = focusSearch) { query = it }
+        Box(Modifier.weight(1f)) {
+            when {
+                contacts.isEmpty() && loading -> CenteredProgress()
+                contacts.isEmpty() -> EmptyState("Контактов пока нет")
+                shown.isEmpty() -> EmptyState("Ничего не найдено")
+                else -> LazyColumn(Modifier.fillMaxSize()) {
+                    items(shown, key = { it.id }) { contact -> ContactRow(contact, onMessage = { onOpenContact(contact.id) }, onCall = onCall) }
+                }
             }
+        }
+        Row(
+            Modifier.padding(horizontal = 16.dp, vertical = 10.dp).fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(16.dp))
+                .background(Fusion.colors.surface1).border(1.dp, Fusion.colors.outline, RoundedCornerShape(16.dp))
+                .clickable {
+                    val share = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, "Давай общаться в Telegram! Я пользуюсь kiroX.")
+                    }
+                    context.startActivity(android.content.Intent.createChooser(share, "Пригласить друзей"))
+                },
+            horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconGlyph(KiroXIcon.Add, null, Modifier.size(20.dp), Fusion.colors.textPrimary)
+            Spacer(Modifier.width(10.dp))
+            Text("Пригласить друзей", color = Fusion.colors.textPrimary, fontSize = 16.sp)
         }
     }
 }
 
 @Composable
-private fun ContactRow(contact: TelegramContact, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 64.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        TelegramAvatar(contact.name, contact.photo, 46.dp)
+private fun ContactRow(contact: TelegramContact, onMessage: () -> Unit, onCall: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onMessage).heightIn(min = 72.dp).padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        TelegramAvatar(contact.name, contact.photo, 52.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(contact.name, color = Fusion.colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -350,74 +396,10 @@ private fun ContactRow(contact: TelegramContact, onClick: () -> Unit) {
                 fontSize = 13.sp, maxLines = 1
             )
         }
+        HeaderAction(KiroXIcon.Chat, "Написать ${contact.name}", onMessage)
+        HeaderAction(KiroXIcon.Call, "Позвонить ${contact.name}", onCall)
     }
-    HorizontalDivider(Modifier.padding(start = 74.dp), color = Fusion.colors.outline)
-}
-
-// ---------- Settings + profile (merged tab) ----------
-
-@Composable
-private fun SettingsTab(profile: TelegramUserProfile?, palette: FusionPalette, onPalette: (FusionPalette) -> Unit, onLogOut: () -> Unit, onNotice: (String) -> Unit) {
-    var confirmLogout by remember { mutableStateOf(false) }
-    var themeSheet by rememberSaveable { mutableStateOf(false) }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { Header("Настройки") }
-        item {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                TelegramAvatar(profile?.name.orEmpty(), profile?.photo, 88.dp)
-                Spacer(Modifier.height(10.dp))
-                Text(profile?.name ?: "Загрузка…", color = Fusion.colors.textPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                val subtitle = listOfNotNull(profile?.username?.let { "@$it" }, profile?.phoneNumber?.let(TelegramFormat::phone)?.takeIf { it.isNotBlank() }).joinToString(" · ")
-                if (subtitle.isNotEmpty()) Text(subtitle, color = Fusion.colors.textSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
-        if (!profile?.bio.isNullOrBlank()) item { InfoRow(KiroXIcon.Info, "О себе", profile!!.bio) }
-        item { SectionLabel("АККАУНТ И ПРИЛОЖЕНИЕ") }
-        val soon = listOf(
-            KiroXIcon.Edit to "Изменить профиль", KiroXIcon.Folder to "Чаты и папки", KiroXIcon.Bell to "Уведомления",
-            KiroXIcon.Shield to "Конфиденциальность", KiroXIcon.Storage to "Данные и память", KiroXIcon.Devices to "Устройства"
-        )
-        item {
-            SettingRow(KiroXIcon.Palette, "Тема", trailing = if (palette == FusionPalette.GraphiteDark) "Graphite" else "AMOLED") { themeSheet = true }
-        }
-        items(soon, key = { it.second }) { (icon, title) -> SettingRow(icon, title, trailing = "скоро") { onNotice("«$title» появится в следующих этапах") } }
-        item { SettingRow(KiroXIcon.Info, "О KiroX", trailing = BuildConfig.VERSION_NAME) { onNotice("KiroX ${BuildConfig.VERSION_NAME} — независимый клиент Telegram") } }
-        item {
-            Text(
-                "Выйти из аккаунта", color = Fusion.colors.danger, fontSize = 15.sp, fontWeight = FontWeight.Medium,
-                modifier = Modifier.fillMaxWidth().padding(top = 16.dp).clickable { confirmLogout = true }.heightIn(min = 52.dp).padding(horizontal = 18.dp).wrapContentHeight()
-            )
-        }
-    }
-    if (themeSheet) ThemeSheet(palette, onSelect = onPalette, onDismiss = { themeSheet = false })
-    if (confirmLogout) AlertDialog(
-        onDismissRequest = { confirmLogout = false },
-        containerColor = Fusion.colors.surface2,
-        title = { Text("Выйти из аккаунта?", color = Fusion.colors.textPrimary) },
-        text = { Text("Сессия на этом устройстве будет завершена, локальный кеш Telegram удалён.", color = Fusion.colors.textSecondary) },
-        confirmButton = { TextButton(onClick = { confirmLogout = false; onLogOut() }) { Text("Выйти", color = Fusion.colors.danger) } },
-        dismissButton = { TextButton(onClick = { confirmLogout = false }) { Text("Отмена", color = Fusion.colors.textPrimary) } }
-    )
-}
-
-@Composable
-private fun SettingRow(icon: KiroXIcon, title: String, trailing: String? = null, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 52.dp).padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-        IconGlyph(icon, null, Modifier.size(22.dp), Fusion.colors.textPrimary)
-        Spacer(Modifier.width(16.dp))
-        Text(title, color = Fusion.colors.textPrimary, fontSize = 15.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        if (trailing != null) Text(trailing, color = Fusion.colors.textTertiary, fontSize = 13.sp)
-        IconGlyph(KiroXIcon.Chevron, null, Modifier.padding(start = 6.dp).size(16.dp), Fusion.colors.textTertiary)
-    }
-}
-
-@Composable
-private fun InfoRow(icon: KiroXIcon, title: String, value: String) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 18.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        IconGlyph(icon, null, Modifier.size(22.dp), Fusion.colors.textSecondary)
-        Spacer(Modifier.width(16.dp))
-        Column { Text(value, color = Fusion.colors.textPrimary, fontSize = 15.sp); Text(title, color = Fusion.colors.textSecondary, fontSize = 12.sp) }
-    }
+    HorizontalDivider(Modifier.padding(start = 80.dp), color = Fusion.colors.outline)
 }
 
 // ---------- Shared pieces ----------
@@ -453,9 +435,10 @@ private fun <T> SectionTabs(tabs: List<Pair<String, T>>, selected: T, onSelect: 
 }
 
 @Composable
-private fun SearchField(value: String, hint: String, autoFocus: Boolean = false, onChange: (String) -> Unit) {
+private fun SearchField(value: String, hint: String, autoFocus: Boolean = false, focusTrigger: Int = 0, onChange: (String) -> Unit) {
     val focus = remember { androidx.compose.ui.focus.FocusRequester() }
     if (autoFocus) LaunchedEffect(Unit) { focus.requestFocus() }
+    LaunchedEffect(focusTrigger) { if (focusTrigger > 0) focus.requestFocus() }
     Row(
         Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(12.dp))
             .background(Fusion.colors.surface2).padding(horizontal = 12.dp),

@@ -94,7 +94,7 @@ internal fun CallsList(state: TelegramCallsState, onLoadMore: () -> Unit, onOpen
                 Text(if (state.calls.isEmpty()) "Звонков пока нет" else "В этом разделе звонков нет", color = Fusion.colors.textSecondary, textAlign = TextAlign.Center)
             }
             else -> LazyColumn(Modifier.fillMaxSize(), state = listState) {
-                items(shown, key = { "${it.chatId}:${it.messageId}" }) { call -> CallRow(call, { onOpenChat(call.chatId) }, onCall) }
+                items(groupCalls(shown), key = { "${it.first.chatId}:${it.first.messageId}" }) { (call, count) -> CallRow(call, count, { onOpenChat(call.chatId) }, onCall) }
                 if (state.loading) item { Box(Modifier.fillMaxWidth().padding(16.dp), Alignment.Center) { CircularProgressIndicator(Modifier.size(20.dp), color = Fusion.colors.textSecondary, strokeWidth = 2.dp) } }
             }
         }
@@ -112,13 +112,13 @@ private fun PagingEffect(listState: LazyListState, complete: Boolean, loadMore: 
 }
 
 @Composable
-private fun CallRow(call: TelegramCall, onOpen: () -> Unit, onCall: () -> Unit) {
+private fun CallRow(call: TelegramCall, count: Int, onOpen: () -> Unit, onCall: () -> Unit) {
     val missed = call.kind == TelegramCallKind.Missed
     Row(Modifier.fillMaxWidth().clickable(onClick = onOpen).heightIn(min = 64.dp).padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         TelegramAvatar(call.peerName, call.photo, 46.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(call.peerName, color = if (missed) Fusion.colors.danger else Fusion.colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(if (count > 1) "${call.peerName} ($count)" else call.peerName, color = if (missed) Fusion.colors.danger else Fusion.colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val icon = when (call.kind) {
                     TelegramCallKind.Incoming -> KiroXIcon.CallIncoming
@@ -130,7 +130,6 @@ private fun CallRow(call: TelegramCall, onOpen: () -> Unit, onCall: () -> Unit) 
                 Text(callSubtitle(call), color = Fusion.colors.textSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
-        Text(TelegramFormat.chatTime(call.date), color = Fusion.colors.textSecondary, fontSize = 12.sp)
         Box(Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onCall), contentAlignment = Alignment.Center) {
             IconGlyph(if (call.isVideo) KiroXIcon.Video else KiroXIcon.Call, "Позвонить", Modifier.size(22.dp), Fusion.colors.textPrimary)
         }
@@ -146,15 +145,39 @@ internal fun callSubtitle(call: TelegramCall): String {
         TelegramCallKind.Missed -> "Пропущенный $type"
         TelegramCallKind.Unanswered -> "Без ответа"
     }
-    return if (call.durationSeconds > 0) "$kind · ${TelegramFormat.duration(call.durationSeconds)}" else kind
+    val withDuration = if (call.durationSeconds > 0) "$kind · ${TelegramFormat.duration(call.durationSeconds)}" else kind
+    return "$withDuration · ${TelegramFormat.callTime(call.date)}"
+}
+
+/** Merges consecutive calls with the same person and kind into one row with a count; history order is kept. */
+internal fun groupCalls(calls: List<TelegramCall>): List<Pair<TelegramCall, Int>> {
+    val groups = ArrayList<Pair<TelegramCall, Int>>()
+    for (call in calls) {
+        val last = groups.lastOrNull()
+        if (last != null && last.first.chatId == call.chatId && last.first.kind == call.kind && last.first.isVideo == call.isVideo) {
+            groups[groups.lastIndex] = last.first to last.second + 1
+        } else groups += call to 1
+    }
+    return groups
 }
 
 // ---------- Stories ----------
 
 @Composable
-internal fun StoriesRow(chats: List<TelegramStoryChat>, onOpen: (TelegramStoryChat) -> Unit) {
+internal fun StoriesRow(chats: List<TelegramStoryChat>, onOpen: (TelegramStoryChat) -> Unit, onAddStory: () -> Unit) {
+    val own = chats.firstOrNull { it.isSelf }
     LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        items(chats, key = { it.chatId }) { chat ->
+        // "Моя история" is always first: opens own stories when there are any, otherwise offers to add one.
+        if (own == null) item(key = "my_story") {
+            Column(Modifier.width(64.dp).clip(RoundedCornerShape(12.dp)).clickable(onClick = onAddStory).padding(vertical = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.size(58.dp).border(1.dp, Fusion.colors.outlineStrong, CircleShape), contentAlignment = Alignment.Center) {
+                    IconGlyph(KiroXIcon.Add, "Добавить историю", Modifier.size(22.dp), Fusion.colors.textPrimary)
+                }
+                Spacer(Modifier.height(4.dp))
+                Text("Моя история", color = Fusion.colors.textSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        items(listOfNotNull(own) + chats.filterNot { it.isSelf }, key = { it.chatId }) { chat ->
             Column(Modifier.width(64.dp).clip(RoundedCornerShape(12.dp)).clickable { onOpen(chat) }.padding(vertical = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(
                     Modifier.size(58.dp).border(if (chat.hasUnread) 2.dp else 1.dp, if (chat.hasUnread) Fusion.colors.accent else Fusion.colors.outlineStrong, CircleShape).padding(4.dp),
