@@ -98,7 +98,10 @@ fun TelegramChatScreen(
             .distinctUntilChanged().filter { it }.collect { actions.loadOlder() }
     }
     // Keep the newest message in view when it arrives while the user is at the bottom.
-    LaunchedEffect(history.messages.lastOrNull()?.id) { if (listState.firstVisibleItemIndex <= 1) listState.animateScrollToItem(0) }
+    LaunchedEffect(history.messages.lastOrNull()?.id) {
+        val newest = history.messages.lastOrNull() ?: return@LaunchedEffect
+        if (newest.isOutgoing || listState.firstVisibleItemIndex <= 3) listState.animateScrollToItem(0)
+    }
 
     BackHandler(enabled = editing != null || replyTo != null) { editing = null; replyTo = null; input = TextFieldValue() }
 
@@ -226,7 +229,16 @@ fun TelegramChatScreen(
             onDismissRequest = { deleting = null },
             containerColor = Fusion.colors.surface2,
             title = { Text("Удалить сообщение?", color = Fusion.colors.textPrimary) },
-            text = { Text(if (message.direction == MessageDirection.Outgoing) "Можно удалить только у себя или у всех участников." else "Сообщение будет удалено у вас.", color = Fusion.colors.textSecondary) },
+            text = {
+                Text(
+                    when {
+                        history.peerKind == TelegramPeerKind.Saved -> "Сообщение будет удалено из «Избранного»."
+                        message.direction == MessageDirection.Outgoing -> "Можно удалить только у себя или у всех участников."
+                        else -> "Сообщение будет удалено у вас."
+                    },
+                    color = Fusion.colors.textSecondary
+                )
+            },
             confirmButton = {
                 Row {
                     if (message.direction == MessageDirection.Outgoing && history.peerKind != TelegramPeerKind.Saved) {
@@ -296,7 +308,8 @@ internal fun TelegramMessage.toUi(time: String) = MessageUi(
         TelegramDelivery.Sending -> DeliveryState.Sending
         TelegramDelivery.Failed -> DeliveryState.Failed
         TelegramDelivery.Read -> DeliveryState.Read
-        TelegramDelivery.Sent, TelegramDelivery.None -> DeliveryState.Sent
+        TelegramDelivery.Sent -> DeliveryState.Sent
+        TelegramDelivery.None -> DeliveryState.None
     },
     quote = replyText?.let { QuoteUi(replyAuthor.orEmpty(), it) },
     forwardedFrom = forwardedFrom,

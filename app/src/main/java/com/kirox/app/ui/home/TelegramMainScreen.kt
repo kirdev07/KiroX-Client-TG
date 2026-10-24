@@ -301,7 +301,9 @@ private fun LoadMoreEffect(listState: LazyListState, count: Int, complete: Boole
 @Composable
 private fun ChatRow(chat: TelegramChatItem, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick, onLongClickLabel = "Действия с чатом").heightIn(min = 74.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        TelegramAvatar(chat.title, chat.photo, 54.dp)
+        if (chat.isSaved) Box(Modifier.size(54.dp).clip(CircleShape).background(Fusion.colors.surface3), contentAlignment = Alignment.Center) {
+            IconGlyph(KiroXIcon.Bookmark, null, Modifier.size(24.dp), Fusion.colors.textPrimary)
+        } else TelegramAvatar(chat.title, chat.photo, 54.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

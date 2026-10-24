@@ -4,7 +4,7 @@ import androidx.compose.runtime.Immutable
 
 enum class MessageDirection { Incoming, Outgoing, System }
 enum class MessageKind { Text, Photo, Video, Voice, Document }
-enum class DeliveryState { Sending, Sent, Delivered, Read, Failed }
+enum class DeliveryState { None, Sending, Sent, Delivered, Read, Failed }
 enum class ChatLoadState { Loading, Ready, Empty, Error, Offline }
 
 @Immutable

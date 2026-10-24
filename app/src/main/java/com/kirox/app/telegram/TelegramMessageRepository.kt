@@ -21,6 +21,7 @@ class TelegramMessageRepository(
     private var lastReadOutbox = 0L
     private var publishScheduled = false
     private val viewed = HashSet<Long>()
+    private var savedChat = false
 
     private val _history = MutableStateFlow(TelegramChatHistory())
     val history: StateFlow<TelegramChatHistory> = _history.asStateFlow()
@@ -141,6 +142,7 @@ class TelegramMessageRepository(
         val chat = chats.chat(id)
         val type = chat?.type
         val peerUser = (type as? TdApi.ChatTypePrivate)?.let { users.user(it.userId) }
+        savedChat = peerUser != null && peerUser.id == users.myId()
         val mapped = messages.values.map { it.toModel() }
         _history.value = TelegramChatHistory(
             chatId = id,
@@ -195,7 +197,7 @@ class TelegramMessageRepository(
             date = date,
             edited = editDate > 0,
             delivery = when {
-                !isOutgoing -> TelegramDelivery.None
+                !isOutgoing || savedChat -> TelegramDelivery.None
                 sendingState is TdApi.MessageSendingStatePending -> TelegramDelivery.Sending
                 sendingState is TdApi.MessageSendingStateFailed -> TelegramDelivery.Failed
                 id <= lastReadOutbox -> TelegramDelivery.Read

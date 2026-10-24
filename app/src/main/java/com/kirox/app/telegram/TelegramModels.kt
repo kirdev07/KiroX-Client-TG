@@ -34,7 +34,9 @@ data class TelegramChatItem(
     val draft: String? = null,
     val outgoingState: LastMessageState = LastMessageState.None,
     val photo: TelegramFileRef?,
-    val archived: Boolean
+    val archived: Boolean,
+    /** The user's own chat (Saved Messages). */
+    val isSaved: Boolean = false
 )
 
 sealed interface TelegramChatListKey {

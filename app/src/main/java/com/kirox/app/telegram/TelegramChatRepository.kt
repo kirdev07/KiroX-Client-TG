@@ -15,6 +15,7 @@ class TelegramChatRepository(private val client: TelegramClient) {
     private val loading = HashSet<TelegramChatListKey>()
     private val complete = HashSet<TelegramChatListKey>()
     private var publishScheduled = false
+    private var myId = 0L
 
     private val _lists = MutableStateFlow(TelegramChatLists())
     val lists: StateFlow<TelegramChatLists> = _lists.asStateFlow()
@@ -80,6 +81,7 @@ class TelegramChatRepository(private val client: TelegramClient) {
                 }
             }
             is TdApi.UpdateNewChat -> { chatsById[update.chat.id] = update.chat; schedulePublish() }
+            is TdApi.UpdateOption -> if (update.name == "my_id") { myId = (update.value as? TdApi.OptionValueInteger)?.value ?: 0L; schedulePublish() }
             is TdApi.UpdateChatFolders -> {
                 folders = update.chatFolders.map { TelegramFolder(it.id, it.name?.text?.text.orEmpty()) }
                 schedulePublish()
@@ -142,7 +144,7 @@ class TelegramChatRepository(private val client: TelegramClient) {
         val list = key.toTd()
         val chats = chatsById.values.mapNotNull { chat ->
             val position = chat.positions.firstOrNull { sameChatList(it.list, list) }?.takeIf { it.order != 0L } ?: return@mapNotNull null
-            toChatItem(chat, position, archived = key == TelegramChatListKey.Archive) to position.order
+            toChatItem(chat, position, archived = key == TelegramChatListKey.Archive, myId = myId) to position.order
         }.sortedWith(compareByDescending<Pair<TelegramChatItem, Long>> { it.second }.thenByDescending { it.first.id }).map { it.first }
         return TelegramChatListState(chats, loading = key in loading, complete = key in complete)
     }
@@ -160,13 +162,14 @@ internal fun TelegramChatListKey.toTd(): TdApi.ChatList = when (this) {
     is TelegramChatListKey.Folder -> TdApi.ChatListFolder(id)
 }
 
-internal fun toChatItem(chat: TdApi.Chat, position: TdApi.ChatPosition, archived: Boolean): TelegramChatItem {
+internal fun toChatItem(chat: TdApi.Chat, position: TdApi.ChatPosition, archived: Boolean, myId: Long = 0L): TelegramChatItem {
+    val saved = myId != 0L && (chat.type as? TdApi.ChatTypePrivate)?.userId == myId
     val last = chat.lastMessage
     val draft = (chat.draftMessage?.content as? TdApi.DraftMessageContentText)?.text?.text?.takeIf { it.isNotBlank() }
     val notifications = chat.notificationSettings
     return TelegramChatItem(
         id = chat.id,
-        title = chat.title.orEmpty(),
+        title = if (saved) "Избранное" else chat.title.orEmpty(),
         preview = messagePreview(last),
         timestamp = maxOf(last?.date ?: 0, if (draft != null) chat.draftMessage?.date ?: 0 else 0),
         unreadCount = chat.unreadCount,
@@ -177,12 +180,13 @@ internal fun toChatItem(chat: TdApi.Chat, position: TdApi.ChatPosition, archived
         isMuted = notifications != null && !notifications.useDefaultMuteFor && notifications.muteFor > 0,
         draft = draft,
         outgoingState = when {
-            last == null || !last.isOutgoing -> LastMessageState.None
+            saved || last == null || !last.isOutgoing -> LastMessageState.None
             last.id <= chat.lastReadOutboxMessageId -> LastMessageState.Read
             else -> LastMessageState.Sent
         },
-        photo = chat.photo?.small?.toRef(),
-        archived = archived
+        photo = if (saved) null else chat.photo?.small?.toRef(),
+        archived = archived,
+        isSaved = saved
     )
 }
 
