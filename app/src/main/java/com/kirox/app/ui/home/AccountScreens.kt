@@ -23,6 +23,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -141,6 +143,15 @@ internal fun CustomizationScreen(
     LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { BackTitle("Кастомизация", onBack) }
         item { BubblePreview(bubbleShape.radiusDp) }
+        item {
+            Box(
+                Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(210.dp).clip(RoundedCornerShape(20.dp))
+                    .background(Fusion.colors.surface1).border(1.dp, Fusion.colors.outline, RoundedCornerShape(20.dp))
+            ) {
+                SeasonalLayer(Modifier.matchParentSize(), mode = com.kirox.app.ui.components.SeasonalMode.Showcase, force = true)
+                Text("Сезонная анимация", color = Fusion.colors.textSecondary, fontSize = 12.sp, modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp))
+            }
+        }
         item { TileRow(KiroXIcon.Palette, "Тема", trailing = themeName(palette)) { themeSheet = true } }
         item {
             SegmentRow(KiroXIcon.Chat, "Форма пузырей", com.kirox.app.settings.BubbleShape.entries, bubbleShape, { it.title }, onBubbleShape)
@@ -379,11 +390,21 @@ internal fun NewMessageScreen(contacts: List<TelegramContact>, onBack: () -> Uni
 /** Large screen title (old Fusion: ~32 sp) with optional seasonal particles behind it. */
 @Composable
 internal fun ScreenTitle(title: String, seasonal: Boolean = true, actions: @Composable RowScope.() -> Unit = {}) {
+    var titleEnd by remember { mutableFloatStateOf(0f) }
+    var actionsStart by remember { mutableFloatStateOf(0f) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val gap = with(density) { 12.dp.toPx() }
+    val startPad = with(density) { 16.dp.toPx() }
     Box(Modifier.fillMaxWidth()) {
-        if (seasonal) SeasonalLayer(Modifier.matchParentSize())
+        if (seasonal) SeasonalLayer(Modifier.matchParentSize(), freeZone = if (actionsStart > titleEnd) (titleEnd + gap)..(actionsStart - gap) else null)
         Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(title, color = Fusion.colors.textPrimary, fontSize = 26.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            Row(content = actions)
+            Box(Modifier.weight(1f)) {
+                Text(
+                    title, color = Fusion.colors.textPrimary, fontSize = 26.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.onGloballyPositioned { titleEnd = it.positionInParent().x + it.size.width + startPad }
+                )
+            }
+            Row(Modifier.onGloballyPositioned { actionsStart = it.positionInParent().x }, content = actions)
         }
     }
 }
