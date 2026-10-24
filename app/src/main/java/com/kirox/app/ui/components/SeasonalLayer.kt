@@ -110,7 +110,6 @@ fun SeasonalLayer(
         when (chosen) {
             com.kirox.app.settings.EffectScene.Halloween -> halloween(time, mode, freeZone ?: freeZoneFraction?.let { (size.width * it.start)..(size.width * it.endInclusive) }, light)
             com.kirox.app.settings.EffectScene.Main -> sparkles(time, mode, light)
-            com.kirox.app.settings.EffectScene.Spring -> spring(time, mode, light, freeZone ?: freeZoneFraction?.let { (size.width * it.start)..(size.width * it.endInclusive) })
             com.kirox.app.settings.EffectScene.NewYear -> newYear(time, mode, light, freeZone ?: freeZoneFraction?.let { (size.width * it.start)..(size.width * it.endInclusive) })
             com.kirox.app.settings.EffectScene.Winter -> winter(time, mode, light, freeZone ?: freeZoneFraction?.let { (size.width * it.start)..(size.width * it.endInclusive) })
         }
@@ -249,45 +248,6 @@ private fun DrawScope.newYear(t: Float, mode: SeasonalMode, light: Boolean, free
     }
     // On the splash the garland hangs below the status bar.
     drawGarland(x0, x1, when (mode) { SeasonalMode.Header -> 2.dp.toPx(); SeasonalMode.Splash -> 30.dp.toPx(); else -> -bulbR }, if (header) size.height * 0.16f else bulbR * 2.4f, t, bulbR, light)
-}
-
-/**
- * Spring: blossoming cherry branches in the top corners, tumbling petals, a meadow with
- * flowers and a couple of butterflies. Headers keep only petals in the free gap.
- */
-private fun DrawScope.spring(t: Float, mode: SeasonalMode, light: Boolean, freeZone: ClosedFloatingPointRange<Float>?) {
-    val header = mode == SeasonalMode.Header
-    if (!header) {
-        drawSunGlowCached(Offset(size.width * 0.85f, 0f), minOf(size.width, size.height) * 0.5f)
-        val branch = minOf(size.width * 0.5f, size.height * (if (mode == SeasonalMode.Splash) 0.3f else 0.7f))
-        val top = if (mode == SeasonalMode.Splash) 24.dp.toPx() else 0f
-        drawBlossomBranchCached(Offset(0f, top), branch, flip = false)
-        drawBlossomBranchCached(Offset(size.width, top), branch * 0.8f, flip = true)
-        drawMeadowCached(size.width, size.height * (if (mode == SeasonalMode.Splash) 0.14f else 0.26f))
-    }
-    val x0 = if (header && freeZone != null) freeZone.start else 0f
-    val span = (if (header && freeZone != null) freeZone.endInclusive else size.width) - x0
-    val count = when (mode) { SeasonalMode.Header -> 8; SeasonalMode.Splash -> 26; else -> 18 } / (if (light) 2 else 1)
-    val baseR = (if (header) 3.dp else 4.5.dp).toPx()
-    if (span > 0f) repeat(count) { i ->
-        val seed = (i * 7919 % 1000) / 1000f
-        val r = baseR * (0.75f + (i % 3) * 0.25f)
-        val fall = (t * (0.045f + seed * 0.03f) + seed) % 1f
-        // Petals drift with the wind: down and a little to the right, swaying.
-        val x = x0 + ((span * ((i * 37 % 101) / 100f) + fall * span * 0.15f) % span) + sin(t * 1.1f + seed * 6.283f) * (if (header) 3f else 10f)
-        val y = -r + fall * (size.height + 2 * r)
-        val rot = if (light) seed * 360f else (t * (40f + seed * 50f) + seed * 360f) % 360f
-        val flip = if (light) 1f else kotlin.math.abs(sin(t * (1.2f + seed) + i))
-        drawPetalCached(Offset(x, y), r, i % 2, rot, flip, alpha = 0.85f)
-    }
-    if (!header && !light) {
-        val colors = listOf(Color(0xFFFFC94D), Color(0xFF8AB4FF))
-        repeat(2) { i ->
-            val p = butterflyPath(t, i, size.width, size.height * (if (mode == SeasonalMode.Splash) 0.9f else 1f))
-            val y = if (mode == SeasonalMode.Splash) size.height * 0.62f + (p.y - size.height * 0.4f) * 0.4f else p.y
-            drawButterfly(Offset(p.x, y), (if (mode == SeasonalMode.Splash) 22.dp else 16.dp).toPx(), sin(t * 14f + i * 2f), colors[i])
-        }
-    }
 }
 
 /** The main kiroX animation: slow drifting, twinkling white particles (as on the splash screen). */

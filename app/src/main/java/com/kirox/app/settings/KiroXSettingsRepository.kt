@@ -39,8 +39,7 @@ enum class EffectScene(val title: String, val subtitle: String) {
     Main("Основная", "Мерцающие частицы kiroX"),
     Halloween("Хэллоуин", "Тыквы в костюмах, летучие мыши, паутина"),
     Winter("Зима", "Снежинки, сугробы с ёлками и иней"),
-    NewYear("Новый год", "Гирлянда, ёлка с подарками и салют"),
-    Spring("Весна", "Цветущая сакура, лепестки, луг и бабочки")
+    NewYear("Новый год", "Гирлянда, ёлка с подарками и салют")
 }
 
 /** Detail of decorative effects. [Auto] picks [Light] on weak devices and in battery saver. */
