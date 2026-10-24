@@ -1,0 +1,16 @@
+kiroX
+Copyright 2026 KirDev Studio (kirdev07)
+
+This NOTICE identifies the attribution for original kiroX project components
+offered under the Apache License, Version 2.0, as described in the root LICENSE.
+
+The repository also includes third-party components whose original copyright
+holders and licenses remain unchanged. In particular:
+
+- TDLib: Copyright of its respective authors/contributors, including the
+  copyright notices retained in its Java interfaces. Boost Software License 1.0.
+- Pacifico font: Copyright 2018 The Pacifico Project Authors.
+  SIL Open Font License 1.1.
+
+See THIRD_PARTY_NOTICES.md and the corresponding full license texts.
+This NOTICE does not claim ownership of third-party code, fonts or trademarks.
