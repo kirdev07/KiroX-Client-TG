@@ -1,0 +1,35 @@
+*.iml
+.gradle/
+.idea/
+local.properties
+kirox.properties
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+app/build/
+third_party/td/
+
+# Android build
+.gradle/
+**/build/
+local.properties
+.idea/
+*.iml
+.cxx/
+.externalNativeBuild/
+
+# Compiled applications
+*.apk
+*.aab
+
+# Secrets
+*.jks
+*.keystore
+*.pem
+*.p12
+.env
+.env.*
+key.properties
+keystore.properties
+secrets.properties
