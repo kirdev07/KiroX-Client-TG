@@ -4,6 +4,7 @@ kotlin = "2.2.10"
 composeBom = "2025.09.01"
 activityCompose = "1.11.0"
 libphonenumber = "9.0.41"
+zxing = "3.5.4"
 junit = "4.13.2"
 room = "2.7.2"
 datastore = "1.1.7"
@@ -21,6 +22,7 @@ androidx-compose-material3 = { module = "androidx.compose.material3:material3" }
 androidx-compose-ui = { module = "androidx.compose.ui:ui" }
 androidx-compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
+zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 google-libphonenumber = { module = "com.googlecode.libphonenumber:libphonenumber", version.ref = "libphonenumber" }
 junit = { module = "junit:junit", version.ref = "junit" }
 androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }

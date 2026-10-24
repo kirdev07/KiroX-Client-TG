@@ -53,6 +53,7 @@ fun PhoneLoginScreen(
     onChooseCountry: () -> Unit,
     onDemoMode: () -> Unit,
     onContinue: (String) -> Unit = {},
+    onQrLogin: () -> Unit = {},
     externalStatus: String? = null,
     busy: Boolean = false
 ) {
@@ -95,6 +96,15 @@ fun PhoneLoginScreen(
             modifier = Modifier.navigationBarsPadding().padding(horizontal = 24.dp, vertical = 20.dp).align(Alignment.BottomCenter),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            Text(
+                "Войти по QR-коду",
+                color = if (busy) KiroXSecondary else KiroXWhite, fontSize = 15.sp, fontWeight = FontWeight.Medium,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).wrapContentHeight().clickable(enabled = !busy) {
+                    focusManager.clearFocus()
+                    onQrLogin()
+                },
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
             DemoButton(onClick = {
                 focusManager.clearFocus()
                 onDemoMode()

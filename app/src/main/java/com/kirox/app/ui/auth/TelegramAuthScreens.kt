@@ -1,6 +1,8 @@
 package com.kirox.app.ui.auth
 
 import com.kirox.app.ui.theme.Fusion
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,46 +12,74 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.EncodeHintType
+import com.google.zxing.common.BitMatrix
+import com.google.zxing.qrcode.QRCodeWriter
 import com.kirox.app.telegram.TelegramAuthRepository
 import com.kirox.app.telegram.TelegramAuthState
 
 @Composable
-fun TelegramAuthStepScreen(state: TelegramAuthState, repository: TelegramAuthRepository, busy: Boolean, error: String?) {
-    var first by remember(state) { mutableStateOf("") }
-    var second by remember(state) { mutableStateOf("") }
-    val isPassword = state is TelegramAuthState.WaitPassword
+fun TelegramAuthStepScreen(state: TelegramAuthState, repository: TelegramAuthRepository, busy: Boolean, error: String?, recoveryCodeSent: Boolean) {
+    var first by remember(state, recoveryCodeSent) { mutableStateOf("") }
+    var second by remember(state, recoveryCodeSent) { mutableStateOf("") }
+    var third by remember(state, recoveryCodeSent) { mutableStateOf("") }
+    var termsAccepted by remember(state) { mutableStateOf(false) }
+    var recoveryUnavailable by remember(state) { mutableStateOf(false) }
+    val recovering = state is TelegramAuthState.WaitPassword && recoveryCodeSent
+    // TDLib cannot go back from QR login to phone entry; abandoning the login restarts it cleanly.
+    BackHandler(enabled = state is TelegramAuthState.WaitOtherDevice && !busy) { repository.logOut() }
+    BackHandler(enabled = recovering) { repository.cancelPasswordRecovery() }
+
+    val isPassword = state is TelegramAuthState.WaitPassword && !recovering
     val numeric = state is TelegramAuthState.WaitCode || state is TelegramAuthState.WaitEmailCode
     val title = when (state) {
         is TelegramAuthState.WaitCode -> "Код подтверждения"
-        is TelegramAuthState.WaitPassword -> "Облачный пароль"
+        is TelegramAuthState.WaitPassword -> if (recovering) "Восстановление пароля" else "Облачный пароль"
         TelegramAuthState.WaitEmailAddress -> "Электронная почта"
         is TelegramAuthState.WaitEmailCode -> "Код из письма"
-        TelegramAuthState.WaitRegistration -> "Регистрация"
-        is TelegramAuthState.WaitOtherDevice -> "Подтвердите вход"
+        is TelegramAuthState.WaitRegistration -> "Регистрация"
+        is TelegramAuthState.WaitOtherDevice -> "Вход по QR-коду"
         else -> "Telegram"
     }
     val description = when (state) {
         is TelegramAuthState.WaitCode -> "Введите код, отправленный Telegram на ${state.phoneNumber}."
-        is TelegramAuthState.WaitPassword -> if (state.hint.isBlank()) "Введите пароль двухэтапной аутентификации." else "Подсказка: ${state.hint}"
+        is TelegramAuthState.WaitPassword -> when {
+            recovering -> "Введите код, отправленный на ${state.recoveryEmailPattern.ifBlank { "резервную почту" }}, и задайте новый пароль."
+            state.hint.isBlank() -> "Введите пароль двухэтапной аутентификации."
+            else -> "Подсказка: ${state.hint}"
+        }
         TelegramAuthState.WaitEmailAddress -> "Telegram запрашивает email для продолжения входа."
         is TelegramAuthState.WaitEmailCode -> "Введите код подтверждения из письма."
-        TelegramAuthState.WaitRegistration -> "Введите имя для создания аккаунта Telegram и принятия условий сервиса."
-        is TelegramAuthState.WaitOtherDevice -> "Откройте ссылку на уже авторизованном устройстве:\n${state.link}"
+        is TelegramAuthState.WaitRegistration -> "Введите имя для создания аккаунта Telegram."
+        is TelegramAuthState.WaitOtherDevice -> "Откройте Telegram на телефоне: Настройки → Устройства → Подключить устройство, и отсканируйте код."
         else -> "Подождите…"
+    }
+    val canSubmit = when {
+        busy -> false
+        recovering -> first.isNotBlank() && second.isNotBlank()
+        state is TelegramAuthState.WaitRegistration -> first.isNotBlank() && (state.termsOfService.isBlank() || termsAccepted)
+        else -> first.isNotBlank()
     }
     Column(
         Modifier.fillMaxSize().background(Fusion.colors.background).statusBarsPadding().navigationBarsPadding()
@@ -61,11 +91,13 @@ fun TelegramAuthStepScreen(state: TelegramAuthState, repository: TelegramAuthRep
         Spacer(Modifier.height(12.dp))
         Text(description, color = Fusion.colors.textSecondary, fontSize = 15.sp, lineHeight = 21.sp)
         Spacer(Modifier.height(32.dp))
-        if (state !is TelegramAuthState.WaitOtherDevice) {
+        if (state is TelegramAuthState.WaitOtherDevice) {
+            QrCode(state.link, Modifier.align(Alignment.CenterHorizontally).size(240.dp))
+        } else {
             AuthField(
                 value = first,
                 onValueChange = { raw ->
-                    val value = if (numeric) raw.filter(Char::isDigit) else raw
+                    val value = if (numeric || recovering) raw.filter(Char::isDigit) else raw
                     val max = when (state) {
                         is TelegramAuthState.WaitCode -> state.length.takeIf { it > 0 } ?: 12
                         is TelegramAuthState.WaitEmailCode -> state.length.takeIf { it > 0 } ?: 12
@@ -74,49 +106,125 @@ fun TelegramAuthStepScreen(state: TelegramAuthState, repository: TelegramAuthRep
                     first = value.take(max)
                     repository.clearError()
                 },
-                hint = when (state) {
-                    TelegramAuthState.WaitRegistration -> "Имя"
-                    TelegramAuthState.WaitEmailAddress -> "Email"
+                hint = when {
+                    recovering -> "Код восстановления"
+                    state is TelegramAuthState.WaitRegistration -> "Имя"
+                    state == TelegramAuthState.WaitEmailAddress -> "Email"
                     else -> if (numeric) "Код" else "Пароль"
                 },
-                numeric = numeric,
+                numeric = numeric || recovering,
                 password = isPassword
             )
             if (state is TelegramAuthState.WaitRegistration) {
                 Spacer(Modifier.height(12.dp))
                 AuthField(second, { second = it.take(128) }, "Фамилия (необязательно)")
+                if (state.termsOfService.isNotBlank()) {
+                    Spacer(Modifier.height(20.dp))
+                    TermsOfService(state.termsOfService, state.minUserAge, termsAccepted) { termsAccepted = it }
+                }
+            }
+            if (recovering) {
+                Spacer(Modifier.height(12.dp))
+                AuthField(second, { second = it.take(128); repository.clearError() }, "Новый пароль", password = true)
+                Spacer(Modifier.height(12.dp))
+                AuthField(third, { third = it.take(128) }, "Подсказка (необязательно)")
             }
         }
         if (error != null) {
             Spacer(Modifier.height(12.dp))
             Text(error, color = Fusion.colors.danger, fontSize = 13.sp)
         }
+        if (recoveryUnavailable) {
+            Spacer(Modifier.height(12.dp))
+            Text("К аккаунту не привязана резервная почта, восстановить пароль в KiroX нельзя.", color = Fusion.colors.textSecondary, fontSize = 13.sp)
+        }
         Spacer(Modifier.height(24.dp))
-        if (state !is TelegramAuthState.WaitOtherDevice) {
-            AuthButton(if (busy) "Проверка…" else "Продолжить", busy || first.isBlank()) {
-                when (state) {
-                    is TelegramAuthState.WaitCode -> repository.code(first)
-                    is TelegramAuthState.WaitPassword -> repository.password(first)
-                    TelegramAuthState.WaitEmailAddress -> repository.email(first)
-                    is TelegramAuthState.WaitEmailCode -> repository.emailCode(first)
-                    TelegramAuthState.WaitRegistration -> repository.register(first, second)
-                    else -> Unit
+        if (state is TelegramAuthState.WaitOtherDevice) {
+            TextAction("Войти по номеру телефона", enabled = !busy) { repository.logOut() }
+        } else {
+            AuthButton(if (busy) "Проверка…" else if (recovering) "Сохранить пароль" else "Продолжить", !canSubmit) {
+                when {
+                    recovering -> repository.recoverPassword(first, second, third)
+                    state is TelegramAuthState.WaitCode -> repository.code(first)
+                    state is TelegramAuthState.WaitPassword -> repository.password(first)
+                    state == TelegramAuthState.WaitEmailAddress -> repository.email(first)
+                    state is TelegramAuthState.WaitEmailCode -> repository.emailCode(first)
+                    state is TelegramAuthState.WaitRegistration -> repository.register(first, second)
                 }
             }
         }
         if (state is TelegramAuthState.WaitCode && state.canResend) {
             Spacer(Modifier.height(10.dp))
-            Text(
+            TextAction(
                 if (state.timeout > 0) "Повторная отправка будет доступна через ${state.timeout} с" else "Отправить код повторно",
-                color = if (state.timeout > 0) Fusion.colors.textTertiary else Fusion.colors.textPrimary,
-                modifier = Modifier.heightIn(min = 48.dp).wrapContentHeight().clickable(enabled = state.timeout <= 0 && !busy) { repository.resend() }
-            )
+                enabled = state.timeout <= 0 && !busy
+            ) { repository.resend() }
+        }
+        if (state is TelegramAuthState.WaitPassword) {
+            Spacer(Modifier.height(10.dp))
+            if (recovering) {
+                TextAction("Отмена", enabled = !busy) { repository.cancelPasswordRecovery() }
+            } else {
+                TextAction("Забыли пароль?", enabled = !busy) {
+                    if (state.hasRecoveryEmail) repository.requestPasswordRecovery() else recoveryUnavailable = true
+                }
+            }
         }
         if (busy) {
             Spacer(Modifier.height(20.dp))
             CircularProgressIndicator(Modifier.size(22.dp), color = Fusion.colors.textPrimary, strokeWidth = 2.dp)
         }
     }
+}
+
+@Composable
+private fun TermsOfService(text: String, minUserAge: Int, accepted: Boolean, onAcceptedChange: (Boolean) -> Unit) {
+    Text("Условия использования Telegram", color = Fusion.colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+    Spacer(Modifier.height(8.dp))
+    Box(
+        Modifier.fillMaxWidth().heightIn(max = 220.dp).clip(RoundedCornerShape(14.dp)).background(Fusion.colors.surface1)
+            .border(1.dp, Fusion.colors.outline, RoundedCornerShape(14.dp)).verticalScroll(rememberScrollState()).padding(14.dp)
+    ) { Text(text, color = Fusion.colors.textSecondary, fontSize = 13.sp, lineHeight = 18.sp) }
+    if (minUserAge > 0) {
+        Spacer(Modifier.height(8.dp))
+        Text("Минимальный возраст: $minUserAge лет", color = Fusion.colors.textSecondary, fontSize = 12.sp)
+    }
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { onAcceptedChange(!accepted) }, verticalAlignment = Alignment.CenterVertically) {
+        Checkbox(
+            accepted, onAcceptedChange,
+            colors = CheckboxDefaults.colors(checkedColor = Fusion.colors.accent, checkmarkColor = Fusion.colors.onAccent, uncheckedColor = Fusion.colors.outlineStrong)
+        )
+        Text("Я принимаю условия использования", color = Fusion.colors.textPrimary, fontSize = 14.sp)
+    }
+}
+
+@Composable
+private fun QrCode(link: String, modifier: Modifier) {
+    val matrix = remember(link) { encodeQr(link) }
+    Box(modifier.clip(RoundedCornerShape(18.dp)).background(Color.White).padding(14.dp).semantics { contentDescription = "QR-код для входа" }) {
+        if (matrix == null) {
+            Text("Не удалось построить QR-код", color = Color.Black, modifier = Modifier.align(Alignment.Center))
+        } else Canvas(Modifier.fillMaxSize()) {
+            val cell = size.minDimension / matrix.width
+            for (y in 0 until matrix.height) for (x in 0 until matrix.width) {
+                if (matrix[x, y]) drawRect(Color.Black, Offset(x * cell, y * cell), Size(cell + 0.5f, cell + 0.5f))
+            }
+        }
+    }
+}
+
+// QR codes must stay black on white regardless of theme so phone cameras can read them.
+private fun encodeQr(link: String): BitMatrix? = runCatching {
+    QRCodeWriter().encode(link, BarcodeFormat.QR_CODE, 0, 0, mapOf(EncodeHintType.MARGIN to 0))
+}.getOrNull()
+
+@Composable
+private fun TextAction(text: String, enabled: Boolean, onClick: () -> Unit) {
+    Text(
+        text,
+        color = if (enabled) Fusion.colors.textPrimary else Fusion.colors.textTertiary,
+        modifier = Modifier.heightIn(min = 48.dp).wrapContentHeight().clickable(enabled = enabled, onClick = onClick)
+    )
 }
 
 @Composable

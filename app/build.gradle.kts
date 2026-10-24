@@ -27,10 +27,15 @@ android {
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("int", "TELEGRAM_API_ID", secret("KIROX_API_ID").toIntOrNull()?.toString() ?: "0")
+        buildConfigField("boolean", "TELEGRAM_USE_TEST_DC", "false")
         buildConfigField("String", "TELEGRAM_API_HASH", "\"${secret("KIROX_API_HASH").replace("\\", "\\\\").replace("\"", "\\\"")}\"")
     }
 
     buildTypes {
+        debug {
+            // Telegram test DC for safe auth testing: KIROX_USE_TEST_DC=true in kirox.properties. Never in release.
+            buildConfigField("boolean", "TELEGRAM_USE_TEST_DC", (secret("KIROX_USE_TEST_DC") == "true").toString())
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -73,6 +78,7 @@ dependencies {
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.google.libphonenumber)
+    implementation(libs.zxing.core)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.datastore.preferences)

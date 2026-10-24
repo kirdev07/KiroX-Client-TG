@@ -44,6 +44,9 @@ fun KiroXApp() {
     val telegramBlocked by telegramViewModel.auth.blocked.collectAsStateWithLifecycle()
     val telegramBusy by telegramViewModel.auth.busy.collectAsStateWithLifecycle()
     val telegramError by telegramViewModel.auth.error.collectAsStateWithLifecycle()
+    val recoveryCodeSent by telegramViewModel.auth.recoveryCodeSent.collectAsStateWithLifecycle()
+    val connection by telegramViewModel.connection.state.collectAsStateWithLifecycle()
+    val profile by telegramViewModel.users.profile.collectAsStateWithLifecycle()
     val mainChats by telegramViewModel.chats.mainChats.collectAsStateWithLifecycle()
     val archiveChats by telegramViewModel.chats.archiveChats.collectAsStateWithLifecycle()
     var phoneState by remember { mutableStateOf<PhoneEntryState?>(null) }
@@ -98,6 +101,7 @@ fun KiroXApp() {
                             onChooseCountry = { stack.push(Screen.Countries) },
                             onDemoMode = { stack.push(Screen.DemoCode) },
                             onContinue = telegramViewModel.auth::phone,
+                            onQrLogin = telegramViewModel.auth::requestQr,
                             externalStatus = telegramBlocked ?: (telegramAuth as? TelegramAuthState.Blocked)?.message ?: telegramError,
                             busy = telegramBusy
                         )
@@ -109,8 +113,8 @@ fun KiroXApp() {
                             onExit = { stack.pop() }
                         )
                         Screen.DemoHome -> DemoMainScreen(onExit = { stack.resetTo(Screen.Phone) })
-                        Screen.AuthStep -> TelegramAuthStepScreen(telegramAuth, telegramViewModel.auth, telegramBusy, telegramError)
-                        Screen.Chats -> TelegramMainScreen(mainChats, archiveChats)
+                        Screen.AuthStep -> TelegramAuthStepScreen(telegramAuth, telegramViewModel.auth, telegramBusy, telegramError, recoveryCodeSent)
+                        Screen.Chats -> TelegramMainScreen(mainChats, archiveChats, connection, profile, onLogOut = telegramViewModel.auth::logOut)
                     }
                 }
             }

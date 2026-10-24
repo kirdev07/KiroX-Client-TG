@@ -21,6 +21,14 @@ TDLib обеспечивает взаимодействие с Telegram. Авт�
 
 Авторские права на шрифт сохраняются за авторами Pacifico. Применение шрифта не означает передачу прав на него проекту kiroX.
 
+## ZXing — Apache License 2.0
+
+**Источник:** [zxing/zxing](https://github.com/zxing/zxing)  
+**Лицензия:** [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)  
+**Зависимость:** `com.google.zxing:core:3.5.4` (Gradle)
+
+Используется для отображения QR-кода при входе в Telegram. Авторские права принадлежат авторам ZXing (ZXing authors).
+
 ## Зависимости Android и тестов
 
 Через Gradle используются AndroidX, Jetpack Compose, Kotlin, Room, DataStore, Google libphonenumber, JUnit и компоненты тестирования. Они подключаются как самостоятельные сторонние зависимости и регулируются условиями их правообладателей.

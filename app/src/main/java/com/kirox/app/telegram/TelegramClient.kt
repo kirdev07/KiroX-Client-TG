@@ -121,7 +121,7 @@ class TelegramClient(context: Context) {
             return
         }
         val parameters = TdApi.SetTdlibParameters().apply {
-            useTestDc = false
+            useTestDc = BuildConfig.TELEGRAM_USE_TEST_DC
             databaseDirectory = session.databaseDirectory
             filesDirectory = session.filesDirectory
             databaseEncryptionKey = key
@@ -138,11 +138,4 @@ class TelegramClient(context: Context) {
         }
         send(parameters) { result -> if (result is TdApi.Error) fail(humanError(result)) }
     }
-}
-
-internal fun humanError(error: TdApi.Error): String = when (error.message) {
-    "PHONE_CODE_INVALID" -> "Неверный код подтверждения"
-    "PHONE_NUMBER_INVALID" -> "Неверный номер телефона"
-    "PASSWORD_HASH_INVALID" -> "Неверный пароль"
-    else -> if (error.code >= 500) "Telegram временно недоступен" else error.message.replace('_', ' ').lowercase().replaceFirstChar(Char::uppercase)
 }

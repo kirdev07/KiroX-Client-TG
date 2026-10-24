@@ -16,6 +16,9 @@ class TelegramAuthRepository(private val client: TelegramClient) {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
     val blocked: StateFlow<String?> = client.blocked
+    private val _recoveryCodeSent = MutableStateFlow(false)
+    /** True after Telegram emailed a 2FA recovery code; reset whenever the auth state changes. */
+    val recoveryCodeSent: StateFlow<Boolean> = _recoveryCodeSent.asStateFlow()
 
     init {
         client.addUpdateHandler { update -> if (update is TdApi.UpdateAuthorizationState) apply(update.authorizationState) }
@@ -32,16 +35,21 @@ class TelegramAuthRepository(private val client: TelegramClient) {
     fun emailCode(value: String) = send(TdApi.CheckAuthenticationEmailCode().apply { code = TdApi.EmailAddressAuthenticationCode(value) })
     fun register(first: String, last: String) = send(TdApi.RegisterUser(first, last, false))
     fun resend() = send(TdApi.ResendAuthenticationCode(null))
+    fun requestQr() = send(TdApi.RequestQrCodeAuthentication(LongArray(0)))
+    fun requestPasswordRecovery() = send(TdApi.RequestAuthenticationPasswordRecovery()) { _recoveryCodeSent.value = true }
+    fun recoverPassword(code: String, newPassword: String, newHint: String) = send(TdApi.RecoverAuthenticationPassword(code, newPassword, newHint))
+    fun cancelPasswordRecovery() { _recoveryCodeSent.value = false; clearError() }
+    /** Logs out a signed-in account, or abandons an unfinished login (e.g. QR) so a fresh one can start. */
     fun logOut() = send(TdApi.LogOut())
     fun clearError() { _error.value = null }
 
-    private fun send(function: TdApi.Function<*>) {
+    private fun send(function: TdApi.Function<*>, onOk: () -> Unit = {}) {
         if (_busy.value) return
         _busy.value = true
         _error.value = null
         val sent = client.send(function) { result ->
             _busy.value = false
-            if (result is TdApi.Error) setFailure(humanError(result))
+            if (result is TdApi.Error) setFailure(humanError(result)) else onOk()
         }
         if (!sent) setFailure("TDLib ещё не готова")
     }
@@ -55,17 +63,22 @@ class TelegramAuthRepository(private val client: TelegramClient) {
             is TdApi.AuthorizationStateWaitCode -> TelegramAuthState.WaitCode(
                 state.codeInfo.phoneNumber.orEmpty(), codeLength(state.codeInfo.type), state.codeInfo.nextType != null, state.codeInfo.timeout
             )
-            is TdApi.AuthorizationStateWaitPassword -> TelegramAuthState.WaitPassword(state.passwordHint.orEmpty())
+            is TdApi.AuthorizationStateWaitPassword -> TelegramAuthState.WaitPassword(
+                state.passwordHint.orEmpty(), state.hasRecoveryEmailAddress, state.recoveryEmailAddressPattern.orEmpty()
+            )
             is TdApi.AuthorizationStateWaitEmailAddress -> TelegramAuthState.WaitEmailAddress
             is TdApi.AuthorizationStateWaitEmailCode -> TelegramAuthState.WaitEmailCode(state.codeInfo.length)
             is TdApi.AuthorizationStateWaitOtherDeviceConfirmation -> TelegramAuthState.WaitOtherDevice(state.link)
-            is TdApi.AuthorizationStateWaitRegistration -> TelegramAuthState.WaitRegistration
+            is TdApi.AuthorizationStateWaitRegistration -> TelegramAuthState.WaitRegistration(
+                state.termsOfService?.text?.text.orEmpty(), state.termsOfService?.minUserAge ?: 0
+            )
             is TdApi.AuthorizationStateReady -> TelegramAuthState.Ready
             is TdApi.AuthorizationStateLoggingOut, is TdApi.AuthorizationStateClosing -> TelegramAuthState.Closing
             is TdApi.AuthorizationStateClosed -> TelegramAuthState.Initializing
             is TdApi.AuthorizationStateWaitPremiumPurchase -> TelegramAuthState.Blocked("Telegram требует завершить покупку Premium в официальном приложении")
             else -> _state.value
         }
+        if (state !is TdApi.AuthorizationStateWaitPassword) _recoveryCodeSent.value = false
         _revision.value++
     }
 
@@ -166,10 +179,29 @@ class TelegramUserRepository(private val client: TelegramClient) {
     )
 }
 
+/** Network state from TDLib, for the "Соединение…" indicator. */
+class TelegramConnectionRepository(client: TelegramClient) {
+    private val _state = MutableStateFlow(TelegramConnection.Connecting)
+    val state: StateFlow<TelegramConnection> = _state.asStateFlow()
+
+    init {
+        client.addUpdateHandler { update ->
+            if (update is TdApi.UpdateConnectionState) _state.value = when (update.state) {
+                is TdApi.ConnectionStateWaitingForNetwork -> TelegramConnection.WaitingForNetwork
+                is TdApi.ConnectionStateConnectingToProxy -> TelegramConnection.ConnectingToProxy
+                is TdApi.ConnectionStateConnecting -> TelegramConnection.Connecting
+                is TdApi.ConnectionStateUpdating -> TelegramConnection.Updating
+                else -> TelegramConnection.Ready
+            }
+        }
+    }
+}
+
 /** Process-wide Telegram graph: one client, one instance of each repository. */
 class TelegramServices(context: android.content.Context) {
     val client = TelegramClient(context)
     val auth = TelegramAuthRepository(client)
     val chats = TelegramChatRepository(client)
     val users = TelegramUserRepository(client)
+    val connection = TelegramConnectionRepository(client)
 }
