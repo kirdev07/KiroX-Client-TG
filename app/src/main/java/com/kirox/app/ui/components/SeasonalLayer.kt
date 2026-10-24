@@ -110,6 +110,7 @@ fun SeasonalLayer(
         when (chosen) {
             com.kirox.app.settings.EffectScene.Halloween -> halloween(time, mode, freeZone ?: freeZoneFraction?.let { (size.width * it.start)..(size.width * it.endInclusive) }, light)
             com.kirox.app.settings.EffectScene.Main -> sparkles(time, mode, light)
+            com.kirox.app.settings.EffectScene.NewYear -> newYear(time, mode, light, freeZone ?: freeZoneFraction?.let { (size.width * it.start)..(size.width * it.endInclusive) })
             com.kirox.app.settings.EffectScene.Winter -> winter(time, mode, light, freeZone ?: freeZoneFraction?.let { (size.width * it.start)..(size.width * it.endInclusive) })
         }
     }
@@ -214,6 +215,39 @@ private fun DrawScope.winter(t: Float, mode: SeasonalMode, light: Boolean, freeZ
         drawFlakeCached(Offset(x, y), r, shape, rotation, alpha = 0.45f + layer * 0.22f)
     }
     if (driftHeight > 0f) drawDriftsCached(size.width, driftHeight, withTrees = !light)
+}
+
+/**
+ * New Year: a twinkling garland along the top, a decorated fir with gifts on a snowdrift,
+ * firework bursts in the sky and a light snowfall. Headers keep only the garland and a few flakes.
+ */
+private fun DrawScope.newYear(t: Float, mode: SeasonalMode, light: Boolean, freeZone: ClosedFloatingPointRange<Float>?) {
+    val header = mode == SeasonalMode.Header
+    val x0 = if (header && freeZone != null) freeZone.start else 0f
+    val x1 = if (header && freeZone != null) freeZone.endInclusive else size.width
+    val bulbR = (if (header) 2.5.dp else if (mode == SeasonalMode.Splash) 4.5.dp else 3.5.dp).toPx()
+    if (!header && !light) drawFireworks(t, size.height * 0.5f, minOf(size.width, size.height) * (if (mode == SeasonalMode.Splash) 0.16f else 0.2f))
+
+    val count = when (mode) { SeasonalMode.Header -> 6; SeasonalMode.Splash -> 22; else -> 14 } / (if (light) 2 else 1)
+    val baseR = (if (header) 2.5.dp else 3.5.dp).toPx()
+    repeat(count) { i ->
+        val seed = (i * 7919 % 1000) / 1000f
+        val r = baseR * (0.7f + (i % 3) * 0.4f)
+        val fall = (t * (0.05f + seed * 0.04f) + seed) % 1f
+        val span = (x1 - x0).coerceAtLeast(0f)
+        if (span <= 0f) return@repeat
+        val x = x0 + span * ((i * 37 % 101) / 100f) + sin(t * 0.8f + seed * 6.283f) * 4f
+        drawFlakeCached(Offset(x, -r + fall * (size.height + 2 * r)), r, if (i % 2 == 0) FlakeShape.Simple else FlakeShape.Star, if (light) 0f else t * 30f % 360f, alpha = 0.5f)
+    }
+    if (!header) {
+        val drift = size.height * (if (mode == SeasonalMode.Splash) 0.14f else 0.22f)
+        drawDriftsCached(size.width, drift, withTrees = false)
+        val treeH = if (mode == SeasonalMode.Splash) size.height * 0.2f else size.height * 0.72f
+        val treeX = if (mode == SeasonalMode.Splash) size.width * 0.78f else size.width * 0.8f
+        drawNewYearTree(Offset(treeX, size.height - drift * 0.35f), treeH, t, light)
+    }
+    // On the splash the garland hangs below the status bar.
+    drawGarland(x0, x1, when (mode) { SeasonalMode.Header -> 2.dp.toPx(); SeasonalMode.Splash -> 30.dp.toPx(); else -> -bulbR }, if (header) size.height * 0.16f else bulbR * 2.4f, t, bulbR, light)
 }
 
 /** The main kiroX animation: slow drifting, twinkling white particles (as on the splash screen). */
