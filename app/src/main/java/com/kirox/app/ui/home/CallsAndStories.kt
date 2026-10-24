@@ -63,7 +63,7 @@ interface TelegramStoryActions {
 private enum class CallFilter(val title: String) { All("Все"), Missed("Пропущенные"), Incoming("Входящие"), Outgoing("Исходящие") }
 
 @Composable
-internal fun CallsList(state: TelegramCallsState, onLoadMore: () -> Unit, onOpenChat: (Long) -> Unit, onCall: () -> Unit) {
+internal fun CallsList(state: TelegramCallsState, onLoadMore: () -> Unit, onOpenChat: (Long) -> Unit, onCall: (TelegramCall) -> Unit) {
     var filter by rememberSaveable { mutableStateOf(CallFilter.All) }
     val shown = remember(state.calls, filter) {
         state.calls.filter {
@@ -94,7 +94,7 @@ internal fun CallsList(state: TelegramCallsState, onLoadMore: () -> Unit, onOpen
                 Text(if (state.calls.isEmpty()) "Звонков пока нет" else "В этом разделе звонков нет", color = Fusion.colors.textSecondary, textAlign = TextAlign.Center)
             }
             else -> LazyColumn(Modifier.fillMaxSize(), state = listState) {
-                items(groupCalls(shown), key = { "${it.first.chatId}:${it.first.messageId}" }) { (call, count) -> CallRow(call, count, { onOpenChat(call.chatId) }, onCall) }
+                items(groupCalls(shown), key = { "${it.first.chatId}:${it.first.messageId}" }) { (call, count) -> CallRow(call, count, { onOpenChat(call.chatId) }, { onCall(call) }) }
                 if (state.loading) item { Box(Modifier.fillMaxWidth().padding(16.dp), Alignment.Center) { CircularProgressIndicator(Modifier.size(20.dp), color = Fusion.colors.textSecondary, strokeWidth = 2.dp) } }
             }
         }

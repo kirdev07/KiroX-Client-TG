@@ -108,7 +108,8 @@ fun TelegramMainScreen(
     effectsQuality: com.kirox.app.settings.EffectsQuality,
     onEffectsQuality: (com.kirox.app.settings.EffectsQuality) -> Unit,
     weakDevice: Boolean,
-    onLogOut: () -> Unit
+    onLogOut: () -> Unit,
+    onStartCall: (userId: Long, isVideo: Boolean) -> Unit = { _, _ -> }
 ) = androidx.compose.runtime.CompositionLocalProvider(com.kirox.app.ui.components.LocalSeasonalEffects provides seasonal) {
     var tab by rememberSaveable { mutableStateOf(MainTab.Chats) }
     var sub by rememberSaveable { mutableStateOf(SubScreen.None) }
@@ -155,7 +156,7 @@ fun TelegramMainScreen(
                         onBack = { sub = SubScreen.Customization }
                     )
                     current == MainTab.Chats -> ChatsTab(lists, chatActions, connection, onOpenChat, storyChats, profile, { viewingStoriesOf = it.chatId }, onNewMessage = { sub = SubScreen.NewMessage }) { notice = it }
-                    current == MainTab.Contacts -> ContactsTab(contacts, contactsLoading, onOpenContact, calls, onLoadCalls, onOpenChat, showNotice)
+                    current == MainTab.Contacts -> ContactsTab(contacts, contactsLoading, onOpenContact, calls, onLoadCalls, onOpenChat, showNotice, onStartCall)
                     current == MainTab.Settings -> SettingsTab(profile, onOpenProfile = { tab = MainTab.Profile }, onOpenCustomization = { sub = SubScreen.Customization }, onNotice = showNotice)
                     else -> ProfileTab(profile, onOpenSettings = { tab = MainTab.Settings }, onOpenSaved = onOpenSavedMessages, onLogOut = onLogOut, onNotice = showNotice)
                 }
@@ -370,24 +371,27 @@ private fun ContactsTab(
     calls: TelegramCallsState,
     onLoadCalls: () -> Unit,
     onOpenChat: (Long) -> Unit,
-    onNotice: (String) -> Unit
+    onNotice: (String) -> Unit,
+    onStartCall: (userId: Long, isVideo: Boolean) -> Unit
 ) {
     var showCalls by rememberSaveable { mutableStateOf(false) }
     var focusSearch by remember { mutableIntStateOf(0) }
     val noCalls = { onNotice("Звонки из KiroX пока недоступны: нужен отдельный VoIP-модуль") }
+    // In a private chat the chat id equals the user id.
+    val call: (Long, Boolean) -> Unit = { userId, video -> if (com.kirox.app.ui.call.callsEnabled) onStartCall(userId, video) else noCalls() }
     Column(Modifier.fillMaxSize()) {
         ScreenTitle("Контакты") {
             TitleAction(KiroXIcon.Search, "Поиск контактов") { showCalls = false; focusSearch++ }
             TitleAction(KiroXIcon.Add, "Добавить контакт") { onNotice("Добавление контакта — В разработке") }
         }
         SectionTabs(listOf("Контакты" to false, "Звонки" to true), showCalls) { showCalls = it }
-        if (showCalls) CallsList(calls, onLoadCalls, onOpenChat, noCalls)
-        else ContactsList(contacts, loading, focusSearch, onOpenContact, noCalls)
+        if (showCalls) CallsList(calls, onLoadCalls, onOpenChat) { item -> call(item.chatId, item.isVideo) }
+        else ContactsList(contacts, loading, focusSearch, onOpenContact, call)
     }
 }
 
 @Composable
-private fun ContactsList(contacts: List<TelegramContact>, loading: Boolean, focusSearch: Int, onOpenContact: (Long) -> Unit, onCall: () -> Unit) {
+private fun ContactsList(contacts: List<TelegramContact>, loading: Boolean, focusSearch: Int, onOpenContact: (Long) -> Unit, onCall: (Long, Boolean) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var query by rememberSaveable { mutableStateOf("") }
     val shown = remember(contacts, query) {
@@ -402,7 +406,7 @@ private fun ContactsList(contacts: List<TelegramContact>, loading: Boolean, focu
                 contacts.isEmpty() -> EmptyState("Контактов пока нет")
                 shown.isEmpty() -> EmptyState("Ничего не найдено")
                 else -> LazyColumn(Modifier.fillMaxSize()) {
-                    items(shown, key = { it.id }) { contact -> ContactRow(contact, onMessage = { onOpenContact(contact.id) }, onCall = onCall) }
+                    items(shown, key = { it.id }) { contact -> ContactRow(contact, onMessage = { onOpenContact(contact.id) }, onCall = { onCall(contact.id, false) }, onVideo = { onCall(contact.id, true) }) }
                 }
             }
         }
@@ -419,7 +423,7 @@ private fun ContactsList(contacts: List<TelegramContact>, loading: Boolean, focu
 }
 
 @Composable
-private fun ContactRow(contact: TelegramContact, onMessage: () -> Unit, onCall: () -> Unit) {
+private fun ContactRow(contact: TelegramContact, onMessage: () -> Unit, onCall: () -> Unit, onVideo: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onMessage).heightIn(min = 72.dp).padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         TelegramAvatar(contact.name, contact.photo, 50.dp)
         Spacer(Modifier.width(12.dp))
@@ -431,8 +435,8 @@ private fun ContactRow(contact: TelegramContact, onMessage: () -> Unit, onCall: 
                 fontSize = 13.sp, maxLines = 1
             )
         }
-        HeaderAction(KiroXIcon.Chat, "Написать ${contact.name}", onMessage)
         HeaderAction(KiroXIcon.Call, "Позвонить ${contact.name}", onCall)
+        HeaderAction(KiroXIcon.Video, "Видеозвонок ${contact.name}", onVideo)
     }
     HorizontalDivider(Modifier.padding(start = 78.dp), color = Fusion.colors.outline)
 }

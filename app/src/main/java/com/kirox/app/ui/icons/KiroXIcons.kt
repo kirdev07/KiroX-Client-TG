@@ -20,7 +20,7 @@ enum class KiroXIcon {
     Edit, More, Stories, Media, Bookmark, Check, Pin, CallIncoming, CallOutgoing, CallMissed,
     Camera, At, Phone, Cake, File, Link, Music, Voice, Verified, Photo,
     Back, Video, Attach, Send, Emoji, Copy, Forward, Delete, Location, Reply,
-    Chats, Tune, ProfileCircle, Qr
+    Chats, Tune, ProfileCircle, Qr, Speaker, CallEnd, FlipCamera
 }
 
 @Composable
@@ -102,6 +102,9 @@ fun KiroXIcon(
             }
             KiroXIcon.ProfileCircle -> { circle(12f,12f,9f); circle(12f,9.5f,3.2f); path(p(6.3f,18.6f),p(8f,16f),p(12f,15f),p(16f,16f),p(17.7f,18.6f)) }
             KiroXIcon.Qr -> { rect(3.5f,3.5f,10f,10f,1.5f); rect(14f,3.5f,20.5f,10f,1.5f); rect(3.5f,14f,10f,20.5f,1.5f); line(p(14f,14f),p(14f,15f)); line(p(17.5f,14f),p(20.5f,14f)); line(p(14f,18f),p(17f,18f)); line(p(20.5f,17.5f),p(20.5f,20.5f)); line(p(17f,20.5f),p(17.5f,20.5f)) }
+            KiroXIcon.Speaker -> { path(p(4f,9f),p(8f,9f),p(13f,5f),p(13f,19f),p(8f,15f),p(4f,15f),close=true); path(p(16f,9f),p(17.2f,12f),p(16f,15f)); path(p(18.5f,6.5f),p(20.5f,12f),p(18.5f,17.5f)) }
+            KiroXIcon.CallEnd -> { path(listOf(p(2.5f,14f),p(3f,11f),p(7f,9f),p(12f,8.5f),p(17f,9f),p(21f,11f),p(21.5f,14f),p(18.5f,15.5f),p(16f,13f),p(16f,11.5f),p(12f,11f),p(8f,11.5f),p(8f,13f),p(5.5f,15.5f),p(2.5f,14f))) }
+            KiroXIcon.FlipCamera -> { rect(3f,7f,21f,19f,3f); path(p(8f,7f),p(10f,4f),p(14f,4f),p(16f,7f)); path(p(9f,12f),p(10.5f,10.5f),p(13.5f,10.5f),p(15f,12.5f)); path(p(15f,14f),p(13.5f,15.5f),p(10.5f,15.5f),p(9f,13.5f)); path(p(15f,10.5f),p(15f,12.5f),p(13f,12.5f)); path(p(9f,15.5f),p(9f,13.5f),p(11f,13.5f)) }
             KiroXIcon.Reply -> { path(p(10f,6f),p(4f,12f),p(10f,18f)); path(p(5f,12f),p(14f,12f),p(20f,17f)) }
         }
     }

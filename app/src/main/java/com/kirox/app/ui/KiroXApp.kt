@@ -68,6 +68,14 @@ fun KiroXApp() {
     val history by telegramViewModel.messages.history.collectAsStateWithLifecycle()
     val messageError by telegramViewModel.messages.error.collectAsStateWithLifecycle()
     val callsState by telegramViewModel.calls.state.collectAsStateWithLifecycle()
+    val activeCall by telegramViewModel.voip.call.collectAsStateWithLifecycle()
+    val callActions = remember {
+        object : com.kirox.app.ui.call.CallActions {
+            override fun accept() = telegramViewModel.voip.accept()
+            override fun hangUp() = telegramViewModel.voip.hangUp()
+            override fun dismiss() = telegramViewModel.voip.dismiss()
+        }
+    }
     val storyChats by telegramViewModel.stories.storyChats.collectAsStateWithLifecycle()
     val storyActions = remember { TelegramStoryActionsImpl(telegramViewModel.stories) }
     val chatActions = remember { TelegramChatListActionsImpl(telegramViewModel.chats) }
@@ -168,7 +176,8 @@ fun KiroXApp() {
                                 onEffectsQuality = settings::setEffectsQuality,
                                 weakDevice = weakDevice,
                                 onOpenSavedMessages = { scope.launch { runCatching { telegramViewModel.users.savedMessagesChatId() }.onSuccess(::openChat) } },
-                                onLogOut = telegramViewModel.auth::logOut
+                                onLogOut = telegramViewModel.auth::logOut,
+                                onStartCall = telegramViewModel.voip::start
                             )
                         }
                         Screen.Conversation -> CompositionLocalProvider(LocalTelegramFiles provides telegramViewModel.files) {
@@ -188,6 +197,9 @@ fun KiroXApp() {
                     }
                 }
             }
+        }
+        activeCall?.let { call ->
+            CompositionLocalProvider(LocalTelegramFiles provides telegramViewModel.files) { com.kirox.app.ui.call.CallScreen(call, callActions) }
         }
     }
 }
