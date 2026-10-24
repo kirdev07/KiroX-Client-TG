@@ -5,8 +5,9 @@ val kiroxProperties = Properties().apply {
     val file = rootProject.file("kirox.properties")
     if (file.exists()) file.inputStream().use(::load)
 }
-fun secret(name: String): String =
-    (kiroxProperties.getProperty(name) ?: System.getenv(name) ?: "").trim()
+/** First non-blank value among [names] from kirox.properties or the environment. */
+fun secret(vararg names: String): String =
+    names.firstNotNullOfOrNull { name -> (kiroxProperties.getProperty(name) ?: System.getenv(name))?.trim()?.takeIf { it.isNotEmpty() } }.orEmpty()
 
 plugins {
     alias(libs.plugins.android.application)
@@ -25,9 +26,9 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("int", "TELEGRAM_API_ID", secret("KIROX_API_ID").toIntOrNull()?.toString() ?: "0")
+        buildConfigField("int", "TELEGRAM_API_ID", secret("KIROX_API_ID", "kirox.apiId").toIntOrNull()?.toString() ?: "0")
         buildConfigField("boolean", "TELEGRAM_USE_TEST_DC", "false")
-        buildConfigField("String", "TELEGRAM_API_HASH", "\"${secret("KIROX_API_HASH").replace("\\", "\\\\").replace("\"", "\\\"")}\"")
+        buildConfigField("String", "TELEGRAM_API_HASH", "\"${secret("KIROX_API_HASH", "kirox.apiHash").replace("\\", "\\\\").replace("\"", "\\\"")}\"")
     }
 
     buildTypes {
@@ -36,11 +37,20 @@ android {
             buildConfigField("boolean", "TELEGRAM_USE_TEST_DC", (secret("KIROX_USE_TEST_DC") == "true").toString())
         }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        // R8-optimized build signed with the local debug key and installed next to the normal app,
+        // to check minification on a device without touching the real install or its session.
+        create("releaseCheck") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            applicationIdSuffix = ".check"
+            matchingFallbacks += "release"
         }
     }
 
@@ -83,6 +93,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation("androidx.annotation:annotation:1.9.1")
     debugImplementation(libs.androidx.compose.ui.tooling)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
+    androidTestImplementation(composeBom)
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
