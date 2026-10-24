@@ -28,6 +28,11 @@ import com.kirox.app.telegram.TelegramViewModel
 import com.kirox.app.ui.auth.TelegramAuthStepScreen
 import com.kirox.app.ui.home.TelegramMainScreen
 import com.kirox.app.ui.components.LocalTelegramFiles
+import com.kirox.app.ui.chat.TelegramChatActions
+import com.kirox.app.ui.chat.TelegramChatScreen
+import com.kirox.app.telegram.TelegramChatHistory
+import com.kirox.app.telegram.TelegramMessageRepository
+import kotlinx.coroutines.launch
 import com.kirox.app.ui.navigation.BackStack
 import com.kirox.app.ui.navigation.NavGraph
 import com.kirox.app.ui.navigation.Screen
@@ -54,6 +59,11 @@ fun KiroXApp() {
     var phoneState by remember { mutableStateOf<PhoneEntryState?>(null) }
     var splashVisible by rememberSaveable { mutableStateOf(true) }
     val stack = rememberSaveable(saver = BackStack.Saver) { BackStack(listOf(Screen.Phone)) }
+    var openChatId by rememberSaveable { mutableLongStateOf(0L) }
+    val history by telegramViewModel.messages.history.collectAsStateWithLifecycle()
+    val messageError by telegramViewModel.messages.error.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    fun openChat(id: Long) { openChatId = id; telegramViewModel.messages.open(id); stack.push(Screen.Conversation) }
 
     LaunchedEffect(Unit) {
         phoneState = withContext(Dispatchers.Default) { PhoneEntryState.create(context) }
@@ -63,7 +73,7 @@ fun KiroXApp() {
     LaunchedEffect(authRevision) {
         val inDemo = Screen.DemoCode in stack || Screen.DemoHome in stack
         when (telegramAuth) {
-            TelegramAuthState.Ready -> stack.resetTo(Screen.Chats)
+            TelegramAuthState.Ready -> if (stack.current.graph != NavGraph.Main) stack.resetTo(Screen.Chats)
             TelegramAuthState.WaitPhoneNumber, TelegramAuthState.Initializing, TelegramAuthState.Closing, is TelegramAuthState.Blocked ->
                 if (stack.current.graph == NavGraph.Main || stack.current == Screen.AuthStep) stack.resetTo(Screen.Phone)
             else -> if (!inDemo) stack.resetTo(Screen.Phone, Screen.AuthStep)
@@ -119,7 +129,23 @@ fun KiroXApp() {
                         Screen.Chats -> CompositionLocalProvider(LocalTelegramFiles provides telegramViewModel.files) {
                             TelegramMainScreen(
                                 chatLists, telegramViewModel.chats::loadMore, contacts, contactsLoading, profile, connection,
+                                onOpenChat = ::openChat,
+                                onOpenContact = { userId -> scope.launch { runCatching { telegramViewModel.chats.privateChatId(userId) }.onSuccess(::openChat) } },
                                 onLogOut = telegramViewModel.auth::logOut
+                            )
+                        }
+                        Screen.Conversation -> CompositionLocalProvider(LocalTelegramFiles provides telegramViewModel.files) {
+                            val chatId = openChatId
+                            LaunchedEffect(chatId) { telegramViewModel.messages.open(chatId) }
+                            DisposableEffect(chatId) { onDispose { telegramViewModel.messages.close(chatId) } }
+                            val actions = remember { TelegramMessageActions(telegramViewModel.messages) }
+                            TelegramChatScreen(
+                                history = if (history.chatId == chatId) history else TelegramChatHistory(chatId = chatId),
+                                error = messageError,
+                                onErrorShown = telegramViewModel.messages::clearError,
+                                forwardTargets = chatLists.main.chats,
+                                actions = actions,
+                                onBack = { stack.pop() }
                             )
                         }
                     }
@@ -127,4 +153,14 @@ fun KiroXApp() {
             }
         }
     }
+}
+
+private class TelegramMessageActions(private val repository: TelegramMessageRepository) : TelegramChatActions {
+    override fun loadOlder() = repository.loadOlder()
+    override fun sendText(text: String, replyToMessageId: Long?) = repository.sendText(text, replyToMessageId)
+    override fun sendPhoto(path: String, caption: String) = repository.sendPhoto(path, caption)
+    override fun sendDocument(path: String, caption: String) = repository.sendDocument(path, caption)
+    override fun edit(messageId: Long, text: String) = repository.edit(messageId, text)
+    override fun delete(messageIds: List<Long>, forEveryone: Boolean) = repository.delete(messageIds, forEveryone)
+    override fun forward(toChatId: Long, messageIds: List<Long>) = repository.forward(toChatId, messageIds)
 }

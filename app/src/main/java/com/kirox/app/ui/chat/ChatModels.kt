@@ -26,7 +26,10 @@ data class MessageUi(
     val forwardedFrom: String? = null,
     val reactions: List<ReactionUi> = emptyList(),
     val canEdit: Boolean = direction == MessageDirection.Outgoing,
-    val canDelete: Boolean = true
+    val canDelete: Boolean = true,
+    val photo: com.kirox.app.telegram.TelegramFileRef? = null,
+    val photoAspect: Float = 0f,
+    val edited: Boolean = false
 )
 
 @Immutable
@@ -37,7 +40,8 @@ data class ChatPeerUi(
     val initial: String,
     val hasAvatar: Boolean = false,
     val canVoiceCall: Boolean = false,
-    val canVideoCall: Boolean = false
+    val canVideoCall: Boolean = false,
+    val photo: com.kirox.app.telegram.TelegramFileRef? = null
 )
 
 data class ChatAppearance(

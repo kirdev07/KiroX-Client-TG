@@ -21,6 +21,12 @@ class TelegramChatRepository(private val client: TelegramClient) {
 
     init { client.addUpdateHandler(::handle) }
 
+    /** Dispatcher-only lookup for other repositories. */
+    internal fun chat(id: Long): TdApi.Chat? = chatsById[id]
+
+    /** Id of the private chat with [userId], creating it locally if needed. */
+    suspend fun privateChatId(userId: Long): Long = client.query(TdApi.CreatePrivateChat(userId, false)).id
+
     /** Requests the next page of [key]; safe to call repeatedly from UI (e.g. on scroll to the end). */
     fun loadMore(key: TelegramChatListKey) = client.post { requestPage(key) }
 

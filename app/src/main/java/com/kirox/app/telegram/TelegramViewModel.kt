@@ -10,6 +10,7 @@ class TelegramViewModel(application: Application) : AndroidViewModel(application
     val chats = services.chats
     val users = services.users
     val files = services.files
+    val messages = services.messages
     val connection = services.connection
     init { services.client.start() }
 }

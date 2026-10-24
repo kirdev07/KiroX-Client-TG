@@ -117,4 +117,5 @@ class TelegramServices(context: android.content.Context) {
     val files = TelegramFileRepository(client)
     val users = TelegramUserRepository(client)
     val connection = TelegramConnectionRepository(client)
+    val messages = TelegramMessageRepository(client, chats, users)
 }

@@ -7,6 +7,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,15 +42,7 @@ val LocalTelegramFiles = staticCompositionLocalOf<TelegramFileRepository?> { nul
 /** Circular avatar: Telegram photo when downloaded, otherwise the first letter of [title]. */
 @Composable
 fun TelegramAvatar(title: String, photo: TelegramFileRef?, size: Dp, modifier: Modifier = Modifier) {
-    val files = LocalTelegramFiles.current
-    val pathFlow = remember(photo?.id, files) {
-        if (photo != null && files != null) files.observe(photo) else MutableStateFlow(photo?.localPath)
-    }
-    val path by pathFlow.collectAsState()
-    val sizePx = with(LocalDensity.current) { size.roundToPx() }
-    val bitmap by produceState(AvatarCache.peek(path, sizePx), path, sizePx) {
-        if (path != null && value == null) value = withContext(Dispatchers.IO) { AvatarCache.load(path!!, sizePx) }
-    }
+    val bitmap = rememberTelegramBitmap(photo, with(LocalDensity.current) { size.roundToPx() })
     Box(modifier.size(size).clip(CircleShape).background(Fusion.colors.avatar), contentAlignment = Alignment.Center) {
         val image = bitmap
         if (image != null) {
@@ -53,6 +50,30 @@ fun TelegramAvatar(title: String, photo: TelegramFileRef?, size: Dp, modifier: M
         } else {
             Text(initial(title), color = Fusion.colors.textPrimary, fontSize = (size.value * .38f).sp, fontWeight = FontWeight.Bold)
         }
+    }
+}
+
+/** Downloads [file] if needed and decodes it downsampled to about [sizePx]; null until ready. */
+@Composable
+fun rememberTelegramBitmap(file: TelegramFileRef?, sizePx: Int, priority: Int = 8): ImageBitmap? {
+    val files = LocalTelegramFiles.current
+    val pathFlow = remember(file?.id, files) {
+        if (file != null && files != null) files.observe(file, priority) else MutableStateFlow(file?.localPath)
+    }
+    val path by pathFlow.collectAsState()
+    val bitmap by produceState(AvatarCache.peek(path, sizePx), path, sizePx) {
+        if (path != null && value == null) value = withContext(Dispatchers.IO) { AvatarCache.load(path!!, sizePx) }
+    }
+    return bitmap
+}
+
+/** Message photo with a stable aspect-ratio box, so the list does not jump while it loads. */
+@Composable
+fun TelegramPhoto(file: TelegramFileRef, aspect: Float, modifier: Modifier = Modifier) {
+    val ratio = aspect.takeIf { it > 0f }?.coerceIn(0.5f, 2.2f) ?: 1.3f
+    val bitmap = rememberTelegramBitmap(file, with(LocalDensity.current) { 280.dp.roundToPx() }, priority = 16)
+    Box(modifier.widthIn(max = 280.dp).fillMaxWidth().aspectRatio(ratio).clip(RoundedCornerShape(12.dp)).background(Fusion.colors.surface3)) {
+        bitmap?.let { Image(it, contentDescription = "Фотография", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
     }
 }
 
@@ -64,7 +85,7 @@ internal fun initial(title: String): String {
 
 /** Downsampled, memory-bounded bitmap cache for avatars. */
 private object AvatarCache {
-    private val cache = object : LruCache<String, ImageBitmap>(16 * 1024 * 1024) {
+    private val cache = object : LruCache<String, ImageBitmap>(32 * 1024 * 1024) {
         override fun sizeOf(key: String, value: ImageBitmap) = value.width * value.height * 4
     }
 

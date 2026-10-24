@@ -81,6 +81,43 @@ data class TelegramContact(
     val photo: TelegramFileRef?
 )
 
+enum class TelegramMessageKind { Text, Photo, Video, Voice, Document, Other }
+enum class TelegramDelivery { None, Sending, Sent, Read, Failed }
+
+data class TelegramMessage(
+    val id: Long,
+    val chatId: Long,
+    val senderName: String,
+    val isOutgoing: Boolean,
+    val kind: TelegramMessageKind,
+    val text: String,
+    val date: Int,
+    val edited: Boolean,
+    val delivery: TelegramDelivery,
+    val replyAuthor: String? = null,
+    val replyText: String? = null,
+    val forwardedFrom: String? = null,
+    val photo: TelegramFileRef? = null,
+    val photoAspect: Float = 0f,
+    val fileName: String? = null,
+    val canEdit: Boolean = false
+)
+
+enum class TelegramPeerKind { User, Bot, Group, Channel, Saved, Unknown }
+
+data class TelegramChatHistory(
+    val chatId: Long = 0,
+    val title: String = "",
+    val photo: TelegramFileRef? = null,
+    val peerKind: TelegramPeerKind = TelegramPeerKind.Unknown,
+    val peerStatus: TelegramUserStatus? = null,
+    val memberCount: Int = 0,
+    /** Oldest first. */
+    val messages: List<TelegramMessage> = emptyList(),
+    val loadingOlder: Boolean = false,
+    val reachedStart: Boolean = false
+)
+
 data class TelegramUserProfile(
     val id: Long,
     val name: String,

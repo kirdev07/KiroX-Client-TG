@@ -71,6 +71,8 @@ fun TelegramMainScreen(
     contactsLoading: Boolean,
     profile: TelegramUserProfile?,
     connection: TelegramConnection,
+    onOpenChat: (Long) -> Unit,
+    onOpenContact: (Long) -> Unit,
     onLogOut: () -> Unit
 ) {
     var tab by rememberSaveable { mutableStateOf(MainTab.Chats) }
@@ -86,8 +88,8 @@ fun TelegramMainScreen(
         Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
             AnimatedContent(tab, transitionSpec = { fadeIn(tween(FusionMotion.NORMAL)) togetherWith fadeOut(tween(FusionMotion.FAST)) }, label = "main_tabs") { current ->
                 when (current) {
-                    MainTab.Chats -> ChatsTab(lists, onLoadMore, connection) { notice = it }
-                    MainTab.Contacts -> ContactsTab(contacts, contactsLoading) { notice = it }
+                    MainTab.Chats -> ChatsTab(lists, onLoadMore, connection, onOpenChat) { notice = it }
+                    MainTab.Contacts -> ContactsTab(contacts, contactsLoading, onOpenContact)
                     MainTab.Settings -> SettingsTab(profile, onLogOut) { notice = it }
                 }
             }
@@ -106,7 +108,7 @@ fun TelegramMainScreen(
 // ---------- Chats ----------
 
 @Composable
-private fun ChatsTab(lists: TelegramChatLists, onLoadMore: (TelegramChatListKey) -> Unit, connection: TelegramConnection, onNotice: (String) -> Unit) {
+private fun ChatsTab(lists: TelegramChatLists, onLoadMore: (TelegramChatListKey) -> Unit, connection: TelegramConnection, onOpenChat: (Long) -> Unit, onNotice: (String) -> Unit) {
     var section by rememberSaveable { mutableStateOf(RealChatSection.Messages) }
     var folderId by rememberSaveable { mutableStateOf<Int?>(null) }
     if (folderId != null && lists.folders.none { it.id == folderId }) folderId = null
@@ -118,8 +120,8 @@ private fun ChatsTab(lists: TelegramChatLists, onLoadMore: (TelegramChatListKey)
     val state = lists[listKey]
     Column(Modifier.fillMaxSize()) {
         Header(connectionTitle(connection) ?: "Чаты") {
-            HeaderAction(KiroXIcon.Search, "Поиск") { onNotice("Поиск появится вместе с перепиской (этап D)") }
-            HeaderAction(KiroXIcon.Compose, "Новый чат") { onNotice("Создание чатов появится на этапе D") }
+            HeaderAction(KiroXIcon.Search, "Поиск") { onNotice("Поиск по чатам появится позже") }
+            HeaderAction(KiroXIcon.Compose, "Новый чат") { onNotice("Новый чат: откройте контакт во вкладке «Контакты»") }
         }
         SectionTabs(listOf("Архив" to RealChatSection.Archive, "Сообщения" to RealChatSection.Messages), section) { section = it }
         if (section == RealChatSection.Messages && lists.folders.isNotEmpty()) {
@@ -142,7 +144,7 @@ private fun ChatsTab(lists: TelegramChatLists, onLoadMore: (TelegramChatListKey)
                     }
                 )
                 else -> LazyColumn(Modifier.fillMaxSize(), state = listState) {
-                    items(state.chats, key = { it.id }) { chat -> ChatRow(chat) { onNotice("Открытие переписки появится на этапе D") } }
+                    items(state.chats, key = { it.id }) { chat -> ChatRow(chat) { onOpenChat(chat.id) } }
                     if (state.loading) item { Box(Modifier.fillMaxWidth().padding(16.dp), Alignment.Center) { CircularProgressIndicator(Modifier.size(22.dp), color = Fusion.colors.textSecondary, strokeWidth = 2.dp) } }
                 }
             }
@@ -223,7 +225,7 @@ private fun connectionTitle(state: TelegramConnection): String? = when (state) {
 // ---------- Contacts ----------
 
 @Composable
-private fun ContactsTab(contacts: List<TelegramContact>, loading: Boolean, onNotice: (String) -> Unit) {
+private fun ContactsTab(contacts: List<TelegramContact>, loading: Boolean, onOpenContact: (Long) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
     val shown = remember(contacts, query) {
         val q = query.trim()
@@ -237,7 +239,7 @@ private fun ContactsTab(contacts: List<TelegramContact>, loading: Boolean, onNot
             contacts.isEmpty() -> EmptyState("Контактов пока нет")
             shown.isEmpty() -> EmptyState("Ничего не найдено")
             else -> LazyColumn(Modifier.fillMaxSize()) {
-                items(shown, key = { it.id }) { contact -> ContactRow(contact) { onNotice("Профиль и переписка с контактом появятся на этапе D") } }
+                items(shown, key = { it.id }) { contact -> ContactRow(contact) { onOpenContact(contact.id) } }
             }
         }
     }

@@ -15,7 +15,8 @@ enum class Screen(val graph: NavGraph) {
     AuthStep(NavGraph.Auth),
     DemoCode(NavGraph.Auth),
     DemoHome(NavGraph.Auth),
-    Chats(NavGraph.Main)
+    Chats(NavGraph.Main),
+    Conversation(NavGraph.Main)
 }
 
 /** Minimal saveable back stack. Switching graphs replaces the whole stack, so Back never crosses auth ↔ main. */

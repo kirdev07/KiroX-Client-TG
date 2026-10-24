@@ -22,6 +22,10 @@ class TelegramUserRepository(private val client: TelegramClient) {
 
     init { client.addUpdateHandler(::handle) }
 
+    /** Dispatcher-only lookup for other repositories. */
+    internal fun user(id: Long): TdApi.User? = users[id]
+    internal fun myId(): Long = myId
+
     private fun handle(update: TdApi.Object) {
         when (update) {
             is TdApi.UpdateAuthorizationState -> when (update.authorizationState) {
