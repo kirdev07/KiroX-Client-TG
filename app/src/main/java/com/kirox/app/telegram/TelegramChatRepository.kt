@@ -18,6 +18,9 @@ class TelegramChatRepository(private val client: TelegramClient) {
 
     private val _lists = MutableStateFlow(TelegramChatLists())
     val lists: StateFlow<TelegramChatLists> = _lists.asStateFlow()
+    private val _error = MutableStateFlow<String?>(null)
+    /** Last failed chat action, for a toast; cleared by [clearError]. */
+    val error: StateFlow<String?> = _error.asStateFlow()
 
     init { client.addUpdateHandler(::handle) }
 
@@ -26,6 +29,40 @@ class TelegramChatRepository(private val client: TelegramClient) {
 
     /** Id of the private chat with [userId], creating it locally if needed. */
     suspend fun privateChatId(userId: Long): Long = client.query(TdApi.CreatePrivateChat(userId, false)).id
+
+    fun setArchived(chatId: Long, archived: Boolean) =
+        act(TdApi.AddChatToList(chatId, if (archived) TdApi.ChatListArchive() else TdApi.ChatListMain()))
+
+    fun setPinned(key: TelegramChatListKey, chatId: Long, pinned: Boolean) = act(TdApi.ToggleChatIsPinned(key.toTd(), chatId, pinned))
+
+    fun markUnread(chatId: Long) = act(TdApi.ToggleChatIsMarkedAsUnread(chatId, true))
+
+    fun markRead(chatId: Long) = client.post {
+        val chat = chatsById[chatId] ?: return@post
+        chat.lastMessage?.let { act(TdApi.ViewMessages(chatId, longArrayOf(it.id), TdApi.MessageSourceChatList(), true)) }
+        if (chat.isMarkedAsUnread) act(TdApi.ToggleChatIsMarkedAsUnread(chatId, false))
+    }
+
+    fun clearError() { _error.value = null }
+
+    /** Chats matching [query] among all chats TDLib knows (title and username), main-list style items. */
+    suspend fun search(query: String): List<TelegramChatItem> = kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+        val sent = client.send(TdApi.SearchChats(query, null, SEARCH_LIMIT)) { result ->
+            // Runs on the TDLib dispatcher, where chatsById may be read.
+            val items = (result as? TdApi.Chats)?.chatIds?.toList()?.mapNotNull { id ->
+                chatsById[id]?.let { chat ->
+                    val position = chat.positions.firstOrNull { it.list is TdApi.ChatListMain } ?: chat.positions.firstOrNull() ?: TdApi.ChatPosition(TdApi.ChatListMain(), 0, false, null)
+                    toChatItem(chat, position, archived = position.list is TdApi.ChatListArchive)
+                }
+            }.orEmpty()
+            continuation.resumeWith(Result.success(items))
+        }
+        if (!sent) continuation.resumeWith(Result.success(emptyList()))
+    }
+
+    private fun act(function: TdApi.Function<*>) {
+        client.send(function) { result -> if (result is TdApi.Error) _error.value = humanError(result) }
+    }
 
     /** Requests the next page of [key]; safe to call repeatedly from UI (e.g. on scroll to the end). */
     fun loadMore(key: TelegramChatListKey) = client.post { requestPage(key) }
@@ -113,6 +150,7 @@ class TelegramChatRepository(private val client: TelegramClient) {
     private companion object {
         const val PAGE_SIZE = 50
         const val PUBLISH_DELAY_MS = 32L
+        const val SEARCH_LIMIT = 50
     }
 }
 

@@ -33,6 +33,10 @@ import kotlinx.coroutines.launch
 import com.kirox.app.telegram.TelegramStory
 import com.kirox.app.telegram.TelegramStoryRepository
 import com.kirox.app.ui.home.TelegramStoryActions
+import com.kirox.app.ui.home.TelegramChatListActions
+import com.kirox.app.telegram.TelegramChatRepository
+import com.kirox.app.telegram.TelegramChatItem
+import com.kirox.app.telegram.TelegramChatListKey
 import com.kirox.app.ui.navigation.BackStack
 import com.kirox.app.ui.navigation.NavGraph
 import com.kirox.app.ui.navigation.Screen
@@ -65,6 +69,10 @@ fun KiroXApp() {
     val callsState by telegramViewModel.calls.state.collectAsStateWithLifecycle()
     val storyChats by telegramViewModel.stories.storyChats.collectAsStateWithLifecycle()
     val storyActions = remember { TelegramStoryActionsImpl(telegramViewModel.stories) }
+    val chatActions = remember { TelegramChatListActionsImpl(telegramViewModel.chats) }
+    val chatError by telegramViewModel.chats.error.collectAsStateWithLifecycle()
+    val settings = remember { (context.applicationContext as com.kirox.app.KiroXApplication).settings }
+    val palette by settings.palette.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     fun openChat(id: Long) { openChatId = id; telegramViewModel.messages.open(id); stack.push(Screen.Conversation) }
 
@@ -122,13 +130,15 @@ fun KiroXApp() {
                         Screen.AuthStep -> TelegramAuthStepScreen(telegramAuth, telegramViewModel.auth, telegramBusy, telegramError, recoveryCodeSent)
                         Screen.Chats -> CompositionLocalProvider(LocalTelegramFiles provides telegramViewModel.files) {
                             TelegramMainScreen(
-                                chatLists, telegramViewModel.chats::loadMore, contacts, contactsLoading, profile, connection,
+                                chatLists, chatActions, chatError, telegramViewModel.chats::clearError, contacts, contactsLoading, profile, connection,
                                 onOpenChat = ::openChat,
                                 onOpenContact = { userId -> scope.launch { runCatching { telegramViewModel.chats.privateChatId(userId) }.onSuccess(::openChat) } },
                                 calls = callsState,
                                 onLoadCalls = telegramViewModel.calls::loadMore,
                                 storyChats = storyChats,
                                 storyActions = storyActions,
+                                palette = palette,
+                                onPalette = settings::setPalette,
                                 onLogOut = telegramViewModel.auth::logOut
                             )
                         }
@@ -167,4 +177,13 @@ private class TelegramStoryActionsImpl(private val repository: TelegramStoryRepo
     override suspend fun story(chatId: Long, storyId: Int): TelegramStory? = repository.story(chatId, storyId)
     override fun open(chatId: Long, storyId: Int) = repository.open(chatId, storyId)
     override fun close(chatId: Long, storyId: Int) = repository.close(chatId, storyId)
+}
+
+private class TelegramChatListActionsImpl(private val repository: TelegramChatRepository) : TelegramChatListActions {
+    override fun loadMore(key: TelegramChatListKey) = repository.loadMore(key)
+    override fun setArchived(chatId: Long, archived: Boolean) = repository.setArchived(chatId, archived)
+    override fun setPinned(key: TelegramChatListKey, chatId: Long, pinned: Boolean) = repository.setPinned(key, chatId, pinned)
+    override fun markRead(chatId: Long) = repository.markRead(chatId)
+    override fun markUnread(chatId: Long) = repository.markUnread(chatId)
+    override suspend fun search(query: String): List<TelegramChatItem> = repository.search(query)
 }

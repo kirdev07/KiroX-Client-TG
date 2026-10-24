@@ -2,11 +2,13 @@ package com.kirox.app
 
 import android.app.Application
 import com.kirox.app.telegram.TelegramServices
+import com.kirox.app.settings.KiroXSettingsRepository
 import java.io.File
 
 class KiroXApplication : Application() {
     /** The only owner of the TDLib client: one instance per process, never per screen. */
     val telegram: TelegramServices by lazy { TelegramServices(this) }
+    val settings: KiroXSettingsRepository by lazy { KiroXSettingsRepository(this) }
 
     override fun onCreate() {
         super.onCreate()

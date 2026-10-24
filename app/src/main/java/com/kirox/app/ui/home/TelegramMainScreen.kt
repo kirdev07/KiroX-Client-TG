@@ -47,6 +47,10 @@ import com.kirox.app.telegram.TelegramStoryChat
 import com.kirox.app.telegram.TelegramUserProfile
 import com.kirox.app.telegram.TelegramUserStatus
 import com.kirox.app.ui.components.FusionBottomBar
+import com.kirox.app.ui.components.FusionNavigationRail
+import com.kirox.app.ui.theme.FusionPalette
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.focus.focusRequester
 import com.kirox.app.ui.components.FusionNavItem
 import com.kirox.app.ui.components.TelegramAvatar
 import com.kirox.app.ui.format.TelegramFormat
@@ -68,7 +72,9 @@ private enum class RealChatSection { Archive, Messages }
 @Composable
 fun TelegramMainScreen(
     lists: TelegramChatLists,
-    onLoadMore: (TelegramChatListKey) -> Unit,
+    chatActions: TelegramChatListActions,
+    chatError: String?,
+    onChatErrorShown: () -> Unit,
     contacts: List<TelegramContact>,
     contactsLoading: Boolean,
     profile: TelegramUserProfile?,
@@ -79,36 +85,53 @@ fun TelegramMainScreen(
     onLoadCalls: () -> Unit,
     storyChats: List<TelegramStoryChat>,
     storyActions: TelegramStoryActions,
+    palette: FusionPalette,
+    onPalette: (FusionPalette) -> Unit,
     onLogOut: () -> Unit
 ) {
     var tab by rememberSaveable { mutableStateOf(MainTab.Chats) }
-    var notice by remember { mutableStateOf<String?>(null) }
+    var notice by remember { mutableStateOf<UiNotice?>(null) }
     var viewingStoriesOf by rememberSaveable { mutableStateOf<Long?>(null) }
     val keyboardOpen = WindowInsets.isImeVisible
+    val showNotice: (String) -> Unit = { notice = UiNotice(it) }
+    LaunchedEffect(chatError) { if (chatError != null) { notice = UiNotice(chatError); onChatErrorShown() } }
+    val navItems = MainTab.entries.map { it.item }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+    val wide = maxWidth >= 600.dp
+    Row(Modifier.fillMaxSize()) {
+    if (wide) FusionNavigationRail(navItems, tab.ordinal, { tab = MainTab.entries[it] })
     Scaffold(
+        modifier = Modifier.weight(1f),
         containerColor = Fusion.colors.background,
         contentWindowInsets = WindowInsets.statusBars,
         bottomBar = {
-            if (!keyboardOpen) FusionBottomBar(MainTab.entries.map { it.item }, tab.ordinal, { tab = MainTab.entries[it] })
+            if (!keyboardOpen && !wide) FusionBottomBar(navItems, tab.ordinal, { tab = MainTab.entries[it] })
         }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding()) {
             AnimatedContent(tab, transitionSpec = { fadeIn(tween(FusionMotion.NORMAL)) togetherWith fadeOut(tween(FusionMotion.FAST)) }, label = "main_tabs") { current ->
                 when (current) {
-                    MainTab.Chats -> ChatsTab(lists, onLoadMore, connection, onOpenChat, storyChats, { viewingStoriesOf = it.chatId }) { notice = it }
-                    MainTab.Contacts -> ContactsTab(contacts, contactsLoading, onOpenContact, calls, onLoadCalls, onOpenChat) { notice = it }
-                    MainTab.Settings -> SettingsTab(profile, onLogOut) { notice = it }
+                    MainTab.Chats -> ChatsTab(lists, chatActions, connection, onOpenChat, storyChats, { viewingStoriesOf = it.chatId }) { notice = it }
+                    MainTab.Contacts -> ContactsTab(contacts, contactsLoading, onOpenContact, calls, onLoadCalls, onOpenChat, showNotice)
+                    MainTab.Settings -> SettingsTab(profile, palette, onPalette, onLogOut, showNotice)
                 }
             }
-            notice?.let { message ->
-                Text(
-                    message, color = Fusion.colors.textPrimary, fontSize = 13.sp,
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp).clip(RoundedCornerShape(12.dp))
-                        .background(Fusion.colors.surface3).padding(horizontal = 16.dp, vertical = 12.dp)
-                )
-                LaunchedEffect(message) { kotlinx.coroutines.delay(1900); notice = null }
+            notice?.let { current ->
+                Row(
+                    Modifier.align(Alignment.BottomCenter).padding(16.dp).clip(RoundedCornerShape(12.dp)).background(Fusion.colors.surface3).padding(start = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(current.text, color = Fusion.colors.textPrimary, fontSize = 13.sp, modifier = Modifier.padding(vertical = 12.dp).weight(1f, fill = false))
+                    if (current.actionLabel != null) Text(
+                        current.actionLabel, color = Fusion.colors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.clickable { current.action?.invoke(); notice = null }.heightIn(min = 44.dp).padding(horizontal = 16.dp).wrapContentHeight()
+                    ) else Spacer(Modifier.width(16.dp))
+                }
+                LaunchedEffect(current) { kotlinx.coroutines.delay(if (current.actionLabel != null) 4000 else 1900); notice = null }
             }
         }
+    }
+    }
     }
     val storyChat = storyChats.firstOrNull { it.chatId == viewingStoriesOf }
     if (storyChat != null) StoryViewer(storyChat, storyActions) { viewingStoriesOf = null }
@@ -119,13 +142,41 @@ fun TelegramMainScreen(
 @Composable
 private fun ChatsTab(
     lists: TelegramChatLists,
-    onLoadMore: (TelegramChatListKey) -> Unit,
+    actions: TelegramChatListActions,
     connection: TelegramConnection,
     onOpenChat: (Long) -> Unit,
     storyChats: List<TelegramStoryChat>,
     onOpenStories: (TelegramStoryChat) -> Unit,
-    onNotice: (String) -> Unit
+    onNotice: (UiNotice) -> Unit
 ) {
+    var searching by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var menuFor by remember { mutableStateOf<TelegramChatItem?>(null) }
+    androidx.activity.compose.BackHandler(enabled = searching) { searching = false; query = "" }
+    fun archive(chat: TelegramChatItem) {
+        val archived = !chat.archived
+        actions.setArchived(chat.id, archived)
+        onNotice(UiNotice(if (archived) "Чат перемещён в архив" else "Чат возвращён из архива", "Отменить") { actions.setArchived(chat.id, !archived) })
+    }
+    fun toggleRead(chat: TelegramChatItem) = if (chat.unreadCount > 0 || chat.isMarkedUnread) actions.markRead(chat.id) else actions.markUnread(chat.id)
+    if (searching) {
+        Column(Modifier.fillMaxSize()) {
+            Row(Modifier.fillMaxWidth().heightIn(min = 58.dp).padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                HeaderAction(KiroXIcon.Back, "Закрыть поиск") { searching = false; query = "" }
+                Box(Modifier.weight(1f)) { SearchField(query, "Поиск чатов", autoFocus = true) { query = it } }
+            }
+            ChatSearchResults(query, actions::search) { chat -> ChatRow(chat) { searching = false; query = ""; onOpenChat(chat.id) } }
+        }
+        return
+    }
+    menuFor?.let { chat ->
+        ChatContextSheet(
+            chat, onDismiss = { menuFor = null },
+            onPin = { actions.setPinned(if (chat.archived) TelegramChatListKey.Archive else TelegramChatListKey.Main, chat.id, !chat.isPinned) },
+            onRead = { toggleRead(chat) },
+            onArchive = { archive(chat) }
+        )
+    }
     var section by rememberSaveable { mutableStateOf(RealChatSection.Messages) }
     var folderId by rememberSaveable { mutableStateOf<Int?>(null) }
     if (folderId != null && lists.folders.none { it.id == folderId }) folderId = null
@@ -137,8 +188,8 @@ private fun ChatsTab(
     val state = lists[listKey]
     Column(Modifier.fillMaxSize()) {
         Header(connectionTitle(connection) ?: "Чаты") {
-            HeaderAction(KiroXIcon.Search, "Поиск") { onNotice("Поиск по чатам появится позже") }
-            HeaderAction(KiroXIcon.Compose, "Новый чат") { onNotice("Новый чат: откройте контакт во вкладке «Контакты»") }
+            HeaderAction(KiroXIcon.Search, "Поиск") { searching = true }
+            HeaderAction(KiroXIcon.Compose, "Новый чат") { onNotice(UiNotice("Новый чат: откройте контакт во вкладке «Контакты»")) }
         }
         if (storyChats.isNotEmpty()) StoriesRow(storyChats, onOpenStories)
         SectionTabs(listOf("Архив" to RealChatSection.Archive, "Сообщения" to RealChatSection.Messages), section) { section = it }
@@ -151,7 +202,7 @@ private fun ChatsTab(
         }
         key(listKey) {
             val listState = rememberLazyListState()
-            LoadMoreEffect(listState, state.chats.size, state.complete) { onLoadMore(listKey) }
+            LoadMoreEffect(listState, state.chats.size, state.complete) { actions.loadMore(listKey) }
             when {
                 state.chats.isEmpty() && !state.complete -> CenteredProgress()
                 state.chats.isEmpty() -> EmptyState(
@@ -162,7 +213,11 @@ private fun ChatsTab(
                     }
                 )
                 else -> LazyColumn(Modifier.fillMaxSize(), state = listState) {
-                    items(state.chats, key = { it.id }) { chat -> ChatRow(chat) { onOpenChat(chat.id) } }
+                    items(state.chats, key = { it.id }) { chat ->
+                        SwipeableChatRow(chat, onSwipeRight = { toggleRead(chat) }, onSwipeLeft = { archive(chat) }) {
+                            ChatRow(chat, onLongClick = { menuFor = chat }) { onOpenChat(chat.id) }
+                        }
+                    }
                     if (state.loading) item { Box(Modifier.fillMaxWidth().padding(16.dp), Alignment.Center) { CircularProgressIndicator(Modifier.size(22.dp), color = Fusion.colors.textSecondary, strokeWidth = 2.dp) } }
                 }
             }
@@ -182,9 +237,10 @@ private fun LoadMoreEffect(listState: LazyListState, count: Int, complete: Boole
     LaunchedEffect(count) { if (!complete && listState.layoutInfo.visibleItemsInfo.size >= count) latest() }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun ChatRow(chat: TelegramChatItem, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 72.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun ChatRow(chat: TelegramChatItem, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick, onLongClickLabel = "Действия с чатом").heightIn(min = 72.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         TelegramAvatar(chat.title, chat.photo, 52.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -301,8 +357,9 @@ private fun ContactRow(contact: TelegramContact, onClick: () -> Unit) {
 // ---------- Settings + profile (merged tab) ----------
 
 @Composable
-private fun SettingsTab(profile: TelegramUserProfile?, onLogOut: () -> Unit, onNotice: (String) -> Unit) {
+private fun SettingsTab(profile: TelegramUserProfile?, palette: FusionPalette, onPalette: (FusionPalette) -> Unit, onLogOut: () -> Unit, onNotice: (String) -> Unit) {
     var confirmLogout by remember { mutableStateOf(false) }
+    var themeSheet by rememberSaveable { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { Header("Настройки") }
         item {
@@ -318,9 +375,11 @@ private fun SettingsTab(profile: TelegramUserProfile?, onLogOut: () -> Unit, onN
         item { SectionLabel("АККАУНТ И ПРИЛОЖЕНИЕ") }
         val soon = listOf(
             KiroXIcon.Edit to "Изменить профиль", KiroXIcon.Folder to "Чаты и папки", KiroXIcon.Bell to "Уведомления",
-            KiroXIcon.Shield to "Конфиденциальность", KiroXIcon.Storage to "Данные и память", KiroXIcon.Devices to "Устройства",
-            KiroXIcon.Palette to "Кастомизация"
+            KiroXIcon.Shield to "Конфиденциальность", KiroXIcon.Storage to "Данные и память", KiroXIcon.Devices to "Устройства"
         )
+        item {
+            SettingRow(KiroXIcon.Palette, "Тема", trailing = if (palette == FusionPalette.GraphiteDark) "Graphite" else "AMOLED") { themeSheet = true }
+        }
         items(soon, key = { it.second }) { (icon, title) -> SettingRow(icon, title, trailing = "скоро") { onNotice("«$title» появится в следующих этапах") } }
         item { SettingRow(KiroXIcon.Info, "О KiroX", trailing = BuildConfig.VERSION_NAME) { onNotice("KiroX ${BuildConfig.VERSION_NAME} — независимый клиент Telegram") } }
         item {
@@ -330,6 +389,7 @@ private fun SettingsTab(profile: TelegramUserProfile?, onLogOut: () -> Unit, onN
             )
         }
     }
+    if (themeSheet) ThemeSheet(palette, onSelect = onPalette, onDismiss = { themeSheet = false })
     if (confirmLogout) AlertDialog(
         onDismissRequest = { confirmLogout = false },
         containerColor = Fusion.colors.surface2,
@@ -393,7 +453,9 @@ private fun <T> SectionTabs(tabs: List<Pair<String, T>>, selected: T, onSelect: 
 }
 
 @Composable
-private fun SearchField(value: String, hint: String, onChange: (String) -> Unit) {
+private fun SearchField(value: String, hint: String, autoFocus: Boolean = false, onChange: (String) -> Unit) {
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    if (autoFocus) LaunchedEffect(Unit) { focus.requestFocus() }
     Row(
         Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(12.dp))
             .background(Fusion.colors.surface2).padding(horizontal = 12.dp),
@@ -402,7 +464,7 @@ private fun SearchField(value: String, hint: String, onChange: (String) -> Unit)
         IconGlyph(KiroXIcon.Search, null, Modifier.size(18.dp), Fusion.colors.textSecondary)
         Spacer(Modifier.width(10.dp))
         BasicTextField(
-            value, onChange, Modifier.weight(1f), singleLine = true,
+            value, onChange, Modifier.weight(1f).focusRequester(focus), singleLine = true,
             textStyle = TextStyle(color = Fusion.colors.textPrimary, fontSize = 15.sp), cursorBrush = SolidColor(Fusion.colors.textPrimary),
             decorationBox = { inner -> Box { if (value.isEmpty()) Text(hint, color = Fusion.colors.textTertiary, fontSize = 15.sp); inner() } }
         )
