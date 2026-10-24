@@ -73,6 +73,7 @@ fun KiroXApp() {
     val chatError by telegramViewModel.chats.error.collectAsStateWithLifecycle()
     val settings = remember { (context.applicationContext as com.kirox.app.KiroXApplication).settings }
     val palette by settings.palette.collectAsStateWithLifecycle()
+    val seasonal by settings.seasonalEffects.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     fun openChat(id: Long) { openChatId = id; telegramViewModel.messages.open(id); stack.push(Screen.Conversation) }
 
@@ -139,6 +140,8 @@ fun KiroXApp() {
                                 storyActions = storyActions,
                                 palette = palette,
                                 onPalette = settings::setPalette,
+                                seasonal = seasonal,
+                                onSeasonal = settings::setSeasonalEffects,
                                 onOpenSavedMessages = { scope.launch { runCatching { telegramViewModel.users.savedMessagesChatId() }.onSuccess(::openChat) } },
                                 onLogOut = telegramViewModel.auth::logOut
                             )

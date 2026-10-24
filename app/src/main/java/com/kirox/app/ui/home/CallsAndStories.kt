@@ -115,10 +115,10 @@ private fun PagingEffect(listState: LazyListState, complete: Boolean, loadMore: 
 private fun CallRow(call: TelegramCall, count: Int, onOpen: () -> Unit, onCall: () -> Unit) {
     val missed = call.kind == TelegramCallKind.Missed
     Row(Modifier.fillMaxWidth().clickable(onClick = onOpen).heightIn(min = 64.dp).padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        TelegramAvatar(call.peerName, call.photo, 46.dp)
+        TelegramAvatar(call.peerName, call.photo, 56.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(if (count > 1) "${call.peerName} ($count)" else call.peerName, color = if (missed) Fusion.colors.danger else Fusion.colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(if (count > 1) "${call.peerName} ($count)" else call.peerName, color = if (missed) Fusion.colors.danger else Fusion.colors.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val icon = when (call.kind) {
                     TelegramCallKind.Incoming -> KiroXIcon.CallIncoming
@@ -164,27 +164,43 @@ internal fun groupCalls(calls: List<TelegramCall>): List<Pair<TelegramCall, Int>
 // ---------- Stories ----------
 
 @Composable
-internal fun StoriesRow(chats: List<TelegramStoryChat>, onOpen: (TelegramStoryChat) -> Unit, onAddStory: () -> Unit) {
+internal fun StoriesRow(chats: List<TelegramStoryChat>, myName: String, myPhoto: com.kirox.app.telegram.TelegramFileRef?, onOpen: (TelegramStoryChat) -> Unit, onAddStory: () -> Unit) {
     val own = chats.firstOrNull { it.isSelf }
-    LazyRow(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        // "Моя история" is always first: opens own stories when there are any, otherwise offers to add one.
-        if (own == null) item(key = "my_story") {
-            Column(Modifier.width(64.dp).clip(RoundedCornerShape(12.dp)).clickable(onClick = onAddStory).padding(vertical = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.size(58.dp).border(1.dp, Fusion.colors.outlineStrong, CircleShape), contentAlignment = Alignment.Center) {
-                    IconGlyph(KiroXIcon.Add, "Добавить историю", Modifier.size(22.dp), Fusion.colors.textPrimary)
-                }
-                Spacer(Modifier.height(4.dp))
-                Text("Моя история", color = Fusion.colors.textSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
-        items(listOfNotNull(own) + chats.filterNot { it.isSelf }, key = { it.chatId }) { chat ->
-            Column(Modifier.width(64.dp).clip(RoundedCornerShape(12.dp)).clickable { onOpen(chat) }.padding(vertical = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    val others = chats.filterNot { it.isSelf }
+    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        // "Моя история" first, as in the old Fusion: own avatar with a "+" badge (or own stories when posted).
+        Column(
+            Modifier.padding(start = 12.dp).width(84.dp).clip(RoundedCornerShape(12.dp)).clickable { if (own != null) onOpen(own) else onAddStory() }.padding(vertical = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(Modifier.size(70.dp)) {
                 Box(
-                    Modifier.size(58.dp).border(if (chat.hasUnread) 2.dp else 1.dp, if (chat.hasUnread) Fusion.colors.accent else Fusion.colors.outlineStrong, CircleShape).padding(4.dp),
+                    Modifier.size(70.dp).border(if (own?.hasUnread == true) 2.dp else 1.5.dp, if (own?.hasUnread == true) Fusion.colors.accent else Fusion.colors.outlineStrong, CircleShape).padding(4.dp),
                     contentAlignment = Alignment.Center
-                ) { TelegramAvatar(chat.title, chat.photo, 50.dp) }
-                Spacer(Modifier.height(4.dp))
-                Text(if (chat.isSelf) "Моя история" else chat.title, color = if (chat.hasUnread) Fusion.colors.textPrimary else Fusion.colors.textSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                ) { TelegramAvatar(myName, myPhoto, 62.dp) }
+                if (own == null) Box(
+                    Modifier.align(Alignment.BottomEnd).size(26.dp).clip(CircleShape).background(Fusion.colors.accent).border(2.5.dp, Fusion.colors.background, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) { IconGlyph(KiroXIcon.Add, "Добавить историю", Modifier.size(15.dp), Fusion.colors.onAccent) }
+            }
+            Spacer(Modifier.height(6.dp))
+            Text("Моя история", color = Fusion.colors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (others.isEmpty()) {
+            Column(Modifier.weight(1f).padding(start = 12.dp, end = 16.dp)) {
+                Text("Историй пока нет", color = Fusion.colors.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                Text("Нажмите +, чтобы поделиться своей", color = Fusion.colors.textSecondary, fontSize = 15.sp)
+            }
+        } else LazyRow(Modifier.weight(1f), contentPadding = PaddingValues(start = 4.dp, end = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(others, key = { it.chatId }) { chat ->
+                Column(Modifier.width(78.dp).clip(RoundedCornerShape(12.dp)).clickable { onOpen(chat) }.padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(
+                        Modifier.size(70.dp).border(if (chat.hasUnread) 2.dp else 1.dp, if (chat.hasUnread) Fusion.colors.accent else Fusion.colors.outlineStrong, CircleShape).padding(4.dp),
+                        contentAlignment = Alignment.Center
+                    ) { TelegramAvatar(chat.title, chat.photo, 62.dp) }
+                    Spacer(Modifier.height(6.dp))
+                    Text(chat.title, color = if (chat.hasUnread) Fusion.colors.textPrimary else Fusion.colors.textSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
         }
     }

@@ -22,11 +22,22 @@ class KiroXSettingsRepository(context: Context) {
     private val store = context.applicationContext.kiroxSettings
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val paletteKey = stringPreferencesKey("palette")
+    private val seasonalKey = androidx.datastore.preferences.core.booleanPreferencesKey("seasonal_effects")
 
     val palette: StateFlow<FusionPalette> = store.data
         .catch { emit(androidx.datastore.preferences.core.emptyPreferences()) }
         .map { prefs -> FusionPalette.entries.firstOrNull { it.name == prefs[paletteKey] } ?: FusionPalette.AmoledBlack }
         .stateIn(scope, SharingStarted.Eagerly, FusionPalette.AmoledBlack)
+
+    /** Light seasonal particles in screen headers; on by default, like the old Fusion. */
+    val seasonalEffects: StateFlow<Boolean> = store.data
+        .catch { emit(androidx.datastore.preferences.core.emptyPreferences()) }
+        .map { it[seasonalKey] ?: true }
+        .stateIn(scope, SharingStarted.Eagerly, true)
+
+    fun setSeasonalEffects(enabled: Boolean) {
+        scope.launch { store.edit { it[seasonalKey] = enabled } }
+    }
 
     fun setPalette(value: FusionPalette) {
         scope.launch { store.edit { it[paletteKey] = value.name } }

@@ -26,20 +26,22 @@ data class FusionColors(
     val accent: Color,
     val onAccent: Color,
     val danger: Color,
-    val avatar: Color
+    val avatar: Color,
+    /** Rounded square behind settings icons. */
+    val iconContainer: Color
 ) {
     companion object {
         val Amoled = FusionColors(
-            background = Color(0xFF000000), surface1 = Color(0xFF0F0F10), surface2 = Color(0xFF17171A), surface3 = Color(0xFF2A2A2E),
-            outline = Color(0xFF26262A), outlineStrong = Color(0xFF6E6E73), textPrimary = Color(0xFFF4F4F4), textSecondary = Color(0xFF8E8E93),
-            textTertiary = Color(0xFF5C5C60), accent = Color(0xFFFFFFFF), onAccent = Color(0xFF000000),
-            danger = Color(0xFFFF6961), avatar = Color(0xFF3E4C58)
+            background = Color(0xFF000000), surface1 = Color(0xFF101010), surface2 = Color(0xFF191919), surface3 = Color(0xFF292929),
+            outline = Color(0xFF242424), outlineStrong = Color(0xFF454545), textPrimary = Color(0xFFFFFFFF), textSecondary = Color(0xFFAAAAAA),
+            textTertiary = Color(0xFF888888), accent = Color(0xFFFFFFFF), onAccent = Color(0xFF000000),
+            danger = Color(0xFFFF6961), avatar = Color(0xFF3A4652), iconContainer = Color(0xFF181818)
         )
         val Graphite = FusionColors(
-            background = Color(0xFF121214), surface1 = Color(0xFF1A1A1D), surface2 = Color(0xFF232327), surface3 = Color(0xFF33333A),
-            outline = Color(0xFF303035), outlineStrong = Color(0xFF77777D), textPrimary = Color(0xFFF2F2F2), textSecondary = Color(0xFF9A9AA0),
-            textTertiary = Color(0xFF6A6A70), accent = Color(0xFFFFFFFF), onAccent = Color(0xFF000000),
-            danger = Color(0xFFFF6961), avatar = Color(0xFF465562)
+            background = Color(0xFF080808), surface1 = Color(0xFF181818), surface2 = Color(0xFF242424), surface3 = Color(0xFF343434),
+            outline = Color(0xFF292929), outlineStrong = Color(0xFF454545), textPrimary = Color(0xFFFFFFFF), textSecondary = Color(0xFFAAAAAA),
+            textTertiary = Color(0xFF858585), accent = Color(0xFFFFFFFF), onAccent = Color(0xFF000000),
+            danger = Color(0xFFFF6961), avatar = Color(0xFF465562), iconContainer = Color(0xFF202020)
         )
     }
 }

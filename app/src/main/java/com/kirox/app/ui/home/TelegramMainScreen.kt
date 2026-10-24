@@ -64,9 +64,9 @@ import kotlinx.coroutines.flow.filter
 
 private enum class MainTab(val item: FusionNavItem) {
     Contacts(FusionNavItem("Контакты", KiroXIcon.Contacts)),
-    Chats(FusionNavItem("Чаты", KiroXIcon.Chat)),
-    Settings(FusionNavItem("Настройки", KiroXIcon.Settings)),
-    Profile(FusionNavItem("Профиль", KiroXIcon.Profile))
+    Chats(FusionNavItem("Чаты", KiroXIcon.Chats)),
+    Settings(FusionNavItem("Настройки", KiroXIcon.Tune)),
+    Profile(FusionNavItem("Профиль", KiroXIcon.ProfileCircle))
 }
 private enum class SubScreen { None, NewMessage, Customization }
 private enum class RealChatSection { Archive, Messages }
@@ -91,8 +91,10 @@ fun TelegramMainScreen(
     palette: FusionPalette,
     onPalette: (FusionPalette) -> Unit,
     onOpenSavedMessages: () -> Unit,
+    seasonal: Boolean,
+    onSeasonal: (Boolean) -> Unit,
     onLogOut: () -> Unit
-) {
+) = androidx.compose.runtime.CompositionLocalProvider(com.kirox.app.ui.components.LocalSeasonalEffects provides seasonal) {
     var tab by rememberSaveable { mutableStateOf(MainTab.Chats) }
     var sub by rememberSaveable { mutableStateOf(SubScreen.None) }
     var notice by remember { mutableStateOf<UiNotice?>(null) }
@@ -117,11 +119,11 @@ fun TelegramMainScreen(
             AnimatedContent(tab to sub, transitionSpec = { fadeIn(tween(FusionMotion.NORMAL)) togetherWith fadeOut(tween(FusionMotion.FAST)) }, label = "main_tabs") { (current, subScreen) ->
                 when {
                     subScreen == SubScreen.NewMessage -> NewMessageScreen(contacts, onBack = { sub = SubScreen.None }, onOpenContact = { sub = SubScreen.None; onOpenContact(it) }, onOpenSaved = { sub = SubScreen.None; onOpenSavedMessages() }, onNotice = showNotice)
-                    subScreen == SubScreen.Customization -> CustomizationScreen(palette, onPalette, onBack = { sub = SubScreen.None }, onNotice = showNotice)
-                    current == MainTab.Chats -> ChatsTab(lists, chatActions, connection, onOpenChat, storyChats, { viewingStoriesOf = it.chatId }, onNewMessage = { sub = SubScreen.NewMessage }) { notice = it }
+                    subScreen == SubScreen.Customization -> CustomizationScreen(palette, onPalette, seasonal, onSeasonal, onBack = { sub = SubScreen.None }, onNotice = showNotice)
+                    current == MainTab.Chats -> ChatsTab(lists, chatActions, connection, onOpenChat, storyChats, profile, { viewingStoriesOf = it.chatId }, onNewMessage = { sub = SubScreen.NewMessage }) { notice = it }
                     current == MainTab.Contacts -> ContactsTab(contacts, contactsLoading, onOpenContact, calls, onLoadCalls, onOpenChat, showNotice)
-                    current == MainTab.Settings -> SettingsTab(profile, palette, onOpenProfile = { tab = MainTab.Profile }, onOpenCustomization = { sub = SubScreen.Customization }, onNotice = showNotice)
-                    else -> ProfileTab(profile, onOpenSaved = onOpenSavedMessages, onLogOut = onLogOut, onNotice = showNotice)
+                    current == MainTab.Settings -> SettingsTab(profile, onOpenProfile = { tab = MainTab.Profile }, onOpenCustomization = { sub = SubScreen.Customization }, onNotice = showNotice)
+                    else -> ProfileTab(profile, onOpenSettings = { tab = MainTab.Settings }, onOpenSaved = onOpenSavedMessages, onLogOut = onLogOut, onNotice = showNotice)
                 }
             }
             notice?.let { current ->
@@ -154,6 +156,7 @@ private fun ChatsTab(
     connection: TelegramConnection,
     onOpenChat: (Long) -> Unit,
     storyChats: List<TelegramStoryChat>,
+    profile: TelegramUserProfile?,
     onOpenStories: (TelegramStoryChat) -> Unit,
     onNewMessage: () -> Unit,
     onNotice: (UiNotice) -> Unit
@@ -209,11 +212,11 @@ private fun ChatsTab(
     }
     Column(Modifier.fillMaxSize()) {
         ScreenTitle(connectionTitle(connection) ?: "Чаты") {
-            TitleAction(KiroXIcon.Search, "Поиск") { searching = true }
             TitleAction(KiroXIcon.ReadAll, "Отметить всё прочитанным") { confirmReadAll = true }
             TitleAction(KiroXIcon.Compose, "Новое сообщение", onClick = onNewMessage)
+            TitleAction(KiroXIcon.Search, "Поиск") { searching = true }
         }
-        StoriesRow(storyChats, onOpenStories) { onNotice(UiNotice("Публикация историй — В разработке")) }
+        StoriesRow(storyChats, profile?.name.orEmpty(), profile?.photo, onOpenStories) { onNotice(UiNotice("Публикация историй — В разработке")) }
         val archiveUnread = lists.archive.chats.count { it.unreadCount > 0 || it.isMarkedUnread }
         SectionTabs(listOf((if (archiveUnread > 0) "Архив · $archiveUnread" else "Архив") to RealChatSection.Archive, "Сообщения" to RealChatSection.Messages), section) { section = it }
         if (section == RealChatSection.Messages && lists.folders.isNotEmpty()) {
@@ -263,12 +266,12 @@ private fun LoadMoreEffect(listState: LazyListState, count: Int, complete: Boole
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun ChatRow(chat: TelegramChatItem, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick, onLongClickLabel = "Действия с чатом").heightIn(min = 72.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        TelegramAvatar(chat.title, chat.photo, 52.dp)
+    Row(Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick, onLongClickLabel = "Действия с чатом").heightIn(min = 84.dp).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        TelegramAvatar(chat.title, chat.photo, 60.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(chat.title, color = Fusion.colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                Text(chat.title, color = Fusion.colors.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 if (chat.isMuted) IconGlyph(KiroXIcon.Bell, "Без звука", Modifier.padding(start = 4.dp).size(13.dp), Fusion.colors.textTertiary)
                 Spacer(Modifier.weight(1f))
                 when (chat.outgoingState) {
@@ -276,19 +279,19 @@ private fun ChatRow(chat: TelegramChatItem, onLongClick: (() -> Unit)? = null, o
                     LastMessageState.Sent -> IconGlyph(KiroXIcon.Check, "Отправлено", Modifier.padding(end = 4.dp).size(15.dp), Fusion.colors.textSecondary)
                     LastMessageState.None -> Unit
                 }
-                Text(TelegramFormat.chatTime(chat.timestamp), color = Fusion.colors.textSecondary, fontSize = 12.sp)
+                Text(TelegramFormat.chatTime(chat.timestamp), color = Fusion.colors.textSecondary, fontSize = 14.sp)
             }
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val preview = if (chat.draft != null) "Черновик: ${chat.draft}" else chat.preview
-                Text(preview, color = if (chat.draft != null) Fusion.colors.danger else Fusion.colors.textSecondary, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text(preview, color = if (chat.draft != null) Fusion.colors.danger else Fusion.colors.textSecondary, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 if (chat.unreadMentionCount > 0) Badge("@", strong = true)
                 if (chat.unreadCount > 0 || chat.isMarkedUnread) Badge(if (chat.unreadCount > 0) compactCount(chat.unreadCount) else "", strong = !chat.isMuted)
                 else if (chat.isPinned) IconGlyph(KiroXIcon.Pin, "Закреплён", Modifier.padding(start = 6.dp).size(15.dp), Fusion.colors.textTertiary)
             }
         }
     }
-    HorizontalDivider(Modifier.padding(start = 80.dp), color = Fusion.colors.outline)
+    HorizontalDivider(Modifier.padding(start = 92.dp), color = Fusion.colors.outline)
 }
 
 @Composable
@@ -365,31 +368,25 @@ private fun ContactsList(contacts: List<TelegramContact>, loading: Boolean, focu
                 }
             }
         }
-        Row(
-            Modifier.padding(horizontal = 16.dp, vertical = 10.dp).fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(16.dp))
-                .background(Fusion.colors.surface1).border(1.dp, Fusion.colors.outline, RoundedCornerShape(16.dp))
-                .clickable {
-                    val share = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                        type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, "Давай общаться в Telegram! Я пользуюсь kiroX.")
-                    }
-                    context.startActivity(android.content.Intent.createChooser(share, "Пригласить друзей"))
-                },
-            horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconGlyph(KiroXIcon.Add, null, Modifier.size(20.dp), Fusion.colors.textPrimary)
-            Spacer(Modifier.width(10.dp))
-            Text("Пригласить друзей", color = Fusion.colors.textPrimary, fontSize = 16.sp)
-        }
+        Text(
+            "Пригласить друзей", color = Fusion.colors.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().clickable {
+                val share = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, "Давай общаться в Telegram! Я пользуюсь kiroX.")
+                }
+                context.startActivity(android.content.Intent.createChooser(share, "Пригласить друзей"))
+            }.heightIn(min = 56.dp).wrapContentHeight()
+        )
     }
 }
 
 @Composable
 private fun ContactRow(contact: TelegramContact, onMessage: () -> Unit, onCall: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onMessage).heightIn(min = 72.dp).padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        TelegramAvatar(contact.name, contact.photo, 52.dp)
+        TelegramAvatar(contact.name, contact.photo, 56.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(contact.name, color = Fusion.colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(contact.name, color = Fusion.colors.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
                 TelegramFormat.status(contact.status),
                 color = if (contact.status == TelegramUserStatus.Online) Fusion.colors.textPrimary else Fusion.colors.textSecondary,
@@ -399,7 +396,7 @@ private fun ContactRow(contact: TelegramContact, onMessage: () -> Unit, onCall: 
         HeaderAction(KiroXIcon.Chat, "Написать ${contact.name}", onMessage)
         HeaderAction(KiroXIcon.Call, "Позвонить ${contact.name}", onCall)
     }
-    HorizontalDivider(Modifier.padding(start = 80.dp), color = Fusion.colors.outline)
+    HorizontalDivider(Modifier.padding(start = 88.dp), color = Fusion.colors.outline)
 }
 
 // ---------- Shared pieces ----------
@@ -421,17 +418,17 @@ private fun HeaderAction(icon: KiroXIcon, description: String, onClick: () -> Un
 
 @Composable
 private fun <T> SectionTabs(tabs: List<Pair<String, T>>, selected: T, onSelect: (T) -> Unit) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.Bottom) {
         tabs.forEach { (label, value) ->
             val active = value == selected
-            Column(Modifier.weight(1f).heightIn(min = 48.dp).clickable { onSelect(value) }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom) {
-                Text(label, color = if (active) Fusion.colors.textPrimary else Fusion.colors.textSecondary, fontSize = 14.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal)
-                Spacer(Modifier.height(10.dp))
-                Box(Modifier.width(94.dp).height(2.dp).background(if (active) Fusion.colors.textPrimary else Fusion.colors.background))
+            Column(Modifier.width(IntrinsicSize.Max).clip(RoundedCornerShape(8.dp)).clickable { onSelect(value) }.padding(horizontal = 12.dp), verticalArrangement = Arrangement.Bottom) {
+                Text(label, color = if (active) Fusion.colors.textPrimary else Fusion.colors.textTertiary, fontSize = 18.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1)
+                Spacer(Modifier.height(8.dp))
+                Box(Modifier.fillMaxWidth().height(2.5.dp).clip(RoundedCornerShape(2.dp)).background(if (active) Fusion.colors.textPrimary else Fusion.colors.background))
             }
         }
     }
-    HorizontalDivider(color = Fusion.colors.outline)
+    Spacer(Modifier.height(4.dp))
 }
 
 @Composable
@@ -440,16 +437,16 @@ private fun SearchField(value: String, hint: String, autoFocus: Boolean = false,
     if (autoFocus) LaunchedEffect(Unit) { focus.requestFocus() }
     LaunchedEffect(focusTrigger) { if (focusTrigger > 0) focus.requestFocus() }
     Row(
-        Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(12.dp))
-            .background(Fusion.colors.surface2).padding(horizontal = 12.dp),
+        Modifier.padding(horizontal = 18.dp, vertical = 6.dp).fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(16.dp))
+            .background(Fusion.colors.surface1).padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconGlyph(KiroXIcon.Search, null, Modifier.size(18.dp), Fusion.colors.textSecondary)
-        Spacer(Modifier.width(10.dp))
+        IconGlyph(KiroXIcon.Search, null, Modifier.size(22.dp), Fusion.colors.textSecondary)
+        Spacer(Modifier.width(12.dp))
         BasicTextField(
             value, onChange, Modifier.weight(1f).focusRequester(focus), singleLine = true,
-            textStyle = TextStyle(color = Fusion.colors.textPrimary, fontSize = 15.sp), cursorBrush = SolidColor(Fusion.colors.textPrimary),
-            decorationBox = { inner -> Box { if (value.isEmpty()) Text(hint, color = Fusion.colors.textTertiary, fontSize = 15.sp); inner() } }
+            textStyle = TextStyle(color = Fusion.colors.textPrimary, fontSize = 17.sp), cursorBrush = SolidColor(Fusion.colors.textPrimary),
+            decorationBox = { inner -> Box { if (value.isEmpty()) Text(hint, color = Fusion.colors.textTertiary, fontSize = 17.sp); inner() } }
         )
         if (value.isNotEmpty()) Text("×", color = Fusion.colors.textSecondary, fontSize = 20.sp, modifier = Modifier.clip(CircleShape).clickable { onChange("") }.padding(horizontal = 8.dp))
     }

@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.hasSetTextAction
@@ -44,10 +45,10 @@ class FusionUiTest {
                 )
             }
         }
-        compose.onNodeWithText("Чаты").assertIsSelected()
-        compose.onNodeWithText("Настройки").performClick()
-        compose.onNodeWithText("Настройки").assertIsSelected()
-        compose.onNodeWithText("Чаты").assertIsNotSelected()
+        compose.onNodeWithContentDescription("Чаты").assertIsSelected()
+        compose.onNodeWithContentDescription("Настройки").performClick()
+        compose.onNodeWithContentDescription("Настройки").assertIsSelected()
+        compose.onNodeWithContentDescription("Чаты").assertIsNotSelected()
     }
 
     @Test fun chatScreenShowsMessagesAndSendsText() {

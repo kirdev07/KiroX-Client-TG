@@ -19,7 +19,8 @@ enum class KiroXIcon {
     Palette, Folder, Bell, Shield, Storage, Devices, Star, Sliders, Refresh, Info,
     Edit, More, Stories, Media, Bookmark, Check, Pin, CallIncoming, CallOutgoing, CallMissed,
     Camera, At, Phone, Cake, File, Link, Music, Voice, Verified, Photo,
-    Back, Video, Attach, Send, Emoji, Copy, Forward, Delete, Location, Reply
+    Back, Video, Attach, Send, Emoji, Copy, Forward, Delete, Location, Reply,
+    Chats, Tune, ProfileCircle, Qr
 }
 
 @Composable
@@ -32,7 +33,7 @@ fun KiroXIcon(
     Canvas(modifier.semantics { if (description != null) contentDescription = description }) {
         val sx = size.width / 24f
         val sy = size.height / 24f
-        val stroke = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val stroke = Stroke(width = 1.9.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
         fun p(x: Float, y: Float) = Offset(x * sx, y * sy)
         fun line(a: Offset, b: Offset) = drawLine(color, a, b, stroke.width, StrokeCap.Round)
         fun circle(cx: Float, cy: Float, r: Float) = drawCircle(color, r * sx, p(cx, cy), style = stroke)
@@ -88,6 +89,19 @@ fun KiroXIcon(
             KiroXIcon.Forward -> { path(p(4f,18f),p(8f,11f),p(16f,9f)); path(p(13f,5f),p(20f,9f),p(13f,14f)) }
             KiroXIcon.Delete -> { rect(6f,7f,18f,21f,1f); line(p(4f,7f),p(20f,7f)); line(p(9f,4f),p(15f,4f)); line(p(10f,11f),p(10f,17f)); line(p(14f,11f),p(14f,17f)) }
             KiroXIcon.Location -> { path(p(12f,22f),p(6f,14f),p(5f,10f),p(7f,5f),p(12f,2f),p(17f,5f),p(19f,10f),p(18f,14f),p(12f,22f)); circle(12f,10f,2.5f) }
+            KiroXIcon.Chats -> {
+                // Two overlapping speech bubbles: back one top-right, front one bottom-left with a tail.
+                path(p(8.5f,7.5f),p(8.5f,5.5f),p(10.5f,3.5f),p(18.5f,3.5f),p(20.5f,5.5f),p(20.5f,11f),p(18.5f,13f),p(17.5f,13f),p(17.5f,15.5f),p(15.5f,13.8f))
+                path(p(5.5f,8f),p(13.5f,8f),p(15.5f,10f),p(15.5f,16f),p(13.5f,18f),p(9.5f,18f),p(5.5f,21f),p(5.5f,18f),p(3.5f,16f),p(3.5f,10f),p(5.5f,8f),close=true)
+            }
+            KiroXIcon.Tune -> {
+                // Three sliders; lines stop at each knob so the glyph works on any background.
+                line(p(4f,6f),p(12.8f,6f)); line(p(17.2f,6f),p(20f,6f)); circle(15f,6f,2.2f)
+                line(p(4f,12f),p(6.8f,12f)); line(p(11.2f,12f),p(20f,12f)); circle(9f,12f,2.2f)
+                line(p(4f,18f),p(13.8f,18f)); line(p(18.2f,18f),p(20f,18f)); circle(16f,18f,2.2f)
+            }
+            KiroXIcon.ProfileCircle -> { circle(12f,12f,9f); circle(12f,9.5f,3.2f); path(p(6.3f,18.6f),p(8f,16f),p(12f,15f),p(16f,16f),p(17.7f,18.6f)) }
+            KiroXIcon.Qr -> { rect(3.5f,3.5f,10f,10f,1.5f); rect(14f,3.5f,20.5f,10f,1.5f); rect(3.5f,14f,10f,20.5f,1.5f); line(p(14f,14f),p(14f,15f)); line(p(17.5f,14f),p(20.5f,14f)); line(p(14f,18f),p(17f,18f)); line(p(20.5f,17.5f),p(20.5f,20.5f)); line(p(17f,20.5f),p(17.5f,20.5f)) }
             KiroXIcon.Reply -> { path(p(10f,6f),p(4f,12f),p(10f,18f)); path(p(5f,12f),p(14f,12f),p(20f,17f)) }
         }
     }
