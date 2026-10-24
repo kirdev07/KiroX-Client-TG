@@ -303,7 +303,13 @@ fun DrawScope.drawCobweb(corner: Offset, radius: Float, flip: Boolean, spiderDro
         }
         drawPath(path, silk, style = Stroke(1.1f))
     }
-    // Spider on a thread.
+    if (spiderDrop >= 0f) drawSpider(corner, radius, flip, spiderDrop, alpha)
+}
+
+/** The spider hanging from a corner web; drawn live because it moves. */
+fun DrawScope.drawSpider(corner: Offset, radius: Float, flip: Boolean, spiderDrop: Float, alpha: Float = 1f) {
+    val dir = if (flip) -1f else 1f
+    fun point(a: Double, d: Float) = corner + Offset(dir * cos(a).toFloat() * d, sin(a).toFloat() * d)
     val anchor = point(PI / 4, radius * 0.55f)
     val spider = anchor + Offset(0f, radius * (0.25f + 0.45f * spiderDrop))
     drawLine(Color.White.copy(alpha = 0.28f * alpha), anchor, spider, 1f)
@@ -319,4 +325,101 @@ fun DrawScope.drawCobweb(corner: Offset, radius: Float, flip: Boolean, spiderDro
     drawCircle(body, s * 0.65f, spider + Offset(0f, -s * 1.2f))
     drawCircle(Color(0xFFFF5A3C).copy(alpha = alpha), s * 0.18f, spider + Offset(-s * 0.22f, -s * 1.25f))
     drawCircle(Color(0xFFFF5A3C).copy(alpha = alpha), s * 0.18f, spider + Offset(s * 0.22f, -s * 1.25f))
+}
+
+// ---------- Sprite cache: static parts are drawn once into bitmaps, then only moved ----------
+
+private class SpriteKey(val kind: String, val a: Int, val b: Int, val flag: Boolean) {
+    override fun equals(other: Any?) = other is SpriteKey && other.kind == kind && other.a == a && other.b == b && other.flag == flag
+    override fun hashCode() = ((kind.hashCode() * 31 + a) * 31 + b) * 31 + flag.hashCode()
+}
+
+private object SpriteCache {
+    private val map = object : LinkedHashMap<SpriteKey, androidx.compose.ui.graphics.ImageBitmap>(32, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<SpriteKey, androidx.compose.ui.graphics.ImageBitmap>?) = size > 160
+    }
+
+    fun get(scope: DrawScope, key: SpriteKey, width: Int, height: Int, draw: DrawScope.() -> Unit): androidx.compose.ui.graphics.ImageBitmap =
+        map.getOrPut(key) {
+            val bitmap = androidx.compose.ui.graphics.ImageBitmap(width.coerceAtLeast(1), height.coerceAtLeast(1))
+            androidx.compose.ui.graphics.drawscope.CanvasDrawScope().draw(
+                scope, scope.layoutDirection, androidx.compose.ui.graphics.Canvas(bitmap), Size(width.toFloat(), height.toFloat()), draw
+            )
+            bitmap
+        }
+}
+
+/**
+ * [drawPumpkin] with the body, stem and costume cached as bitmaps; only the candle-lit face
+ * (glow and blink) is drawn every frame.
+ */
+fun DrawScope.drawPumpkinCached(
+    center: Offset, r: Float, face: PumpkinFace, costume: PumpkinCostume,
+    glow: Float = 1f, blink: Float = 0f, rotationDeg: Float = 0f, flat: Boolean = false
+) {
+    val rr = r.toInt().coerceAtLeast(2)
+    val r2 = rr.toFloat()
+    val left = r2 * 1.4f
+    val top = r2 * 2.5f
+    val w = (r2 * 2.8f).toInt()
+    val h = (r2 * 3.9f).toInt()
+    val ghost = costume == PumpkinCostume.Ghost
+    val back = SpriteCache.get(this, SpriteKey("back", rr, costume.ordinal, flat), w, h) {
+        translate(left, top) {
+            if (costume == PumpkinCostume.Vampire) drawVampireCape(r2, 1f)
+            if (ghost) drawGhostSheet(r2, 1f, 1f) else {
+                drawStem(r2, 1f)
+                drawBody(r2, 1f, flat)
+                if (costume == PumpkinCostume.Vampire) drawVampireHair(r2, 1f)
+            }
+        }
+    }
+    val hasFront = costume == PumpkinCostume.WitchHat || costume == PumpkinCostume.TopHat || costume == PumpkinCostume.Bow
+    val front = if (!hasFront) null else SpriteCache.get(this, SpriteKey("front", rr, costume.ordinal, false), w, h) {
+        translate(left, top) {
+            when (costume) {
+                PumpkinCostume.WitchHat -> drawWitchHat(r2, 1f)
+                PumpkinCostume.TopHat -> drawTopHat(r2, 1f)
+                else -> drawBow(r2, 1f)
+            }
+        }
+    }
+    val scale = r / r2
+    translate(center.x, center.y) {
+        rotate(rotationDeg, pivot = Offset.Zero) {
+            scale(scale, scale, pivot = Offset.Zero) {
+                drawImage(back, Offset(-left, -top))
+                if (!ghost) {
+                    val glowStep = ((glow.coerceIn(0f, 1f)) * 4f).toInt()
+                    val blinkStep = ((blink.coerceIn(0f, 1f)) * 3f).toInt()
+                    val fangs = costume == PumpkinCostume.Vampire
+                    val faceSprite = SpriteCache.get(this, SpriteKey("face", rr, face.ordinal * 100 + glowStep * 10 + blinkStep + (if (fangs) 1000 else 0), flat), w, h) {
+                        translate(left, top) { drawFace(r2, face, glowStep / 4f, blinkStep / 3f, 1f, fangs = fangs, flat = flat) }
+                    }
+                    drawImage(faceSprite, Offset(-left, -top))
+                }
+                front?.let { drawImage(it, Offset(-left, -top)) }
+            }
+        }
+    }
+}
+
+/** Cached corner web; [corner] is top-left (flip = false) or top-right (flip = true). */
+fun DrawScope.drawCobwebCached(corner: Offset, radius: Float, flip: Boolean) {
+    val size = radius.toInt().coerceAtLeast(2) + 2
+    val web = SpriteCache.get(this, SpriteKey("web", size, 0, flip), size, size) {
+        drawCobweb(if (flip) Offset(size.toFloat(), 0f) else Offset.Zero, size - 2f, flip, spiderDrop = -1f)
+    }
+    drawImage(web, if (flip) Offset(corner.x - size, corner.y) else corner)
+}
+
+/** Bat from 8 cached wing frames. */
+fun DrawScope.drawBatCached(center: Offset, span: Float, flap: Float, alpha: Float = 1f) {
+    val sp = span.toInt().coerceAtLeast(4)
+    val frame = (((flap.coerceIn(-1f, 1f) + 1f) / 2f) * 7f).toInt()
+    val box = (sp * 1.1f).toInt()
+    val sprite = SpriteCache.get(this, SpriteKey("bat", sp, frame, false), box, box) {
+        drawBat(Offset(box / 2f, box / 2f), sp.toFloat(), frame / 7f * 2f - 1f)
+    }
+    drawImage(sprite, Offset(center.x - box / 2f, center.y - box / 2f), alpha = alpha)
 }

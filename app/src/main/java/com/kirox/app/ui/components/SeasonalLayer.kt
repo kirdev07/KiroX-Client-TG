@@ -11,6 +11,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -100,21 +101,12 @@ fun SeasonalLayer(
     val animate = systemAnimations && speed > 0f
     val light = com.kirox.app.ui.theme.LocalLightEffects.current
     val chosen = scene ?: LocalEffectScene.current
-    val time by produceState(2.3f, animate, speed, light) {
-        if (!animate) return@produceState
-        var last = withFrameNanos { it }
-        var accumulated = 0f
-        while (true) {
-            withFrameNanos { now ->
-                val step = (now - last) / 1_000_000_000f * speed
-                last = now
-                // Light mode redraws at ~30 fps instead of every frame.
-                accumulated += step
-                if (!light || accumulated >= 1f / 30f) { value += accumulated; accumulated = 0f }
-            }
-        }
-    }
-    Canvas(modifier) {
+    val clock = LocalSceneClock.current
+    SubscribeToSceneClock(clock, animate, large = mode != SeasonalMode.Header)
+    // Own graphics layer: a scene redraw re-records only this layer, not the screen behind it.
+    Canvas(modifier.graphicsLayer()) {
+        // Read the shared clock here, in the draw phase: the scene redraws without recomposing.
+        val time = if (animate) clock.time else 2.3f
         when (chosen) {
             com.kirox.app.settings.EffectScene.Halloween -> halloween(time, mode, freeZone ?: freeZoneFraction?.let { (size.width * it.start)..(size.width * it.endInclusive) }, light)
             com.kirox.app.settings.EffectScene.Main -> sparkles(time, mode, light)
@@ -131,8 +123,10 @@ private fun DrawScope.halloween(t: Float, mode: SeasonalMode, freeZone: ClosedFl
         SeasonalMode.Header -> minOf(size.height * 1.1f, 64.dp.toPx())
     }
     val drop = (sin(t * 0.7f) * 0.5f + 0.5f)
-    drawCobweb(Offset.Zero, webRadius, flip = false, spiderDrop = drop)
-    drawCobweb(Offset(size.width, 0f), webRadius * 0.85f, flip = true, spiderDrop = 1f - drop)
+    drawCobwebCached(Offset.Zero, webRadius, flip = false)
+    drawSpider(Offset.Zero, webRadius, flip = false, spiderDrop = drop)
+    drawCobwebCached(Offset(size.width, 0f), webRadius * 0.85f, flip = true)
+    drawSpider(Offset(size.width, 0f), webRadius * 0.85f, flip = true, spiderDrop = 1f - drop)
 
     // Bats cross the scene on slow, slightly wavy paths.
     val bats = when { light && !showcase -> 0; light -> 1; showcase -> 3; else -> 2 }
@@ -142,7 +136,7 @@ private fun DrawScope.halloween(t: Float, mode: SeasonalMode, freeZone: ClosedFl
         val x = -40f + (size.width + 80f) * p
         val y = size.height * (when (mode) { SeasonalMode.Splash -> 0.12f + 0.1f * i; SeasonalMode.Banner -> 0.1f + 0.05f * i; else -> 0.18f + 0.18f * i }) + sin(t * 1.6f + i) * size.height * 0.03f
         val span = (if (showcase) 34.dp else 20.dp).toPx() * (1f - i * 0.15f)
-        drawBat(Offset(x, y), span, flap = sin(t * 9f + i * 2f))
+        drawBatCached(Offset(x, y), span, flap = sin(t * 9f + i * 2f))
     }
 
     val base = when (mode) {
@@ -167,7 +161,7 @@ private fun DrawScope.halloween(t: Float, mode: SeasonalMode, freeZone: ClosedFl
         // Blink for ~0.2 s every few seconds, each pumpkin at its own moment.
         val blinkPhase = (t + l.seed * 5f) % 4.2f
         val blink = if (blinkPhase < 0.2f) 1f - abs(blinkPhase - 0.1f) * 10f else 0f
-        drawPumpkin(
+        drawPumpkinCached(
             center = Offset(cx, size.height * l.y + bob),
             r = base * l.size,
             face = l.face, costume = l.costume,

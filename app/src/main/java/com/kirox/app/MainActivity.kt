@@ -36,8 +36,10 @@ class MainActivity : ComponentActivity() {
             val chatStyle = com.kirox.app.settings.ChatStyle(bubbles.radiusDp, textSize.scale, wallpaper, density)
             val weakDevice = remember { prefersLightEffects(this@MainActivity) }
             val lightEffects = quality == EffectsQuality.Light || (quality == EffectsQuality.Auto && weakDevice)
+            val sceneClock = remember { com.kirox.app.ui.components.SceneClock() }
+            sceneClock.Drive(speed = motion.factor, light = lightEffects)
             FusionTheme(palette) {
-                CompositionLocalProvider(LocalMotionFactor provides motion.factor, LocalBubbleRadius provides bubbles.radiusDp, LocalSeasonalEffects provides seasonal, LocalLightEffects provides lightEffects, LocalEffectScene provides scene, com.kirox.app.ui.theme.LocalChatStyle provides chatStyle) {
+                CompositionLocalProvider(LocalMotionFactor provides motion.factor, LocalBubbleRadius provides bubbles.radiusDp, LocalSeasonalEffects provides seasonal, LocalLightEffects provides lightEffects, LocalEffectScene provides scene, com.kirox.app.ui.theme.LocalChatStyle provides chatStyle, com.kirox.app.ui.components.LocalSceneClock provides sceneClock) {
                     KiroXApp()
                 }
             }
