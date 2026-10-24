@@ -67,6 +67,11 @@ class TelegramClient(context: Context) {
         return true
     }
 
+    /** Runs [block] on the TDLib dispatcher after [delayMs]; repositories use it to coalesce work. */
+    fun post(delayMs: Long = 0, block: () -> Unit) {
+        scope.launch { if (delayMs > 0) kotlinx.coroutines.delay(delayMs); block() }
+    }
+
     @Suppress("UNCHECKED_CAST")
     suspend fun <T : TdApi.Object> query(function: TdApi.Function<T>): T = suspendCancellableCoroutine { continuation ->
         val sent = send(function) { result ->

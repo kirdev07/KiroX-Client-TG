@@ -27,6 +27,7 @@ import com.kirox.app.telegram.TelegramAuthState
 import com.kirox.app.telegram.TelegramViewModel
 import com.kirox.app.ui.auth.TelegramAuthStepScreen
 import com.kirox.app.ui.home.TelegramMainScreen
+import com.kirox.app.ui.components.LocalTelegramFiles
 import com.kirox.app.ui.navigation.BackStack
 import com.kirox.app.ui.navigation.NavGraph
 import com.kirox.app.ui.navigation.Screen
@@ -47,8 +48,9 @@ fun KiroXApp() {
     val recoveryCodeSent by telegramViewModel.auth.recoveryCodeSent.collectAsStateWithLifecycle()
     val connection by telegramViewModel.connection.state.collectAsStateWithLifecycle()
     val profile by telegramViewModel.users.profile.collectAsStateWithLifecycle()
-    val mainChats by telegramViewModel.chats.mainChats.collectAsStateWithLifecycle()
-    val archiveChats by telegramViewModel.chats.archiveChats.collectAsStateWithLifecycle()
+    val chatLists by telegramViewModel.chats.lists.collectAsStateWithLifecycle()
+    val contacts by telegramViewModel.users.contacts.collectAsStateWithLifecycle()
+    val contactsLoading by telegramViewModel.users.contactsLoading.collectAsStateWithLifecycle()
     var phoneState by remember { mutableStateOf<PhoneEntryState?>(null) }
     var splashVisible by rememberSaveable { mutableStateOf(true) }
     val stack = rememberSaveable(saver = BackStack.Saver) { BackStack(listOf(Screen.Phone)) }
@@ -114,7 +116,12 @@ fun KiroXApp() {
                         )
                         Screen.DemoHome -> DemoMainScreen(onExit = { stack.resetTo(Screen.Phone) })
                         Screen.AuthStep -> TelegramAuthStepScreen(telegramAuth, telegramViewModel.auth, telegramBusy, telegramError, recoveryCodeSent)
-                        Screen.Chats -> TelegramMainScreen(mainChats, archiveChats, connection, profile, onLogOut = telegramViewModel.auth::logOut)
+                        Screen.Chats -> CompositionLocalProvider(LocalTelegramFiles provides telegramViewModel.files) {
+                            TelegramMainScreen(
+                                chatLists, telegramViewModel.chats::loadMore, contacts, contactsLoading, profile, connection,
+                                onLogOut = telegramViewModel.auth::logOut
+                            )
+                        }
                     }
                 }
             }
