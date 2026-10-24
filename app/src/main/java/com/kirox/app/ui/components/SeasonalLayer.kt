@@ -90,7 +90,7 @@ fun SeasonalLayer(
     val picked = scene ?: LocalEffectScene.current
     val chosen = remember(picked) { picked.resolved() }
     val clock = LocalSceneClock.current
-    SubscribeToSceneClock(clock, animate, large = mode != SeasonalMode.Header)
+    SubscribeToSceneClock(clock, animate, large = mode == SeasonalMode.Splash)
     // Own graphics layer: a scene redraw re-records only this layer, not the screen behind it.
     Canvas(modifier.graphicsLayer()) {
         // Read the shared clock here, in the draw phase: the scene redraws without recomposing.

@@ -13,8 +13,8 @@ import kotlinx.coroutines.flow.collectLatest
 
 /**
  * One animation clock for every decorative scene on screen.
- * It ticks on a timer only while scenes are visible: 60 fps while a large scene (splash,
- * preview, banner) is shown, 30 fps for header strips alone, 30 fps in light mode.
+ * It ticks on a timer only while scenes are visible: 60 fps while the splash scene is shown,
+ * 30 fps for previews, banners and header strips, 30 fps in light mode.
  * [time] is read only in the draw phase, so scenes redraw without recomposing.
  */
 @Stable
