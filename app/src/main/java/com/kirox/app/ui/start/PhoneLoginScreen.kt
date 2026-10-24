@@ -51,7 +51,6 @@ internal val KiroXOutline: Color @Composable @ReadOnlyComposable get() = Fusion.
 fun PhoneLoginScreen(
     state: PhoneEntryState,
     onChooseCountry: () -> Unit,
-    onDemoMode: () -> Unit,
     onContinue: (String) -> Unit = {},
     onQrLogin: () -> Unit = {},
     externalStatus: String? = null,
@@ -105,31 +104,11 @@ fun PhoneLoginScreen(
                 },
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
-            DemoButton(onClick = {
-                focusManager.clearFocus()
-                onDemoMode()
-            })
             PrimaryButton(text = if (busy) "Подключение…" else "Продолжить", onClick = {
                 focusManager.clearFocus()
                 if (!busy && state.validate()) onContinue(state.internationalNumber)
             })
         }
-    }
-}
-
-@Composable
-private fun DemoButton(onClick: () -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .border(1.dp, KiroXOutline, RoundedCornerShape(16.dp))
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Text("Демо-режим", color = KiroXWhite, fontSize = 15.sp, fontWeight = FontWeight.Medium)
     }
 }
 

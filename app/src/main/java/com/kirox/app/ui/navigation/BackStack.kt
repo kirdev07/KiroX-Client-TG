@@ -13,8 +13,6 @@ enum class Screen(val graph: NavGraph) {
     Phone(NavGraph.Auth),
     Countries(NavGraph.Auth),
     AuthStep(NavGraph.Auth),
-    DemoCode(NavGraph.Auth),
-    DemoHome(NavGraph.Auth),
     Chats(NavGraph.Main),
     Conversation(NavGraph.Main)
 }

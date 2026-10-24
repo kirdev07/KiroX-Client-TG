@@ -26,10 +26,15 @@ class BackStackTest {
         assertFalse(stack.canPop)
     }
 
-    @Test fun demoSuccessReplacesCodeScreen() {
-        val stack = BackStack(listOf(Screen.Phone, Screen.DemoCode))
-        stack.replaceTop(Screen.DemoHome)
-        assertEquals(listOf(Screen.Phone, Screen.DemoHome), stack.snapshot())
+    @Test fun replaceTopKeepsHistoryBelow() {
+        val stack = BackStack(listOf(Screen.Phone, Screen.Countries))
+        stack.replaceTop(Screen.AuthStep)
+        assertEquals(listOf(Screen.Phone, Screen.AuthStep), stack.snapshot())
+    }
+
+    @Test fun removedScreensAreDroppedOnRestore() {
+        val restored = BackStack(listOf("Phone", "DemoHome").mapNotNull { name -> Screen.entries.firstOrNull { it.name == name } })
+        assertEquals(listOf(Screen.Phone), restored.snapshot())
     }
 
     @Test fun emptyRestoreFallsBackToPhone() {

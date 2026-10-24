@@ -1,5 +1,7 @@
 package com.kirox.app.ui.chat
 
+// Shared Fusion chat components used by TelegramChatScreen.
+
 import androidx.compose.runtime.ReadOnlyComposable
 import com.kirox.app.ui.theme.Fusion
 import androidx.activity.compose.BackHandler
@@ -41,10 +43,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.kirox.app.core.demo.DemoMessage
-import com.kirox.app.core.demo.DemoMessageWithReactions
-import com.kirox.app.core.demo.DemoViewModel
 import com.kirox.app.ui.icons.KiroXIcon
 import com.kirox.app.ui.icons.KiroXIcon as IconGlyph
 import kotlinx.coroutines.launch
@@ -56,138 +54,6 @@ import kotlin.math.abs
 private val ChatWhite: Color @Composable @ReadOnlyComposable get() = Fusion.colors.textPrimary
 private val ChatSecondary: Color @Composable @ReadOnlyComposable get() = Fusion.colors.textSecondary
 private val ChatDivider: Color @Composable @ReadOnlyComposable get() = Fusion.colors.surface2
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun DemoChatScreen(chatId: Long, demoViewModel: DemoViewModel, onBack: () -> Unit) {
-    val snapshot by demoViewModel.state.collectAsStateWithLifecycle()
-    val chat = snapshot.chats.firstOrNull { it.chatId == chatId }
-    val peer = ChatPeerUi(chatId, chat?.title ?: "Чат", chat?.status ?: "", chat?.initial ?: "?", canVoiceCall = chat?.contactId != null)
-    val storedMessages by demoViewModel.messages(chatId).collectAsStateWithLifecycle(initialValue = emptyList())
-    val messages = remember(storedMessages) { storedMessages.map(::toMessageUi) }
-    var input by rememberSaveable(chatId, stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue(chat?.draft.orEmpty())) }
-    var replyTo by remember { mutableStateOf<MessageUi?>(null) }
-    var selected by remember { mutableStateOf<MessageUi?>(null) }
-    var editing by remember { mutableStateOf<MessageUi?>(null) }
-    var searchVisible by rememberSaveable { mutableStateOf(false) }
-    var searchQuery by rememberSaveable { mutableStateOf("") }
-    val muted = chat?.muted == true
-    var confirmClear by rememberSaveable { mutableStateOf(false) }
-    var attachments by rememberSaveable { mutableStateOf(false) }
-    var profile by rememberSaveable { mutableStateOf(false) }
-    var overflow by rememberSaveable { mutableStateOf(false) }
-    var notice by remember { mutableStateOf<String?>(null) }
-    val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
-    val clipboard = LocalClipboardManager.current
-    val appearance = remember { ChatAppearance() }
-    val visibleMessages = remember(messages, searchQuery) {
-        if (searchQuery.isBlank()) messages else messages.filter { it.text.contains(searchQuery, ignoreCase = true) }
-    }
-
-    LaunchedEffect(chatId) { demoViewModel.markRead(chatId) }
-    LaunchedEffect(messages.size) { if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex) }
-
-    BackHandler { when { selected != null -> selected = null; searchVisible -> { searchVisible = false; searchQuery = "" }; attachments -> attachments = false; profile -> profile = false; else -> onBack() } }
-
-    Scaffold(
-        containerColor = Color(appearance.backgroundColor),
-        contentWindowInsets = WindowInsets.statusBars,
-        topBar = {
-            Column {
-                ChatHeader(peer, onBack, onProfile = { profile = true }, onOverflow = { overflow = true })
-                AnimatedVisibility(searchVisible) { ChatSearchField(searchQuery, { searchQuery = it }, { searchVisible = false; searchQuery = "" }) }
-            }
-        },
-        bottomBar = {
-            ChatComposer(
-                value = input,
-                reply = replyTo,
-                editing = editing,
-                onValueChange = { input = it; demoViewModel.saveDraft(chatId, it.text) },
-                onCancelContext = { replyTo = null; editing = null; input = TextFieldValue(); demoViewModel.saveDraft(chatId, "") },
-                onAttach = { attachments = true },
-                onEmoji = { input = input.copy(text = input.text + "🙂", selection = androidx.compose.ui.text.TextRange(input.text.length + 2)) },
-                onSend = {
-                    val value = input.text.trim()
-                    if (value.isNotEmpty()) {
-                        val edited = editing
-                        if (edited != null) {
-                            demoViewModel.edit(chatId, edited.id, value)
-                            editing = null
-                        } else {
-                            demoViewModel.send(chatId, value, replyTo?.let(::toDemoMessage))
-                        }
-                        input = TextFieldValue(); demoViewModel.saveDraft(chatId, ""); replyTo = null
-                    }
-                },
-                onMic = { notice = "Запись голоса не подключена к TDLib" },
-                appearance = appearance
-            )
-        }
-    ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding).background(Fusion.colors.background)) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(appearance.messageSpacingDp.dp)
-            ) {
-                if (visibleMessages.isEmpty()) item { Text("Сообщения не найдены", color = ChatSecondary, modifier = Modifier.fillMaxWidth().padding(28.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
-                itemsIndexed(visibleMessages, key = { _, item -> item.id }) { index, message ->
-                    val grouped = index > 0 && visibleMessages[index - 1].direction == message.direction && message.direction != MessageDirection.System
-                    MessageRow(message, grouped, appearance, storedMessages.firstOrNull { it.message.messageId == message.id }?.message?.pinned == true, onLongClick = { selected = message }, onReply = { replyTo = message; editing = null })
-                }
-            }
-            notice?.let { message ->
-                Surface(color = Fusion.colors.surface3, shape = RoundedCornerShape(12.dp), modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp)) {
-                    Text(message, color = ChatWhite, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp))
-                }
-                LaunchedEffect(message) { kotlinx.coroutines.delay(1800); notice = null }
-            }
-            DropdownMenu(expanded = overflow, onDismissRequest = { overflow = false }, modifier = Modifier.align(Alignment.TopEnd).background(Fusion.colors.surface2)) {
-                listOf("Поиск", "Очистить историю", if (muted) "Включить уведомления" else "Отключить уведомления").forEach { label -> DropdownMenuItem(text = { Text(label, color = ChatWhite) }, onClick = {
-                    overflow = false
-                    when (label) {
-                        "Поиск" -> searchVisible = true
-                        "Очистить историю" -> confirmClear = true
-                        else -> { demoViewModel.setMuted(chatId, !muted); notice = if (!muted) "Уведомления отключены в DEMO" else "Уведомления включены в DEMO" }
-                    }
-                }) }
-            }
-        }
-    }
-
-    if (attachments) AttachmentSheet({ attachments = false }, onPick = { notice = "$it — интерфейс готов, отправка не подключена"; attachments = false })
-    selected?.let { message -> MessageActionsSheet(message, onDismiss = { selected = null }, onReply = { replyTo = message; editing = null; selected = null }, onReaction = { emoji ->
-        val existing = message.reactions.firstOrNull { it.emoji == emoji }
-        demoViewModel.react(message.id, emoji, !(existing?.selected ?: false), existing?.count ?: 0)
-        selected = null
-    }, onAction = { action ->
-        when (action) {
-            "Копировать" -> { clipboard.setText(AnnotatedString(message.text)); notice = "Сообщение скопировано" }
-            "Закрепить" -> { val pinned = storedMessages.firstOrNull { it.message.messageId == message.id }?.message?.pinned == true; demoViewModel.pin(message.id, !pinned); notice = if (!pinned) "Сообщение закреплено в DEMO" else "Сообщение откреплено" }
-            "Редактировать" -> { editing = message; replyTo = null; input = TextFieldValue(message.text) }
-            "Удалить" -> { demoViewModel.delete(chatId, message.id); notice = "Сообщение удалено из DEMO" }
-            "Выбрать" -> notice = "Множественный выбор будет следующим улучшением текущего экрана"
-            "Переслать" -> notice = "Для пересылки потребуется выбор получателя"
-        }
-        selected = null
-    }) }
-    if (profile) PeerProfileSheet(peer, { profile = false }, { notice = it })
-    if (confirmClear) AlertDialog(onDismissRequest = { confirmClear = false }, containerColor = Fusion.colors.surface2, title = { Text("Очистить историю?", color = ChatWhite) }, text = { Text("Будут удалены только локальные DEMO-сообщения.", color = ChatSecondary) }, confirmButton = { TextButton(onClick = { demoViewModel.clear(chatId); confirmClear = false }) { Text("Очистить", color = Fusion.colors.danger) } }, dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Отмена", color = ChatWhite) } })
-}
-
-private fun toMessageUi(item: DemoMessageWithReactions): MessageUi = with(item.message) {
-    MessageUi(messageId, author, if (outgoing) MessageDirection.Outgoing else MessageDirection.Incoming,
-        runCatching { MessageKind.valueOf(kind) }.getOrDefault(MessageKind.Text), text,
-        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(sentAt)),
-        runCatching { DeliveryState.valueOf(delivery) }.getOrDefault(DeliveryState.Read),
-        quoteText?.let { QuoteUi(quoteAuthor.orEmpty(), it) }, forwardedFrom,
-        item.reactions.map { ReactionUi(it.emoji, it.count, it.selected) })
-}
-
-private fun toDemoMessage(item: MessageUi) = DemoMessage(messageId = item.id, accountId = 0, chatId = 0, author = item.author, outgoing = item.direction == MessageDirection.Outgoing, text = item.text, sentAt = 0)
 
 @Composable
 internal fun ChatHeader(peer: ChatPeerUi, onBack: () -> Unit, onProfile: () -> Unit, onOverflow: () -> Unit) {
@@ -301,7 +167,7 @@ internal fun ChatComposer(value: TextFieldValue, reply: MessageUi?, editing: Mes
     onDismiss: () -> Unit,
     onPick: (String) -> Unit,
     actions: List<Pair<KiroXIcon, String>> = listOf(KiroXIcon.Media to "Галерея", KiroXIcon.Camera to "Камера", KiroXIcon.File to "Документ", KiroXIcon.Music to "Музыка", KiroXIcon.Contacts to "Контакт", KiroXIcon.Location to "Местоположение"),
-    footer: String? = "Отправка файлов в DEMO недоступна"
+    footer: String? = null
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Fusion.colors.surface1, contentColor = ChatWhite) {
         Text("Вложения", fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
@@ -317,18 +183,6 @@ internal fun ChatComposer(value: TextFieldValue, reply: MessageUi?, editing: Mes
         val actions = buildList { add(KiroXIcon.Reply to "Ответить"); if (message.kind == MessageKind.Text) add(KiroXIcon.Copy to "Копировать"); add(KiroXIcon.Forward to "Переслать"); add(KiroXIcon.Pin to "Закрепить"); if (message.canEdit) add(KiroXIcon.Edit to "Редактировать"); if (message.canDelete) add(KiroXIcon.Delete to "Удалить"); add(KiroXIcon.Check to "Выбрать") }.filterNot { it.second in hidden }
         actions.forEach { (icon, title) -> Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable { if (title == "Ответить") onReply() else onAction(title) }.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { IconGlyph(icon, null, Modifier.size(22.dp), ChatWhite); Spacer(Modifier.width(16.dp)); Text(title, color = if (title == "Удалить") Fusion.colors.danger else ChatWhite, fontSize = 15.sp) } }
         Spacer(Modifier.navigationBarsPadding())
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable private fun PeerProfileSheet(peer: ChatPeerUi, onDismiss: () -> Unit, onNotice: (String) -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Fusion.colors.surface1, contentColor = ChatWhite) {
-        Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(Modifier.size(88.dp).border(1.dp, Fusion.colors.textTertiary, CircleShape).clip(CircleShape).background(Fusion.colors.avatar), contentAlignment = Alignment.Center) { Text(peer.initial, color = ChatWhite, fontSize = 30.sp, fontWeight = FontWeight.Bold) }
-            Spacer(Modifier.height(12.dp)); Text(peer.name, color = ChatWhite, fontSize = 21.sp, fontWeight = FontWeight.Bold); Text(peer.status, color = ChatSecondary, fontSize = 13.sp)
-            Spacer(Modifier.height(18.dp)); OutlinedButton(onClick = { onNotice("Полный профиль будет подключён к реальным данным") }) { Text("Открыть профиль", color = ChatWhite) }
-            Text("DEMO · локальные данные", color = ChatSecondary, fontSize = 11.sp, modifier = Modifier.padding(16.dp)); Spacer(Modifier.navigationBarsPadding())
-        }
     }
 }
 

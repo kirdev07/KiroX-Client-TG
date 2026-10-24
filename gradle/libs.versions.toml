@@ -6,10 +6,8 @@ activityCompose = "1.11.0"
 libphonenumber = "9.0.41"
 zxing = "3.5.4"
 junit = "4.13.2"
-room = "2.7.2"
 datastore = "1.1.7"
 lifecycle = "2.9.3"
-ksp = "2.2.10-2.0.2"
 androidxTestExt = "1.3.0"
 testRunner = "1.7.0"
 
@@ -25,10 +23,6 @@ androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 google-libphonenumber = { module = "com.googlecode.libphonenumber:libphonenumber", version.ref = "libphonenumber" }
 junit = { module = "junit:junit", version.ref = "junit" }
-androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
-androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
-androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
-androidx-room-testing = { module = "androidx.room:room-testing", version.ref = "room" }
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
 androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
 androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
@@ -40,4 +34,3 @@ androidx-test-core = { module = "androidx.test:core", version.ref = "testRunner"
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
-ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }

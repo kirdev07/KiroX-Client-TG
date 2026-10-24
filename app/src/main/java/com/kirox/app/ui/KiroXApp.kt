@@ -17,10 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.kirox.app.phone.PhoneEntryState
-import com.kirox.app.demo.DemoAuth
 import com.kirox.app.ui.country.CountryPickerScreen
-import com.kirox.app.ui.demo.DemoCodeScreen
-import com.kirox.app.ui.home.DemoMainScreen
 import com.kirox.app.ui.splash.AnimatedSplashScreen2
 import com.kirox.app.ui.start.PhoneLoginScreen
 import com.kirox.app.telegram.TelegramAuthState
@@ -77,12 +74,11 @@ fun KiroXApp() {
 
     // TDLib drives the graph: Ready opens main, auth steps open the auth step screen.
     LaunchedEffect(authRevision) {
-        val inDemo = Screen.DemoCode in stack || Screen.DemoHome in stack
         when (telegramAuth) {
             TelegramAuthState.Ready -> if (stack.current.graph != NavGraph.Main) stack.resetTo(Screen.Chats)
             TelegramAuthState.WaitPhoneNumber, TelegramAuthState.Initializing, TelegramAuthState.Closing, is TelegramAuthState.Blocked ->
                 if (stack.current.graph == NavGraph.Main || stack.current == Screen.AuthStep) stack.resetTo(Screen.Phone)
-            else -> if (!inDemo) stack.resetTo(Screen.Phone, Screen.AuthStep)
+            else -> stack.resetTo(Screen.Phone, Screen.AuthStep)
         }
     }
 
@@ -117,20 +113,12 @@ fun KiroXApp() {
                         Screen.Phone -> PhoneLoginScreen(
                             state,
                             onChooseCountry = { stack.push(Screen.Countries) },
-                            onDemoMode = { stack.push(Screen.DemoCode) },
                             onContinue = telegramViewModel.auth::phone,
                             onQrLogin = telegramViewModel.auth::requestQr,
                             externalStatus = telegramBlocked ?: (telegramAuth as? TelegramAuthState.Blocked)?.message ?: telegramError,
                             busy = telegramBusy
                         )
                         Screen.Countries -> CountryPickerScreen(state, onBack = { stack.pop() })
-                        Screen.DemoCode -> DemoCodeScreen(
-                            codeLength = DemoAuth.codeLength,
-                            onVerify = DemoAuth::verify,
-                            onSuccess = { stack.replaceTop(Screen.DemoHome) },
-                            onExit = { stack.pop() }
-                        )
-                        Screen.DemoHome -> DemoMainScreen(onExit = { stack.resetTo(Screen.Phone) })
                         Screen.AuthStep -> TelegramAuthStepScreen(telegramAuth, telegramViewModel.auth, telegramBusy, telegramError, recoveryCodeSent)
                         Screen.Chats -> CompositionLocalProvider(LocalTelegramFiles provides telegramViewModel.files) {
                             TelegramMainScreen(
