@@ -96,6 +96,18 @@ class TelegramUserRepository(private val client: TelegramClient) {
         return result.userIds.firstOrNull()?.takeIf { it != 0L }
     }
 
+    /** Saves only what changed; TDLib then sends UpdateUser / UpdateUserFullInfo and the profile refreshes. */
+    suspend fun updateProfile(first: String, last: String, bio: String, username: String, old: TelegramUserProfile?) {
+        if (first != old?.firstName || last != old.lastName) client.query(TdApi.SetName(first, last))
+        if (bio != old?.bio) client.query(TdApi.SetBio(bio))
+        if (username != old?.username.orEmpty()) client.query(TdApi.SetUsername(username))
+        client.query(TdApi.GetUserFullInfo(myId)).let { info -> client.post { applyFullInfo(info); schedulePublish() } }
+    }
+
+    suspend fun setProfilePhoto(path: String) {
+        client.query(TdApi.SetProfilePhoto(TdApi.InputChatPhotoStatic(TdApi.InputFileLocal(path)), false))
+    }
+
     private companion object { const val PUBLISH_DELAY_MS = 50L }
 }
 
@@ -108,7 +120,8 @@ internal fun TdApi.User.toContact() = TelegramContact(
 
 internal fun TdApi.User.toProfile(bio: String, birthday: String = "") = TelegramUserProfile(
     id, displayName(), usernames?.activeUsernames?.firstOrNull(), phoneNumber.orEmpty(), bio, profilePhoto?.small?.toRef(),
-    isPremium = isPremium, isVerified = verificationStatus?.isVerified == true, birthday = birthday
+    isPremium = isPremium, isVerified = verificationStatus?.isVerified == true, birthday = birthday,
+    firstName = firstName.orEmpty(), lastName = lastName.orEmpty()
 )
 
 internal fun formatBirthday(day: Int, month: Int, year: Int): String =

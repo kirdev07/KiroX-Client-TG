@@ -56,7 +56,8 @@ private const val IN_PROGRESS = "В разработке"
 // ---------- Settings: profile header + icon-tile rows (old Fusion layout) ----------
 
 @Composable
-internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Unit, onOpenCustomization: () -> Unit, onOpenUpdates: () -> Unit, onOpenDevices: () -> Unit, onNotice: (String) -> Unit) {
+internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Unit, onOpenCustomization: () -> Unit, onOpenUpdates: () -> Unit, onOpenDevices: () -> Unit, onEditProfile: () -> Unit, onNotice: (String) -> Unit) {
+    val pickPhoto = rememberProfilePhotoPicker(onNotice)
     val entries = listOf(
         KiroXIcon.Palette to "Кастомизация", KiroXIcon.Chats to "Чаты и папки", KiroXIcon.Bell to "Уведомления",
         KiroXIcon.Shield to "Конфиденциальность", KiroXIcon.Storage to "Данные и память", KiroXIcon.Devices to "Устройства",
@@ -69,7 +70,7 @@ internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Uni
                 SeasonalLayer(Modifier.matchParentSize())
                 Column {
                     ScreenTitle("Настройки", seasonal = false) { TitleAction(KiroXIcon.Search, "Поиск настроек") { onNotice("Поиск по настройкам — $IN_PROGRESS") } }
-                    ProfileHeader(profile, onEdit = { onNotice("Редактирование профиля — $IN_PROGRESS") }, onAccounts = { onNotice("Несколько аккаунтов — $IN_PROGRESS") }, onAvatar = onOpenProfile, onCamera = { onNotice("Смена фото — $IN_PROGRESS") })
+                    ProfileHeader(profile, onEdit = onEditProfile, onAccounts = { onNotice("Несколько аккаунтов — $IN_PROGRESS") }, onAvatar = onOpenProfile, onCamera = pickPhoto)
                 }
             }
         }
@@ -483,7 +484,8 @@ private fun <T> SegmentRow(icon: KiroXIcon, title: String, options: List<T>, sel
 // ---------- My profile (old Fusion layout) ----------
 
 @Composable
-internal fun ProfileTab(profile: TelegramUserProfile?, onOpenSettings: () -> Unit, onOpenSaved: () -> Unit, onLogOut: () -> Unit, onNotice: (String) -> Unit) {
+internal fun ProfileTab(profile: TelegramUserProfile?, onOpenSettings: () -> Unit, onOpenSaved: () -> Unit, onLogOut: () -> Unit, onEditProfile: () -> Unit, onNotice: (String) -> Unit) {
+    val pickPhoto = rememberProfilePhotoPicker(onNotice)
     var menu by remember { mutableStateOf(false) }
     var confirmLogout by remember { mutableStateOf(false) }
     var archived by rememberSaveable { mutableStateOf(false) }
@@ -522,8 +524,8 @@ internal fun ProfileTab(profile: TelegramUserProfile?, onOpenSettings: () -> Uni
                     )
                     Spacer(Modifier.height(16.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ActionTile(KiroXIcon.Camera, "Выбрать фото", Modifier.weight(1f)) { onNotice("Смена фото — $IN_PROGRESS") }
-                        ActionTile(KiroXIcon.Edit, "Изменить", Modifier.weight(1f)) { onNotice("Редактирование профиля — $IN_PROGRESS") }
+                        ActionTile(KiroXIcon.Camera, "Выбрать фото", Modifier.weight(1f), pickPhoto)
+                        ActionTile(KiroXIcon.Edit, "Изменить", Modifier.weight(1f), onEditProfile)
                         ActionTile(KiroXIcon.Tune, "Настройки", Modifier.weight(1f), onOpenSettings)
                     }
                 }
@@ -619,27 +621,110 @@ internal fun KiroXBadge(modifier: Modifier) {
 
 // ---------- New message ----------
 
+private enum class NewChatMode { Menu, Message, GroupMembers, GroupTitle, Channel }
+
 @Composable
-internal fun NewMessageScreen(contacts: List<TelegramContact>, onBack: () -> Unit, onOpenContact: (Long) -> Unit, onOpenSaved: () -> Unit, onNotice: (String) -> Unit) {
-    var picking by rememberSaveable { mutableStateOf(false) }
-    BackHandler { if (picking) picking = false else onBack() }
-    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { BackTitle(if (picking) "Выберите контакт" else "Новое сообщение") { if (picking) picking = false else onBack() } }
-        if (!picking) {
-            item { TileRow(KiroXIcon.Chats, "Новое сообщение") { picking = true } }
-            item { TileRow(KiroXIcon.Contacts, "Создать группу") { onNotice("Создание групп — $IN_PROGRESS") } }
-            item { TileRow(KiroXIcon.Add, "Создать канал") { onNotice("Создание каналов — $IN_PROGRESS") } }
-            item { TileRow(KiroXIcon.Bookmark, "Избранное", onClick = onOpenSaved) }
-            item { TileRow(KiroXIcon.Shield, "Секретный чат") { onNotice("Секретные чаты — $IN_PROGRESS") } }
-        } else {
-            if (contacts.isEmpty()) item { Text("Контактов пока нет", color = Fusion.colors.textSecondary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp)) }
-            items(contacts, key = { it.id }) { contact ->
-                Row(Modifier.fillMaxWidth().clickable { onOpenContact(contact.id) }.heightIn(min = 66.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    TelegramAvatar(contact.name, contact.photo, 50.dp)
-                    Spacer(Modifier.width(12.dp))
-                    Column {
-                        Text(contact.name, color = Fusion.colors.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(TelegramFormat.status(contact.status), color = Fusion.colors.textSecondary, fontSize = 14.sp)
+internal fun NewMessageScreen(
+    contacts: List<TelegramContact>,
+    onBack: () -> Unit,
+    onOpenContact: (Long) -> Unit,
+    onOpenSaved: () -> Unit,
+    onOpenChat: (Long) -> Unit,
+    onNotice: (String) -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val chats = (context.applicationContext as com.kirox.app.KiroXApplication).telegram.chats
+    val scope = rememberCoroutineScope()
+    var mode by rememberSaveable { mutableStateOf(NewChatMode.Menu) }
+    var members by rememberSaveable { mutableStateOf(listOf<Long>()) }
+    var title by rememberSaveable { mutableStateOf("") }
+    var description by rememberSaveable { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    val back = {
+        mode = when (mode) {
+            NewChatMode.GroupTitle -> NewChatMode.GroupMembers
+            NewChatMode.Menu -> { onBack(); NewChatMode.Menu }
+            else -> NewChatMode.Menu
+        }
+    }
+    BackHandler { back() }
+    fun create(group: Boolean) {
+        busy = true
+        scope.launch {
+            runCatching { if (group) chats.createGroup(title.trim(), members) else chats.createChannel(title.trim(), description.trim()) }
+                .onSuccess { id -> onNotice(if (group) "Группа создана" else "Канал создан"); onOpenChat(id) }
+                .onFailure { onNotice(if (group) "Не удалось создать группу" else "Не удалось создать канал") }
+            busy = false
+        }
+    }
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background).imePadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
+        item {
+            BackTitle(
+                when (mode) {
+                    NewChatMode.Menu -> "Новое сообщение"
+                    NewChatMode.Message -> "Выберите контакт"
+                    NewChatMode.GroupMembers -> if (members.isEmpty()) "Участники группы" else "Выбрано: ${members.size}"
+                    NewChatMode.GroupTitle -> "Новая группа"
+                    NewChatMode.Channel -> "Новый канал"
+                }
+            ) { back() }
+        }
+        when (mode) {
+            NewChatMode.Menu -> {
+                item { TileRow(KiroXIcon.Chats, "Новое сообщение") { mode = NewChatMode.Message } }
+                item { TileRow(KiroXIcon.Contacts, "Создать группу") { members = emptyList(); title = ""; mode = NewChatMode.GroupMembers } }
+                item { TileRow(KiroXIcon.Add, "Создать канал") { title = ""; description = ""; mode = NewChatMode.Channel } }
+                item { TileRow(KiroXIcon.Bookmark, "Избранное", onClick = onOpenSaved) }
+                item { TileRow(KiroXIcon.Shield, "Секретный чат") { onNotice("Секретные чаты — $IN_PROGRESS") } }
+            }
+            NewChatMode.Message, NewChatMode.GroupMembers -> {
+                val picking = mode == NewChatMode.GroupMembers
+                if (picking && members.isNotEmpty()) item {
+                    Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(24.dp)).background(Fusion.colors.accent).clickable { mode = NewChatMode.GroupTitle }, contentAlignment = Alignment.Center) {
+                        Text("Далее", color = Fusion.colors.onAccent, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                if (contacts.isEmpty()) item { Text("Контактов пока нет", color = Fusion.colors.textSecondary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp)) }
+                items(contacts, key = { it.id }) { contact ->
+                    val checked = contact.id in members
+                    Row(
+                        Modifier.fillMaxWidth().clickable {
+                            if (picking) members = if (checked) members - contact.id else members + contact.id else onOpenContact(contact.id)
+                        }.heightIn(min = 66.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TelegramAvatar(contact.name, contact.photo, 50.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(contact.name, color = Fusion.colors.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(TelegramFormat.status(contact.status), color = Fusion.colors.textSecondary, fontSize = 14.sp)
+                        }
+                        if (picking) Box(
+                            Modifier.size(24.dp).clip(CircleShape).border(2.dp, if (checked) Fusion.colors.accent else Fusion.colors.outlineStrong, CircleShape).background(if (checked) Fusion.colors.accent else androidx.compose.ui.graphics.Color.Transparent),
+                            contentAlignment = Alignment.Center
+                        ) { if (checked) IconGlyph(KiroXIcon.Check, null, Modifier.size(16.dp), Fusion.colors.onAccent) }
+                    }
+                }
+            }
+            NewChatMode.GroupTitle, NewChatMode.Channel -> {
+                val group = mode == NewChatMode.GroupTitle
+                item { SmallCaption(if (group) "Название группы" else "Название канала") }
+                item { EditField(title, "Название") { title = it.take(128) } }
+                if (!group) {
+                    item { SmallCaption("Описание") }
+                    item { EditField(description, "Необязательно", singleLine = false) { description = it.take(255) } }
+                } else item {
+                    Text("Участники: ${contacts.filter { it.id in members }.joinToString { it.name }}", color = Fusion.colors.textSecondary, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+                }
+                item {
+                    val canCreate = title.isNotBlank() && !busy
+                    Box(
+                        Modifier.padding(16.dp).fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(26.dp))
+                            .background(if (canCreate) Fusion.colors.accent else Fusion.colors.surface2).clickable(enabled = canCreate) { create(group) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (busy) androidx.compose.material3.CircularProgressIndicator(Modifier.size(22.dp), color = Fusion.colors.onAccent, strokeWidth = 2.dp)
+                        else Text(if (group) "Создать группу" else "Создать канал", color = if (canCreate) Fusion.colors.onAccent else Fusion.colors.textTertiary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -852,4 +937,108 @@ private fun SessionRow(session: com.kirox.app.telegram.TelegramSession, onTermin
             modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClick = onTerminate).padding(horizontal = 12.dp, vertical = 10.dp)
         )
     }
+}
+
+/** Picks a photo and sets it as the profile photo; returns the launcher action. */
+@Composable
+internal fun rememberProfilePhotoPicker(onNotice: (String) -> Unit): () -> Unit {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    val users = (context.applicationContext as com.kirox.app.KiroXApplication).telegram.users
+    val launcher = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val path = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    val out = java.io.File(context.cacheDir, "profile_photo_${System.currentTimeMillis()}.jpg")
+                    context.contentResolver.openInputStream(uri)?.use { input -> out.outputStream().use { input.copyTo(it) } }
+                    out.absolutePath
+                }.getOrNull()
+            }
+            if (path == null) { onNotice("Не удалось прочитать фото"); return@launch }
+            onNotice("Загружаю фото…")
+            runCatching { users.setProfilePhoto(path) }
+                .onSuccess { onNotice("Фото профиля обновлено") }
+                .onFailure { onNotice("Не удалось обновить фото") }
+        }
+    }
+    return { launcher.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+}
+
+/** Edit name, bio and username. */
+@Composable
+internal fun ProfileEditScreen(profile: TelegramUserProfile?, onBack: () -> Unit, onNotice: (String) -> Unit) {
+    BackHandler(onBack = onBack)
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    val users = (context.applicationContext as com.kirox.app.KiroXApplication).telegram.users
+    var first by rememberSaveable(profile?.id) { mutableStateOf(profile?.firstName.orEmpty()) }
+    var last by rememberSaveable(profile?.id) { mutableStateOf(profile?.lastName.orEmpty()) }
+    var bio by rememberSaveable(profile?.id) { mutableStateOf(profile?.bio.orEmpty()) }
+    var username by rememberSaveable(profile?.id) { mutableStateOf(profile?.username.orEmpty()) }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val pickPhoto = rememberProfilePhotoPicker(onNotice)
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background).imePadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
+        item { BackTitle("Профиль", onBack) }
+        item {
+            Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.clip(CircleShape).clickable(onClick = pickPhoto)) { TelegramAvatar(profile?.name.orEmpty(), profile?.photo, 96.dp) }
+                Text(
+                    "Изменить фото", color = Fusion.colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium,
+                    modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClick = pickPhoto).padding(horizontal = 12.dp, vertical = 10.dp)
+                )
+            }
+        }
+        item { SmallCaption("Имя") }
+        item { EditField(first, "Имя") { first = it.take(64) } }
+        item { EditField(last, "Фамилия (необязательно)") { last = it.take(64) } }
+        item { SmallCaption("О себе") }
+        item { EditField(bio, "Пара слов о себе", singleLine = false) { bio = it.take(140) } }
+        item { Text("${bio.length}/140", color = Fusion.colors.textTertiary, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp)) }
+        item { SmallCaption("Имя пользователя") }
+        item { EditField(username, "username") { username = it.filter { c -> c.isLetterOrDigit() || c == '_' }.take(32) } }
+        item { Text("Можно использовать a–z, 0–9 и _, от 5 символов. Пустое поле — без имени пользователя.", color = Fusion.colors.textTertiary, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) }
+        error?.let { message -> item { Text(message, color = Fusion.colors.danger, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) } }
+        item {
+            val canSave = first.isNotBlank() && !busy && (username.isEmpty() || username.length >= 5)
+            Box(
+                Modifier.padding(16.dp).fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(26.dp))
+                    .background(if (canSave) Fusion.colors.accent else Fusion.colors.surface2)
+                    .clickable(enabled = canSave) {
+                        busy = true; error = null
+                        scope.launch {
+                            runCatching { users.updateProfile(first.trim(), last.trim(), bio.trim(), username.trim(), profile) }
+                                .onSuccess { onNotice("Профиль сохранён"); onBack() }
+                                .onFailure { error = (it as? com.kirox.app.telegram.TdException)?.let { e -> profileError(e.message.orEmpty()) } ?: "Не удалось сохранить профиль" }
+                            busy = false
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                if (busy) androidx.compose.material3.CircularProgressIndicator(Modifier.size(22.dp), color = Fusion.colors.onAccent, strokeWidth = 2.dp)
+                else Text("Сохранить", color = if (canSave) Fusion.colors.onAccent else Fusion.colors.textTertiary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
+}
+
+private fun profileError(message: String): String = when {
+    message.contains("USERNAME_OCCUPIED", true) -> "Это имя пользователя уже занято"
+    message.contains("USERNAME_INVALID", true) -> "Недопустимое имя пользователя"
+    message.contains("FIRSTNAME_INVALID", true) -> "Недопустимое имя"
+    message.contains("ABOUT_TOO_LONG", true) -> "Слишком длинное «О себе»"
+    else -> "Не удалось сохранить профиль"
+}
+
+@Composable
+private fun EditField(value: String, hint: String, singleLine: Boolean = true, onChange: (String) -> Unit) {
+    androidx.compose.foundation.text.BasicTextField(
+        value, onChange, singleLine = singleLine,
+        textStyle = androidx.compose.ui.text.TextStyle(Fusion.colors.textPrimary, 16.sp),
+        cursorBrush = androidx.compose.ui.graphics.SolidColor(Fusion.colors.textPrimary),
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).fillMaxWidth().heightIn(min = 52.dp)
+            .clip(RoundedCornerShape(14.dp)).background(Fusion.colors.surface1).padding(horizontal = 16.dp, vertical = 15.dp),
+        decorationBox = { inner -> Box { if (value.isEmpty()) Text(hint, color = Fusion.colors.textTertiary, fontSize = 16.sp); inner() } }
+    )
 }

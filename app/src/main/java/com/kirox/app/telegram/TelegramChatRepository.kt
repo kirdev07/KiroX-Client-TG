@@ -38,6 +38,14 @@ class TelegramChatRepository(private val client: TelegramClient) {
 
     fun markUnread(chatId: Long) = act(TdApi.ToggleChatIsMarkedAsUnread(chatId, true))
 
+    /** New basic group with [userIds]; returns its chat id. */
+    suspend fun createGroup(title: String, userIds: List<Long>): Long =
+        client.query(TdApi.CreateNewBasicGroupChat(userIds.toLongArray(), title, 0)).chatId
+
+    /** New broadcast channel; returns its chat id. */
+    suspend fun createChannel(title: String, description: String): Long =
+        client.query(TdApi.CreateNewSupergroupChat(title, false, true, description, null, 0, false)).id
+
     suspend fun isMuted(chatId: Long): Boolean =
         client.query(TdApi.GetChat(chatId)).notificationSettings.let { !it.useDefaultMuteFor && it.muteFor > 0 }
 

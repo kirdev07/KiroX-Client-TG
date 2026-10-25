@@ -71,6 +71,13 @@ class TelegramMessageRepository(
         ))
     }
 
+    fun sendVideo(path: String, caption: String, durationSeconds: Int, width: Int, height: Int) = act { id ->
+        TdApi.SendMessage(id, null, null, null, null, TdApi.InputMessageVideo(
+            TdApi.InputVideo(TdApi.InputFileLocal(path), null, null, 0, IntArray(0), durationSeconds, width, height, true),
+            TdApi.FormattedText(caption, emptyArray()), false, null, false
+        ))
+    }
+
     fun sendDocument(path: String, caption: String) = act { id ->
         TdApi.SendMessage(id, null, null, null, null, TdApi.InputMessageDocument().apply {
             document = TdApi.InputDocument().apply { document = TdApi.InputFileLocal(path) }
@@ -79,6 +86,14 @@ class TelegramMessageRepository(
     }
 
     fun edit(messageId: Long, text: String) = act { id -> TdApi.EditMessageText(id, messageId, null, inputText(text)) }
+
+    /** Adds the emoji reaction, or removes it when this account already chose it. */
+    fun toggleReaction(messageId: Long, emoji: String) = act { id ->
+        val chosen = messages[messageId]?.interactionInfo?.reactions?.reactions
+            ?.any { (it.type as? TdApi.ReactionTypeEmoji)?.emoji == emoji && it.isChosen } == true
+        if (chosen) TdApi.RemoveMessageReaction(id, messageId, TdApi.ReactionTypeEmoji(emoji))
+        else TdApi.AddMessageReaction(id, messageId, TdApi.ReactionTypeEmoji(emoji), false, true)
+    }
 
     fun delete(messageIds: List<Long>, forEveryone: Boolean) = act { id -> TdApi.DeleteMessages(id, messageIds.toLongArray(), forEveryone) }
 
@@ -126,6 +141,7 @@ class TelegramMessageRepository(
             }
             is TdApi.UpdateMessageContent -> if (update.chatId == chatId) messages[update.messageId]?.let { it.content = update.newContent; schedulePublish() }
             is TdApi.UpdateMessageEdited -> if (update.chatId == chatId) messages[update.messageId]?.let { it.editDate = update.editDate; schedulePublish() }
+            is TdApi.UpdateMessageInteractionInfo -> if (update.chatId == chatId) messages[update.messageId]?.let { it.interactionInfo = update.interactionInfo; schedulePublish() }
             is TdApi.UpdateDeleteMessages -> if (update.chatId == chatId && update.isPermanent) {
                 update.messageIds.forEach { messages.remove(it) }; schedulePublish()
             }
@@ -214,6 +230,9 @@ class TelegramMessageRepository(
             replyText = replied?.let(::messagePreview) ?: reply?.content?.let { "Сообщение" },
             forwardedFrom = forwardInfo?.origin?.let(::originName),
             photo = photo?.photo?.toRef() ?: (content as? TdApi.MessageVoiceNote)?.voiceNote?.voice?.toRef(),
+            reactions = interactionInfo?.reactions?.reactions.orEmpty().mapNotNull { reaction ->
+                (reaction.type as? TdApi.ReactionTypeEmoji)?.let { Triple(it.emoji, reaction.totalCount, reaction.isChosen) }
+            },
             photoAspect = photo?.let { if (it.height > 0) it.width.toFloat() / it.height else 0f } ?: 0f,
             fileName = (content as? TdApi.MessageDocument)?.document?.fileName ?: (content as? TdApi.MessageAudio)?.audio?.fileName,
             // Rough client-side hint; TDLib enforces the real rules and reports errors.

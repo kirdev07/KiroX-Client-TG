@@ -64,6 +64,8 @@ interface TelegramChatActions {
     fun sendPhoto(path: String, caption: String)
     fun sendDocument(path: String, caption: String)
     fun sendVoice(path: String, durationSeconds: Int, waveform: ByteArray)
+    fun toggleReaction(messageId: Long, emoji: String)
+    fun sendVideo(path: String, caption: String, durationSeconds: Int, width: Int, height: Int)
     fun edit(messageId: Long, text: String)
     fun delete(messageIds: List<Long>, forEveryone: Boolean)
     fun forward(toChatId: Long, messageIds: List<Long>)
@@ -151,11 +153,21 @@ fun TelegramChatScreen(
             val path = withContext(Dispatchers.IO) { copyToCache(context, uri) }
             if (path == null) { notice = "Не удалось прочитать файл"; return@launch }
             val caption = input.text.trim()
-            if (asPhoto) actions.sendPhoto(path, caption) else actions.sendDocument(path, caption)
+            val isVideo = context.contentResolver.getType(uri)?.startsWith("video/") == true
+            when {
+                isVideo && asPhoto -> {
+                    // Duration and size from the file itself; TDLib makes the preview.
+                    val meta = withContext(Dispatchers.IO) { videoMeta(path) }
+                    actions.sendVideo(path, caption, meta.first, meta.second, meta.third)
+                }
+                asPhoto -> actions.sendPhoto(path, caption)
+                else -> actions.sendDocument(path, caption)
+            }
             input = TextFieldValue()
         }
     }
-    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> uri?.let { sendPicked(it, asPhoto = true) } }
+    // Gallery: photos and videos.
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { sendPicked(it, asPhoto = true) } }
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> uri?.let { sendPicked(it, asPhoto = false) } }
 
     val peer = ChatPeerUi(
@@ -261,9 +273,9 @@ fun TelegramChatScreen(
         onDismiss = { attachments = false },
         onPick = { choice ->
             attachments = false
-            if (choice == "Фото") pickPhoto.launch("image/*") else pickFile.launch("*/*")
+            if (choice == "Фото и видео") pickPhoto.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) else pickFile.launch("*/*")
         },
-        actions = listOf(KiroXIcon.Media to "Фото", KiroXIcon.File to "Файл"),
+        actions = listOf(KiroXIcon.Media to "Фото и видео", KiroXIcon.File to "Файл"),
         footer = if (input.text.isNotBlank()) "Текст из поля ввода станет подписью" else null
     )
     selected?.let { message ->
@@ -272,7 +284,7 @@ fun TelegramChatScreen(
             message,
             onDismiss = { selected = null },
             onReply = { replyTo = message; editing = null; selected = null },
-            onReaction = {},
+            onReaction = { emoji -> actions.toggleReaction(message.id, emoji); selected = null },
             onAction = { action ->
                 selected = null
                 when (action) {
@@ -282,7 +294,7 @@ fun TelegramChatScreen(
                     "Переслать" -> forwarding = message
                 }
             },
-            reactions = false,
+            reactions = history.peerKind != TelegramPeerKind.Saved,
             hidden = buildSet {
                 add("Закрепить"); add("Выбрать")
                 if (source?.canEdit != true) add("Редактировать")
@@ -443,6 +455,7 @@ internal fun TelegramMessage.toUi(time: String) = MessageUi(
     },
     quote = replyText?.let { QuoteUi(replyAuthor.orEmpty(), it) },
     forwardedFrom = forwardedFrom,
+    reactions = reactions.map { (emoji, count, chosen) -> ReactionUi(emoji, count, chosen) },
     canEdit = canEdit,
     photo = photo,
     photoAspect = photoAspect,
@@ -480,3 +493,16 @@ private fun VoiceRecordingBar(elapsedMs: Long, level: Float, onCancel: () -> Uni
         }
     }
 }
+
+/** Duration (s), width and height of a local video; zeros when unreadable. */
+private fun videoMeta(path: String): Triple<Int, Int, Int> = runCatching {
+    android.media.MediaMetadataRetriever().use { r ->
+        r.setDataSource(path)
+        val ms = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0
+        var w = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+        var h = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+        val rotation = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+        if (rotation == 90 || rotation == 270) { val t = w; w = h; h = t }
+        Triple((ms / 1000).toInt(), w, h)
+    }
+}.getOrDefault(Triple(0, 0, 0))

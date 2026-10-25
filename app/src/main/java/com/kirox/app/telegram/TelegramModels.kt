@@ -104,7 +104,9 @@ data class TelegramMessage(
     val photo: TelegramFileRef? = null,
     val photoAspect: Float = 0f,
     val fileName: String? = null,
-    val canEdit: Boolean = false
+    val canEdit: Boolean = false,
+    /** Emoji reactions: emoji, count, whether this account chose it. */
+    val reactions: List<Triple<String, Int, Boolean>> = emptyList()
 )
 
 enum class TelegramPeerKind { User, Bot, Group, Channel, Saved, Unknown }
@@ -170,7 +172,9 @@ data class TelegramUserProfile(
     val isPremium: Boolean = false,
     val isVerified: Boolean = false,
     /** "d.MM" or "d.MM.yyyy", empty when hidden or not set. */
-    val birthday: String = ""
+    val birthday: String = "",
+    val firstName: String = "",
+    val lastName: String = ""
 )
 
 /** Where Telegram sent the login code. */

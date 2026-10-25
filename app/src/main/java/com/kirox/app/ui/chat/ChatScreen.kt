@@ -131,7 +131,7 @@ internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAp
                 if (outgoing && message.delivery != DeliveryState.None) { Spacer(Modifier.width(4.dp)); Text(deliveryGlyph(message.delivery), color = ChatSecondary, fontSize = 10.sp) }
             }
             if (message.reactions.isNotEmpty()) {
-                Row(Modifier.padding(top = 5.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) { message.reactions.forEach { reaction -> Text("${reaction.emoji} ${reaction.count}", color = ChatWhite, fontSize = 11.sp, modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(if (reaction.selected) Fusion.colors.surface3 else Fusion.colors.surface3).padding(horizontal = 8.dp, vertical = 4.dp)) } }
+                Row(Modifier.padding(top = 5.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) { message.reactions.forEach { reaction -> Text("${reaction.emoji} ${reaction.count}", color = ChatWhite, fontSize = 11.sp, modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(if (reaction.selected) Fusion.colors.textTertiary else Fusion.colors.surface3).padding(horizontal = 8.dp, vertical = 4.dp)) } }
             }
         }
     }
@@ -199,7 +199,7 @@ internal fun ChatComposer(value: TextFieldValue, reply: MessageUi?, editing: Mes
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable internal fun MessageActionsSheet(message: MessageUi, onDismiss: () -> Unit, onReply: () -> Unit, onReaction: (String) -> Unit, onAction: (String) -> Unit, reactions: Boolean = true, hidden: Set<String> = emptySet()) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Fusion.colors.surface1, contentColor = ChatWhite) {
-        if (reactions) Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceAround) { listOf("♡", "👍", "🔥", "🙂", "👏").forEach { emoji -> Text(emoji, fontSize = 23.sp, modifier = Modifier.clip(CircleShape).clickable { onReaction(emoji) }.padding(9.dp)) } }
+        if (reactions) Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceAround) { listOf("❤", "👍", "🔥", "😁", "👏").forEach { emoji -> Text(emoji, fontSize = 23.sp, modifier = Modifier.clip(CircleShape).clickable { onReaction(emoji) }.padding(9.dp)) } }
         val actions = buildList { add(KiroXIcon.Reply to "Ответить"); if (message.kind == MessageKind.Text) add(KiroXIcon.Copy to "Копировать"); add(KiroXIcon.Forward to "Переслать"); add(KiroXIcon.Pin to "Закрепить"); if (message.canEdit) add(KiroXIcon.Edit to "Редактировать"); if (message.canDelete) add(KiroXIcon.Delete to "Удалить"); add(KiroXIcon.Check to "Выбрать") }.filterNot { it.second in hidden }
         actions.forEach { (icon, title) -> Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable { if (title == "Ответить") onReply() else onAction(title) }.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { IconGlyph(icon, null, Modifier.size(22.dp), ChatWhite); Spacer(Modifier.width(16.dp)); Text(title, color = if (title == "Удалить") Fusion.colors.danger else ChatWhite, fontSize = 15.sp) } }
         Spacer(Modifier.navigationBarsPadding())
