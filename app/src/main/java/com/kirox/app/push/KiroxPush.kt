@@ -147,7 +147,8 @@ object UnifiedPush {
 class UnifiedPushReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val push = context.push
-        if (intent.getStringExtra("token") != push.unifiedToken()) return
+        // Only the distributor can address this receiver. A registration left from an earlier install
+        // may carry an older token, and its messages must still wake the app.
         when (intent.action) {
             "org.unifiedpush.android.connector.NEW_ENDPOINT" -> intent.getStringExtra("endpoint")?.let(push::onUnifiedEndpoint)
             "org.unifiedpush.android.connector.MESSAGE" -> {
