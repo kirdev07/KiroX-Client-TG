@@ -41,6 +41,11 @@ class TelegramClient(context: Context) {
     fun addUpdateHandler(handler: (TdApi.Object) -> Unit) { updateHandlers += handler }
     fun addFailureHandler(handler: (String) -> Unit) { failureHandlers += handler }
 
+    /**
+     * Starts TDLib once. Called from the UI, from push wake-ups and after a logout closes the client,
+     * possibly at the same time: the lock keeps it to one client per database.
+     */
+    @Synchronized
     fun start() {
         if (client != null) return
         if (BuildConfig.TELEGRAM_API_ID <= 0 || BuildConfig.TELEGRAM_API_HASH.isBlank()) {
