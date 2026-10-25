@@ -872,7 +872,7 @@ internal fun UpdatesScreen(updates: com.kirox.app.update.UpdateCenter, onBack: (
         }
         if (release != null && release.notes.isNotBlank()) {
             item { SmallCaption("Что нового в ${release.version}") }
-            item { Text(release.notes.replace("\r", ""), color = Fusion.colors.textSecondary, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 20.dp)) }
+            item { Text(releaseNotesText(release.notes, Fusion.colors.textPrimary), color = Fusion.colors.textSecondary, fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(horizontal = 20.dp)) }
         }
         item {
             Text(
@@ -1083,3 +1083,21 @@ private fun EditField(value: String, hint: String, singleLine: Boolean = true, o
         decorationBox = { inner -> Box { if (value.isEmpty()) Text(hint, color = Fusion.colors.textTertiary, fontSize = 16.sp); inner() } }
     )
 }
+
+/** The small Markdown subset used in release notes: headings, "- " bullets and **bold**. The top "## KiroX …" title is dropped. */
+private fun releaseNotesText(markdown: String, strong: androidx.compose.ui.graphics.Color): androidx.compose.ui.text.AnnotatedString =
+    androidx.compose.ui.text.buildAnnotatedString {
+        var lines = markdown.replace("\r", "").lines().dropWhile { it.isBlank() }
+        if (lines.firstOrNull()?.startsWith("## ") == true) lines = lines.drop(1).dropWhile { it.isBlank() }
+        lines.forEachIndexed { index, raw ->
+            if (index > 0) append('\n')
+            if (raw.startsWith("#")) {
+                withStyle(androidx.compose.ui.text.SpanStyle(color = strong, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)) { append(raw.trimStart('#').trim()) }
+                return@forEachIndexed
+            }
+            val line = if (raw.startsWith("- ")) "•  " + raw.drop(2) else raw
+            line.split("**").forEachIndexed { i, part ->
+                if (i % 2 == 1) withStyle(androidx.compose.ui.text.SpanStyle(color = strong, fontWeight = FontWeight.SemiBold)) { append(part) } else append(part)
+            }
+        }
+    }
