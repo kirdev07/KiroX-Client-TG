@@ -56,7 +56,7 @@ private const val IN_PROGRESS = "В разработке"
 // ---------- Settings: profile header + icon-tile rows (old Fusion layout) ----------
 
 @Composable
-internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Unit, onOpenCustomization: () -> Unit, onOpenUpdates: () -> Unit, onOpenDevices: () -> Unit, onEditProfile: () -> Unit, onNotice: (String) -> Unit) {
+internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Unit, onOpenCustomization: () -> Unit, onOpenUpdates: () -> Unit, onOpenDevices: () -> Unit, onEditProfile: () -> Unit, onOpenSection: (String) -> Unit, onNotice: (String) -> Unit) {
     val pickPhoto = rememberProfilePhotoPicker(onNotice)
     val entries = listOf(
         KiroXIcon.Palette to "Кастомизация", KiroXIcon.Chats to "Чаты и папки", KiroXIcon.Bell to "Уведомления",
@@ -64,25 +64,51 @@ internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Uni
         KiroXIcon.Star to "Telegram Premium", KiroXIcon.Sliders to "Возможности KiroX", KiroXIcon.Settings to "Дополнительно",
         KiroXIcon.Refresh to "Обновления", KiroXIcon.Info to "О KiroX"
     )
+    // Search filters the rows by name and by what each section contains.
+    var searching by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+    val keywords = mapOf(
+        "Кастомизация" to "тема цвет пузыри анимации обои шрифт",
+        "Чаты и папки" to "чат обои размер текста плотность",
+        "Уведомления" to "звук вибрация превью",
+        "Конфиденциальность" to "приватность номер телефона время захода фото звонки приглашения",
+        "Данные и память" to "кэш память хранилище очистить",
+        "Устройства" to "сеансы сессии выйти",
+        "Дополнительно" to "язык сброс выход лицензии",
+        "Обновления" to "версия бета github"
+    )
+    val shown = if (query.isBlank()) entries else entries.filter { (_, title) ->
+        title.contains(query, true) || keywords[title]?.contains(query, true) == true
+    }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
             Box {
                 SeasonalLayer(Modifier.matchParentSize())
                 Column {
-                    ScreenTitle("Настройки", seasonal = false) { TitleAction(KiroXIcon.Search, "Поиск настроек") { onNotice("Поиск по настройкам — $IN_PROGRESS") } }
+                    ScreenTitle("Настройки", seasonal = false) { TitleAction(KiroXIcon.Search, "Поиск настроек") { searching = !searching; if (!searching) query = "" } }
+                    if (searching) androidx.compose.foundation.text.BasicTextField(
+                        query, { query = it }, singleLine = true,
+                        textStyle = androidx.compose.ui.text.TextStyle(Fusion.colors.textPrimary, 16.sp),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Fusion.colors.textPrimary),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).fillMaxWidth().heightIn(min = 48.dp)
+                            .clip(RoundedCornerShape(24.dp)).background(Fusion.colors.surface1).padding(horizontal = 18.dp, vertical = 14.dp),
+                        decorationBox = { inner -> Box { if (query.isEmpty()) Text("Поиск настроек", color = Fusion.colors.textTertiary, fontSize = 16.sp); inner() } }
+                    )
                     ProfileHeader(profile, onEdit = onEditProfile, onAccounts = { onNotice("Несколько аккаунтов — $IN_PROGRESS") }, onAvatar = onOpenProfile, onCamera = pickPhoto)
                 }
             }
         }
         item { HorizontalDivider(Modifier.padding(horizontal = 18.dp, vertical = 8.dp), color = Fusion.colors.outline) }
-        items(entries, key = { it.second }) { (icon, title) ->
+        if (shown.isEmpty()) item { Text("Ничего не найдено", color = Fusion.colors.textSecondary, modifier = Modifier.padding(20.dp)) }
+        items(shown, key = { it.second }) { (icon, title) ->
             TileRow(icon, title, trailing = if (title == "Обновления") BuildConfig.VERSION_NAME else null) {
                 when (title) {
                     "Кастомизация" -> onOpenCustomization()
                     "Обновления" -> onOpenUpdates()
                     "Устройства" -> onOpenDevices()
+                    "Чаты и папки", "Возможности KiroX" -> onOpenSection(title)
+                    "Уведомления", "Конфиденциальность", "Данные и память", "Telegram Premium", "Дополнительно" -> onOpenSection(title)
                     "О KiroX" -> onNotice("KiroX ${BuildConfig.VERSION_NAME} — независимый клиент Telegram на TDLib")
-                    "Telegram Premium" -> onNotice(if (profile?.isPremium == true) "Telegram Premium активен" else "Telegram Premium — $IN_PROGRESS")
                     else -> onNotice("«$title» — $IN_PROGRESS")
                 }
             }
@@ -426,7 +452,7 @@ private fun SceneRow(scene: com.kirox.app.settings.EffectScene, selected: Boolea
 }
 
 @Composable
-private fun SmallCaption(text: String) {
+internal fun SmallCaption(text: String) {
     Text(text.uppercase(), color = Fusion.colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium, letterSpacing = 1.sp,
         modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 4.dp))
 }
@@ -485,6 +511,8 @@ private fun <T> SegmentRow(icon: KiroXIcon, title: String, options: List<T>, sel
 
 @Composable
 internal fun ProfileTab(profile: TelegramUserProfile?, onOpenSettings: () -> Unit, onOpenSaved: () -> Unit, onLogOut: () -> Unit, onEditProfile: () -> Unit, onNotice: (String) -> Unit) {
+    var showQr by remember { mutableStateOf(false) }
+    if (showQr) ProfileQrDialog(profile) { showQr = false }
     val pickPhoto = rememberProfilePhotoPicker(onNotice)
     var menu by remember { mutableStateOf(false) }
     var confirmLogout by remember { mutableStateOf(false) }
@@ -495,7 +523,7 @@ internal fun ProfileTab(profile: TelegramUserProfile?, onOpenSettings: () -> Uni
                 Box(Modifier.fillMaxWidth()) {
                 SeasonalLayer(Modifier.matchParentSize(), freeZoneFraction = 0.2f..0.8f)
                 Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    TitleAction(KiroXIcon.Qr, "QR-код профиля") { onNotice("QR-код профиля — $IN_PROGRESS") }
+                    TitleAction(KiroXIcon.Qr, "QR-код профиля") { showQr = true }
                     Spacer(Modifier.weight(1f))
                     Box {
                         TitleAction(KiroXIcon.More, "Ещё") { menu = true }
@@ -764,7 +792,7 @@ internal fun TitleAction(icon: KiroXIcon, description: String, size: Dp = 24.dp,
 }
 
 @Composable
-private fun BackTitle(title: String, onBack: () -> Unit) {
+internal fun BackTitle(title: String, onBack: () -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
         TitleAction(KiroXIcon.Back, "Назад", onClick = onBack)
         Text(title, color = Fusion.colors.textPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)

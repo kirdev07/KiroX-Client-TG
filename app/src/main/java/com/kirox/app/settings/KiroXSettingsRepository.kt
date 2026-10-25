@@ -117,6 +117,9 @@ class KiroXSettingsRepository(context: Context) {
     val chatWallpaper: StateFlow<ChatWallpaper> = enumFlow(wallpaperKey, ChatWallpaper.None)
     val chatDensity: StateFlow<ChatDensity> = enumFlow(densityKey, ChatDensity.Normal)
 
+    /** Back to defaults for every KiroX look-and-feel setting; Telegram data is not touched. */
+    fun resetAll() { scope.launch { store.edit { it.clear() } } }
+
     fun setChatTextSize(value: ChatTextSize) { scope.launch { store.edit { it[textSizeKey] = value.name } } }
     fun setChatWallpaper(value: ChatWallpaper) { scope.launch { store.edit { it[wallpaperKey] = value.name } } }
     fun setChatDensity(value: ChatDensity) { scope.launch { store.edit { it[densityKey] = value.name } } }

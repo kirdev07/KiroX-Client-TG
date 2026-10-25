@@ -69,7 +69,7 @@ private enum class MainTab(val item: FusionNavItem) {
     Settings(FusionNavItem("Настройки", KiroXIcon.Tune)),
     Profile(FusionNavItem("Профиль", KiroXIcon.ProfileCircle))
 }
-private enum class SubScreen { None, NewMessage, Customization, Themes, ChatStyle, Animations, Updates, Devices, ProfileEdit }
+private enum class SubScreen { None, NewMessage, Customization, Themes, ChatStyle, Animations, Updates, Devices, ProfileEdit, Notifications, Privacy, Storage, Premium, Advanced }
 private enum class RealChatSection { Archive, Messages }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -148,6 +148,11 @@ fun TelegramMainScreen(
                         onOpenAnimations = { sub = SubScreen.Animations },
                         onBack = { sub = SubScreen.None }
                     )
+                    subScreen == SubScreen.Notifications -> NotificationSettingsScreen(onBack = { sub = SubScreen.None }, onNotice = showNotice)
+                    subScreen == SubScreen.Privacy -> PrivacyScreen(onBack = { sub = SubScreen.None }, onNotice = showNotice)
+                    subScreen == SubScreen.Storage -> StorageScreen(onBack = { sub = SubScreen.None }, onNotice = showNotice)
+                    subScreen == SubScreen.Premium -> PremiumScreen(profile, onBack = { sub = SubScreen.None })
+                    subScreen == SubScreen.Advanced -> AdvancedScreen(onBack = { sub = SubScreen.None }, onLogOut = onLogOut, onNotice = showNotice)
                     subScreen == SubScreen.ProfileEdit -> ProfileEditScreen(profile, onBack = { sub = SubScreen.None }, onNotice = showNotice)
                     subScreen == SubScreen.Devices -> DevicesScreen(
                         (androidx.compose.ui.platform.LocalContext.current.applicationContext as com.kirox.app.KiroXApplication).telegram.sessions,
@@ -168,7 +173,17 @@ fun TelegramMainScreen(
                     )
                     current == MainTab.Chats -> ChatsTab(lists, chatActions, connection, onOpenChat, storyChats, profile, { viewingStoriesOf = it.chatId }, onNewMessage = { sub = SubScreen.NewMessage }) { notice = it }
                     current == MainTab.Contacts -> ContactsTab(contacts, contactsLoading, onOpenContact, calls, onLoadCalls, onOpenChat, showNotice, onStartCall, onAddContact)
-                    current == MainTab.Settings -> SettingsTab(profile, onOpenProfile = { tab = MainTab.Profile }, onOpenCustomization = { sub = SubScreen.Customization }, onOpenUpdates = { sub = SubScreen.Updates }, onOpenDevices = { sub = SubScreen.Devices }, onEditProfile = { sub = SubScreen.ProfileEdit }, onNotice = showNotice)
+                    current == MainTab.Settings -> SettingsTab(profile, onOpenProfile = { tab = MainTab.Profile }, onOpenCustomization = { sub = SubScreen.Customization }, onOpenUpdates = { sub = SubScreen.Updates }, onOpenDevices = { sub = SubScreen.Devices }, onEditProfile = { sub = SubScreen.ProfileEdit }, onOpenSection = { section ->
+                        sub = when (section) {
+                            "Уведомления" -> SubScreen.Notifications
+                            "Конфиденциальность" -> SubScreen.Privacy
+                            "Данные и память" -> SubScreen.Storage
+                            "Telegram Premium" -> SubScreen.Premium
+                            "Чаты и папки" -> SubScreen.ChatStyle
+                            "Возможности KiroX" -> SubScreen.Customization
+                            else -> SubScreen.Advanced
+                        }
+                    }, onNotice = showNotice)
                     else -> ProfileTab(profile, onOpenSettings = { tab = MainTab.Settings }, onOpenSaved = onOpenSavedMessages, onLogOut = onLogOut, onEditProfile = { sub = SubScreen.ProfileEdit }, onNotice = showNotice)
                 }
             }
