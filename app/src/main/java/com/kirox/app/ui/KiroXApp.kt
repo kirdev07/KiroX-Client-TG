@@ -266,6 +266,7 @@ private class TelegramMessageActions(private val repository: TelegramMessageRepo
     override fun sendText(text: String, replyToMessageId: Long?) = repository.sendText(text, replyToMessageId)
     override fun sendPhoto(path: String, caption: String) = repository.sendPhoto(path, caption)
     override fun sendDocument(path: String, caption: String) = repository.sendDocument(path, caption)
+    override fun sendVoice(path: String, durationSeconds: Int, waveform: ByteArray) = repository.sendVoice(path, durationSeconds, waveform)
     override fun edit(messageId: Long, text: String) = repository.edit(messageId, text)
     override fun delete(messageIds: List<Long>, forEveryone: Boolean) = repository.delete(messageIds, forEveryone)
     override fun forward(toChatId: Long, messageIds: List<Long>) = repository.forward(toChatId, messageIds)

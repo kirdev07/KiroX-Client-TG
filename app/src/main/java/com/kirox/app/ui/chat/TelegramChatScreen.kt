@@ -63,6 +63,7 @@ interface TelegramChatActions {
     fun sendText(text: String, replyToMessageId: Long?)
     fun sendPhoto(path: String, caption: String)
     fun sendDocument(path: String, caption: String)
+    fun sendVoice(path: String, durationSeconds: Int, waveform: ByteArray)
     fun edit(messageId: Long, text: String)
     fun delete(messageIds: List<Long>, forEveryone: Boolean)
     fun forward(toChatId: Long, messageIds: List<Long>)
@@ -100,6 +101,24 @@ fun TelegramChatScreen(
 
     val isGroup = history.peerKind == TelegramPeerKind.Group
     // Newest first for reverseLayout; date separators are inserted as system rows.
+    val recorder = remember { VoiceRecorder(context) }
+    var recording by remember { mutableStateOf(false) }
+    var recordLevel by remember { mutableStateOf(0f) }
+    var recordMs by remember { mutableStateOf(0L) }
+    fun startRecording() {
+        if (recorder.start()) { recording = true; recordMs = 0 } else notice = "Не удалось начать запись"
+    }
+    val micPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted) startRecording() else notice = "Без доступа к микрофону голосовое не записать" }
+    LaunchedEffect(recording) {
+        while (recording) {
+            recordLevel = recorder.sampleLevel()
+            recordMs = recorder.elapsedMs
+            kotlinx.coroutines.delay(100)
+        }
+    }
+    DisposableEffect(Unit) { onDispose { recorder.stop(discard = true); VoicePlayer.stop() } }
     var menuOpen by remember { mutableStateOf(false) }
     var searching by remember(history.chatId) { mutableStateOf(false) }
     var searchQuery by remember(history.chatId) { mutableStateOf("") }
@@ -169,7 +188,16 @@ fun TelegramChatScreen(
             }, onCall = { video -> onCall?.invoke(video) })
         },
         bottomBar = {
-            if (history.peerKind != TelegramPeerKind.Channel) ChatComposer(
+            if (recording) VoiceRecordingBar(
+                elapsedMs = recordMs,
+                level = recordLevel,
+                onCancel = { recorder.stop(discard = true); recording = false },
+                onSend = {
+                    val note = recorder.stop()
+                    recording = false
+                    if (note != null) actions.sendVoice(note.file.absolutePath, note.durationSeconds, note.waveform) else notice = "Слишком короткое голосовое"
+                }
+            ) else if (history.peerKind != TelegramPeerKind.Channel) ChatComposer(
                 value = input,
                 reply = replyTo,
                 editing = editing,
@@ -185,7 +213,10 @@ fun TelegramChatScreen(
                         input = TextFieldValue(); replyTo = null; editing = null
                     }
                 },
-                onMic = { notice = "Голосовые сообщения появятся позже" },
+                onMic = {
+                    if (androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) startRecording()
+                    else micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
+                },
                 appearance = appearance
             )
         }
@@ -428,3 +459,24 @@ private fun copyToCache(context: Context, uri: Uri): String? = runCatching {
     context.contentResolver.openInputStream(uri)?.use { input -> target.outputStream().use { input.copyTo(it) } } ?: return null
     target.absolutePath
 }.getOrNull()
+
+/** Shown instead of the composer while a voice note is being recorded. */
+@Composable
+private fun VoiceRecordingBar(elapsedMs: Long, level: Float, onCancel: () -> Unit, onSend: () -> Unit) {
+    Surface(color = Fusion.colors.background) {
+        Row(
+            Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 10.dp, vertical = 8.dp)
+                .clip(RoundedCornerShape(26.dp)).background(Fusion.colors.surface1).padding(start = 18.dp, end = 6.dp).heightIn(min = 52.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(Modifier.size((10 + 8 * level).dp).clip(androidx.compose.foundation.shape.CircleShape).background(Fusion.colors.danger))
+            Spacer(Modifier.width(12.dp))
+            Text("%d:%02d".format(elapsedMs / 60000, elapsedMs / 1000 % 60), color = Fusion.colors.textPrimary, fontSize = 16.sp)
+            Spacer(Modifier.weight(1f))
+            Text("Отмена", color = Fusion.colors.textSecondary, fontSize = 15.sp, modifier = Modifier.clip(RoundedCornerShape(16.dp)).clickable(onClick = onCancel).padding(horizontal = 14.dp, vertical = 12.dp))
+            Box(Modifier.size(44.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Fusion.colors.accent).clickable(onClick = onSend), contentAlignment = Alignment.Center) {
+                com.kirox.app.ui.icons.KiroXIcon(com.kirox.app.ui.icons.KiroXIcon.Send, "Отправить голосовое", Modifier.size(22.dp), Fusion.colors.onAccent)
+            }
+        }
+    }
+}

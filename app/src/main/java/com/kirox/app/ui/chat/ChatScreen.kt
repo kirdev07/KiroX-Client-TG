@@ -121,7 +121,7 @@ internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAp
                     if (message.text.isNotBlank()) { Spacer(Modifier.height(6.dp)); Text(message.text, color = ChatWhite, fontSize = (15f * appearance.textScale).sp, lineHeight = (20f * appearance.textScale).sp) }
                 }
                 MessageKind.Video -> MediaPlaceholder(message.kind)
-                MessageKind.Voice -> VoiceMessage(message.text)
+                MessageKind.Voice -> VoiceMessage(message.text, message.photo)
                 MessageKind.Document -> DocumentMessage(message.text)
                 MessageKind.Text -> Text(message.text, color = ChatWhite, fontSize = (15f * appearance.textScale).sp, lineHeight = (20f * appearance.textScale).sp)
             }
@@ -139,7 +139,27 @@ internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAp
 
 @Composable private fun QuoteBlock(quote: QuoteUi) { Row(Modifier.fillMaxWidth()) { Box(Modifier.width(2.dp).height(36.dp).background(ChatWhite)); Spacer(Modifier.width(7.dp)); Column { Text(quote.author, color = ChatWhite, fontSize = 11.sp, fontWeight = FontWeight.SemiBold); Text(quote.text, color = ChatSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) } } }
 @Composable private fun MediaPlaceholder(kind: MessageKind) { Box(Modifier.fillMaxWidth().height(132.dp).clip(RoundedCornerShape(12.dp)).background(Fusion.colors.surface3), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { IconGlyph(if (kind == MessageKind.Video) KiroXIcon.Video else KiroXIcon.Media, null, Modifier.size(28.dp), ChatSecondary); Text(if (kind == MessageKind.Video) "Видео" else "Фото", color = ChatSecondary, fontSize = 12.sp) } } }
-@Composable private fun VoiceMessage(duration: String) { Row(verticalAlignment = Alignment.CenterVertically) { IconGlyph(KiroXIcon.Send, null, Modifier.size(28.dp), ChatWhite); Spacer(Modifier.width(9.dp)); Box(Modifier.width(120.dp).height(2.dp).background(ChatSecondary)); Spacer(Modifier.width(8.dp)); Text(duration, color = ChatSecondary, fontSize = 11.sp) } }
+/** Voice note: tap plays or stops it; the file downloads on first view. */
+@Composable private fun VoiceMessage(duration: String, file: com.kirox.app.telegram.TelegramFileRef?) {
+    val files = com.kirox.app.ui.components.LocalTelegramFiles.current
+    val path by remember(file?.id, files) {
+        if (file != null && files != null) files.observe(file, 16) else kotlinx.coroutines.flow.MutableStateFlow(file?.localPath)
+    }.collectAsState()
+    var playing by remember(path) { mutableStateOf(path != null && VoicePlayer.playingPath == path) }
+    Row(
+        Modifier.clip(RoundedCornerShape(12.dp)).clickable(enabled = path != null) { path?.let { VoicePlayer.toggle(it) { playing = false }; playing = VoicePlayer.playingPath == it } },
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(36.dp).clip(CircleShape).background(Fusion.colors.surface3), contentAlignment = Alignment.Center) {
+            if (path == null) androidx.compose.material3.CircularProgressIndicator(Modifier.size(16.dp), color = ChatWhite, strokeWidth = 2.dp)
+            else Text(if (playing) "❚❚" else "▶", color = ChatWhite, fontSize = 13.sp)
+        }
+        Spacer(Modifier.width(9.dp))
+        Box(Modifier.width(110.dp).height(2.dp).background(if (playing) ChatWhite else ChatSecondary))
+        Spacer(Modifier.width(8.dp))
+        Text(duration, color = ChatSecondary, fontSize = 11.sp)
+    }
+}
 @Composable private fun DocumentMessage(text: String) { Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(42.dp).clip(CircleShape).background(Fusion.colors.surface3), contentAlignment = Alignment.Center) { IconGlyph(KiroXIcon.File, null, Modifier.size(22.dp), ChatWhite) }; Spacer(Modifier.width(9.dp)); Text(text, color = ChatWhite, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) } }
 private fun deliveryGlyph(state: DeliveryState) = when (state) { DeliveryState.Sending -> "◷"; DeliveryState.Sent -> "✓"; DeliveryState.Delivered, DeliveryState.Read -> "✓✓"; DeliveryState.Failed -> "!"; DeliveryState.None -> "" }
 

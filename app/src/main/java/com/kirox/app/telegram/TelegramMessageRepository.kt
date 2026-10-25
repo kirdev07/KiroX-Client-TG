@@ -65,6 +65,12 @@ class TelegramMessageRepository(
         })
     }
 
+    fun sendVoice(path: String, durationSeconds: Int, waveform: ByteArray) = act { id ->
+        TdApi.SendMessage(id, null, null, null, null, TdApi.InputMessageVoiceNote(
+            TdApi.InputVoiceNote(TdApi.InputFileLocal(path), durationSeconds, waveform), TdApi.FormattedText("", emptyArray()), null
+        ))
+    }
+
     fun sendDocument(path: String, caption: String) = act { id ->
         TdApi.SendMessage(id, null, null, null, null, TdApi.InputMessageDocument().apply {
             document = TdApi.InputDocument().apply { document = TdApi.InputFileLocal(path) }
@@ -192,6 +198,7 @@ class TelegramMessageRepository(
                 is TdApi.MessageText -> content.text.text
                 is TdApi.MessagePhoto -> content.caption.text
                 is TdApi.MessageDocument -> content.caption.text
+                is TdApi.MessageVoiceNote -> "%d:%02d".format(content.voiceNote.duration / 60, content.voiceNote.duration % 60)
                 else -> messagePreview(this)
             },
             date = date,
@@ -206,7 +213,7 @@ class TelegramMessageRepository(
             replyAuthor = replied?.let { senderName(it.senderId) } ?: reply?.let { "Ответ" },
             replyText = replied?.let(::messagePreview) ?: reply?.content?.let { "Сообщение" },
             forwardedFrom = forwardInfo?.origin?.let(::originName),
-            photo = photo?.photo?.toRef(),
+            photo = photo?.photo?.toRef() ?: (content as? TdApi.MessageVoiceNote)?.voiceNote?.voice?.toRef(),
             photoAspect = photo?.let { if (it.height > 0) it.width.toFloat() / it.height else 0f } ?: 0f,
             fileName = (content as? TdApi.MessageDocument)?.document?.fileName ?: (content as? TdApi.MessageAudio)?.audio?.fileName,
             // Rough client-side hint; TDLib enforces the real rules and reports errors.
