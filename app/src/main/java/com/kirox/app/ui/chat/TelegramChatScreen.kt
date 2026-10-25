@@ -50,6 +50,14 @@ import java.util.Date
 import java.util.Locale
 
 /** Actions the real chat screen can perform; implemented by the message repository. */
+/** Chat-level actions behind the ⋮ menu. */
+interface TelegramChatMenuActions {
+    suspend fun isMuted(chatId: Long): Boolean
+    suspend fun setMuted(chatId: Long, muted: Boolean)
+    suspend fun clearHistory(chatId: Long)
+    suspend fun deleteChat(chatId: Long)
+}
+
 interface TelegramChatActions {
     fun loadOlder()
     fun sendText(text: String, replyToMessageId: Long?)
@@ -70,7 +78,8 @@ fun TelegramChatScreen(
     actions: TelegramChatActions,
     onBack: () -> Unit,
     /** Starts a call with the peer of a private chat (its chat id is the user id). */
-    onCall: ((isVideo: Boolean) -> Unit)? = null
+    onCall: ((isVideo: Boolean) -> Unit)? = null,
+    menu: TelegramChatMenuActions? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -91,7 +100,18 @@ fun TelegramChatScreen(
 
     val isGroup = history.peerKind == TelegramPeerKind.Group
     // Newest first for reverseLayout; date separators are inserted as system rows.
-    val rows = remember(history.messages) { toRows(history.messages.asReversed()) }
+    var menuOpen by remember { mutableStateOf(false) }
+    var searching by remember(history.chatId) { mutableStateOf(false) }
+    var searchQuery by remember(history.chatId) { mutableStateOf("") }
+    var muted by remember(history.chatId) { mutableStateOf<Boolean?>(null) }
+    var confirmClear by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    // Search filters the loaded part of the conversation.
+    val shownMessages = remember(history.messages, searchQuery) {
+        val q = searchQuery.trim()
+        if (q.isEmpty()) history.messages else history.messages.filter { it.text.contains(q, ignoreCase = true) }
+    }
+    val rows = remember(shownMessages) { toRows(shownMessages.asReversed()) }
     val byId = remember(history.messages) { history.messages.associateBy { it.id } }
 
     LaunchedEffect(error) { if (error != null) { notice = error; onErrorShown() } }
@@ -138,7 +158,16 @@ fun TelegramChatScreen(
     Scaffold(
         containerColor = Fusion.colors.background,
         contentWindowInsets = WindowInsets.statusBars,
-        topBar = { ChatHeader(peer, onBack, onProfile = {}, onOverflow = { notice = "Меню чата появится позже" }, onCall = { video -> onCall?.invoke(video) }) },
+        topBar = {
+            if (searching) Column(Modifier.statusBarsPadding()) {
+                ChatSearchField(searchQuery, { searchQuery = it }, onClose = { searching = false; searchQuery = "" })
+            } else ChatHeader(peer, onBack, onProfile = {}, onOverflow = {
+                if (menu == null) notice = "Меню чата недоступно" else {
+                    menuOpen = true
+                    scope.launch { muted = runCatching { menu.isMuted(history.chatId) }.getOrNull() }
+                }
+            }, onCall = { video -> onCall?.invoke(video) })
+        },
         bottomBar = {
             if (history.peerKind != TelegramPeerKind.Channel) ChatComposer(
                 value = input,
@@ -168,6 +197,8 @@ fun TelegramChatScreen(
                     if (history.reachedStart) Text("Сообщений пока нет", color = Fusion.colors.textSecondary)
                     else CircularProgressIndicator(Modifier.size(26.dp), color = Fusion.colors.textSecondary, strokeWidth = 2.dp)
                 }
+            } else if (shownMessages.isEmpty()) {
+                Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Ничего не найдено", color = Fusion.colors.textSecondary) }
             } else LazyColumn(
                 state = listState,
                 reverseLayout = true,
@@ -275,6 +306,70 @@ fun TelegramChatScreen(
             Spacer(Modifier.navigationBarsPadding().height(8.dp))
         }
     }
+    if (menuOpen && menu != null) {
+        ModalBottomSheet(onDismissRequest = { menuOpen = false }, containerColor = Fusion.colors.surface1) {
+            val items = buildList {
+                add(Triple(KiroXIcon.Bell, if (muted == true) "Включить звук" else "Без звука", false))
+                add(Triple(KiroXIcon.Search, "Поиск", false))
+                add(Triple(KiroXIcon.Delete, "Очистить историю", true))
+                add(Triple(KiroXIcon.Delete, if (history.peerKind == TelegramPeerKind.User || history.peerKind == TelegramPeerKind.Bot) "Удалить чат" else "Покинуть", true))
+            }
+            items.forEach { (icon, title, danger) ->
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable {
+                        menuOpen = false
+                        when (title) {
+                            "Поиск" -> searching = true
+                            "Очистить историю" -> confirmClear = true
+                            "Удалить чат", "Покинуть" -> confirmDelete = true
+                            else -> {
+                                val target = muted != true
+                                scope.launch {
+                                    runCatching { menu.setMuted(history.chatId, target) }
+                                        .onSuccess { notice = if (target) "Уведомления выключены" else "Уведомления включены" }
+                                        .onFailure { notice = "Не удалось изменить уведомления" }
+                                }
+                            }
+                        }
+                    }.padding(horizontal = 20.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    com.kirox.app.ui.icons.KiroXIcon(icon, null, Modifier.size(22.dp), if (danger) Fusion.colors.danger else Fusion.colors.textPrimary)
+                    Spacer(Modifier.width(16.dp))
+                    Text(title, color = if (danger) Fusion.colors.danger else Fusion.colors.textPrimary, fontSize = 15.sp)
+                }
+            }
+            Spacer(Modifier.navigationBarsPadding().height(8.dp))
+        }
+    }
+    if (confirmClear && menu != null) AlertDialog(
+        onDismissRequest = { confirmClear = false },
+        containerColor = Fusion.colors.surface1,
+        title = { Text("Очистить историю?", color = Fusion.colors.textPrimary) },
+        text = { Text("Сообщения удалятся только у вас.", color = Fusion.colors.textSecondary) },
+        confirmButton = {
+            TextButton(onClick = {
+                confirmClear = false
+                scope.launch { runCatching { menu.clearHistory(history.chatId) }.onFailure { notice = "Не удалось очистить историю" } }
+            }) { Text("Очистить", color = Fusion.colors.danger) }
+        },
+        dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Отмена", color = Fusion.colors.textSecondary) } }
+    )
+    if (confirmDelete && menu != null) AlertDialog(
+        onDismissRequest = { confirmDelete = false },
+        containerColor = Fusion.colors.surface1,
+        title = { Text(if (history.peerKind == TelegramPeerKind.User || history.peerKind == TelegramPeerKind.Bot) "Удалить чат?" else "Покинуть «${history.title}»?", color = Fusion.colors.textPrimary) },
+        text = { Text("Чат пропадёт из списка.", color = Fusion.colors.textSecondary) },
+        confirmButton = {
+            TextButton(onClick = {
+                confirmDelete = false
+                scope.launch {
+                    runCatching { menu.deleteChat(history.chatId) }.onSuccess { onBack() }.onFailure { notice = "Не удалось удалить чат" }
+                }
+            }) { Text("Удалить", color = Fusion.colors.danger) }
+        },
+        dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Отмена", color = Fusion.colors.textSecondary) } }
+    )
 }
 
 private data class ChatRow(val key: String, val message: MessageUi)

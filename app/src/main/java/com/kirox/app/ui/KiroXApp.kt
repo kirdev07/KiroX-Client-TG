@@ -123,6 +123,14 @@ fun KiroXApp() {
     val storyChats by telegramViewModel.stories.storyChats.collectAsStateWithLifecycle()
     val storyActions = remember { TelegramStoryActionsImpl(telegramViewModel.stories) }
     val chatActions = remember { TelegramChatListActionsImpl(telegramViewModel.chats) }
+    val chatMenu = remember {
+        object : com.kirox.app.ui.chat.TelegramChatMenuActions {
+            override suspend fun isMuted(chatId: Long) = telegramViewModel.chats.isMuted(chatId)
+            override suspend fun setMuted(chatId: Long, muted: Boolean) = telegramViewModel.chats.setMuted(chatId, muted)
+            override suspend fun clearHistory(chatId: Long) = telegramViewModel.chats.clearHistory(chatId)
+            override suspend fun deleteChat(chatId: Long) = telegramViewModel.chats.deleteChat(chatId)
+        }
+    }
     val chatError by telegramViewModel.chats.error.collectAsStateWithLifecycle()
     val settings = remember { (context.applicationContext as com.kirox.app.KiroXApplication).settings }
     val palette by settings.palette.collectAsStateWithLifecycle()
@@ -237,6 +245,7 @@ fun KiroXApp() {
                                 forwardTargets = chatLists.main.chats,
                                 actions = actions,
                                 onBack = { stack.pop() },
+                                menu = chatMenu,
                                 onCall = if (com.kirox.app.ui.call.callsEnabled) { video ->
                                     withCallPermissions(video) { telegramViewModel.voip.start(chatId, video) }
                                 } else null

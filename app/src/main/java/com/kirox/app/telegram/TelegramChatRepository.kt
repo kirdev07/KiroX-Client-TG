@@ -38,6 +38,28 @@ class TelegramChatRepository(private val client: TelegramClient) {
 
     fun markUnread(chatId: Long) = act(TdApi.ToggleChatIsMarkedAsUnread(chatId, true))
 
+    suspend fun isMuted(chatId: Long): Boolean =
+        client.query(TdApi.GetChat(chatId)).notificationSettings.let { !it.useDefaultMuteFor && it.muteFor > 0 }
+
+    /** Mutes "forever" (Telegram treats a year and more as forever) or unmutes the chat. */
+    suspend fun setMuted(chatId: Long, muted: Boolean) {
+        val settings = client.query(TdApi.GetChat(chatId)).notificationSettings
+        settings.useDefaultMuteFor = false
+        settings.muteFor = if (muted) MUTE_FOREVER_S else 0
+        client.query(TdApi.SetChatNotificationSettings(chatId, settings))
+    }
+
+    /** Deletes the chat history for this account only; the chat stays in the list. */
+    suspend fun clearHistory(chatId: Long) { client.query(TdApi.DeleteChatHistory(chatId, false, false)) }
+
+    /** Private chats: delete for this account and remove from the list. Groups and channels: leave. */
+    suspend fun deleteChat(chatId: Long) {
+        when (client.query(TdApi.GetChat(chatId)).type) {
+            is TdApi.ChatTypePrivate, is TdApi.ChatTypeSecret -> client.query(TdApi.DeleteChatHistory(chatId, true, false))
+            else -> client.query(TdApi.LeaveChat(chatId))
+        }
+    }
+
     fun markRead(chatId: Long) = client.post {
         val chat = chatsById[chatId] ?: return@post
         chat.lastMessage?.let { act(TdApi.ViewMessages(chatId, longArrayOf(it.id), TdApi.MessageSourceChatList(), true)) }
@@ -209,3 +231,5 @@ internal fun messagePreview(message: TdApi.Message?): String = when (val content
     null -> ""
     else -> "Сообщение"
 }
+
+private const val MUTE_FOREVER_S = 400 * 24 * 60 * 60
