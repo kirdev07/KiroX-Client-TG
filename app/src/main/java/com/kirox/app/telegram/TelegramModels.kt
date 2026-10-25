@@ -121,7 +121,9 @@ data class TelegramChatHistory(
     /** Oldest first. */
     val messages: List<TelegramMessage> = emptyList(),
     val loadingOlder: Boolean = false,
-    val reachedStart: Boolean = false
+    val reachedStart: Boolean = false,
+    /** End-to-end encrypted secret chat; its chat id is not the peer's user id. */
+    val isSecret: Boolean = false
 )
 
 enum class TelegramCallKind { Incoming, Outgoing, Missed, Unanswered }

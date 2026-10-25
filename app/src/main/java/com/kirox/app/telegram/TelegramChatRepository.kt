@@ -38,6 +38,9 @@ class TelegramChatRepository(private val client: TelegramClient) {
 
     fun markUnread(chatId: Long) = act(TdApi.ToggleChatIsMarkedAsUnread(chatId, true))
 
+    /** End-to-end encrypted chat with [userId]; works only between this device and the peer's device. */
+    suspend fun createSecretChat(userId: Long): Long = client.query(TdApi.CreateNewSecretChat(userId)).id
+
     /** New basic group with [userIds]; returns its chat id. */
     suspend fun createGroup(title: String, userIds: List<Long>): Long =
         client.query(TdApi.CreateNewBasicGroupChat(userIds.toLongArray(), title, 0)).chatId

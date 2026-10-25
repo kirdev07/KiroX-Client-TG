@@ -163,7 +163,7 @@ class TelegramMessageRepository(
         val id = chatId.takeIf { it != 0L } ?: return
         val chat = chats.chat(id)
         val type = chat?.type
-        val peerUser = (type as? TdApi.ChatTypePrivate)?.let { users.user(it.userId) }
+        val peerUser = (type as? TdApi.ChatTypePrivate)?.let { users.user(it.userId) } ?: (type as? TdApi.ChatTypeSecret)?.let { users.user(it.userId) }
         savedChat = peerUser != null && peerUser.id == users.myId()
         val mapped = messages.values.map { it.toModel() }
         _history.value = TelegramChatHistory(
@@ -181,7 +181,8 @@ class TelegramMessageRepository(
             peerStatus = peerUser?.status?.toStatus(),
             messages = mapped,
             loadingOlder = loadingOlder,
-            reachedStart = reachedStart
+            reachedStart = reachedStart,
+            isSecret = type is TdApi.ChatTypeSecret
         )
         markViewed(id)
     }
