@@ -74,12 +74,24 @@ class NativeCall private constructor(private val listener: Listener) {
         @Volatile var available = false
             private set
 
+        private val loaded = java.util.concurrent.CountDownLatch(1)
+
         fun load(context: Context) {
             if (available) return
             available = runCatching {
                 ContextUtils.initialize(context.applicationContext)
                 System.loadLibrary("kiroxvoip")
             }.isSuccess
+            loaded.countDown()
+        }
+
+        /**
+         * Waits for [load] (it runs on a background thread at app start), so a call placed or
+         * answered right after a cold start still gets the engine. Returns [available].
+         */
+        fun awaitLoaded(timeoutMs: Long = LOAD_TIMEOUT_MS): Boolean {
+            loaded.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+            return available
         }
 
         /** Engine versions for TDLib's CallProtocol, newest first. */
@@ -106,6 +118,7 @@ class NativeCall private constructor(private val listener: Listener) {
         @JvmStatic private external fun nativeVersions(): Array<String>
         @JvmStatic private external fun nativeMaxLayer(): Int
 
+        private const val LOAD_TIMEOUT_MS = 5_000L
         private const val INIT_TIMEOUT_S = 30.0
         private const val RECEIVE_TIMEOUT_S = 10.0
     }

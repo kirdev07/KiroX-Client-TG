@@ -69,6 +69,7 @@ class TelegramVoipRepository(private val client: TelegramClient, private val use
 
     fun start(userId: Long, isVideo: Boolean) = client.post {
         if (_call.value?.phase.isLive()) return@post
+        NativeCall.awaitLoaded()
         val user = users.user(userId)
         // Placeholder until TDLib reports the call id.
         _call.value = TelegramActiveCall(0, userId, user?.displayName().orEmpty(), user?.profilePhoto?.small?.toRef(), true, isVideo, CallPhase.Calling(false), cameraOn = isVideo)
@@ -81,6 +82,7 @@ class TelegramVoipRepository(private val client: TelegramClient, private val use
     fun accept() = client.post {
         val current = _call.value ?: return@post
         if (current.phase != CallPhase.Incoming) return@post
+        NativeCall.awaitLoaded()
         _call.value = current.copy(phase = CallPhase.Connecting)
         client.send(TdApi.AcceptCall(current.id, protocol()))
     }
@@ -134,7 +136,7 @@ class TelegramVoipRepository(private val client: TelegramClient, private val use
             is TdApi.CallStateExchangingKeys -> CallPhase.Connecting
             is TdApi.CallStateReady -> {
                 emojis = state.emojis.toList()
-                if (!mediaAvailable) {
+                if (!NativeCall.awaitLoaded()) {
                     if (current?.phase !is CallPhase.Active) activeSince = System.currentTimeMillis()
                     CallPhase.Active(activeSince)
                 } else {
