@@ -19,6 +19,7 @@ class KiroXApplication : Application() {
         Thread { com.kirox.app.voip.NativeCall.load(this) }.start()
         com.kirox.app.voip.CallController(this, telegram.voip).start()
         push // registers push channels once Telegram is signed in
+        telegram.notifications // new-message notifications
         updates.checkDaily()
     }
 

@@ -90,6 +90,15 @@ fun KiroXApp() {
         if (granted[android.Manifest.permission.RECORD_AUDIO] == true) action?.invoke()
         else android.widget.Toast.makeText(context, "Без доступа к микрофону звонок невозможен", android.widget.Toast.LENGTH_LONG).show()
     }
+    // Android 13+: ask once after sign-in, so new-message notifications can be shown.
+    val notificationPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { }
+    LaunchedEffect(telegramAuth) {
+        if (telegramAuth == TelegramAuthState.Ready && android.os.Build.VERSION.SDK_INT >= 33 &&
+            androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+    }
     fun withCallPermissions(video: Boolean, action: () -> Unit) {
         val needed = listOfNotNull(
             android.Manifest.permission.RECORD_AUDIO,

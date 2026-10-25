@@ -56,6 +56,9 @@
         <receiver
             android:name=".voip.CallActionReceiver"
             android:exported="false" />
+        <receiver
+            android:name=".notify.MessageActionReceiver"
+            android:exported="false" />
         <service
             android:name=".push.KiroxFirebaseService"
             android:exported="false">

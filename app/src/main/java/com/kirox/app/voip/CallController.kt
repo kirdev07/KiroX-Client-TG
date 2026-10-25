@@ -23,8 +23,8 @@ class CallController(private val app: Application, private val voip: TelegramVoi
     fun start() {
         CallNotifications.ensureChannels(app)
         app.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
-            override fun onActivityStarted(activity: Activity) { startedActivities++; update() }
-            override fun onActivityStopped(activity: Activity) { startedActivities--; update() }
+            override fun onActivityStarted(activity: Activity) { startedActivities++; com.kirox.app.notify.AppVisibility.visible = true; update() }
+            override fun onActivityStopped(activity: Activity) { startedActivities--; com.kirox.app.notify.AppVisibility.visible = startedActivities > 0; update() }
             override fun onActivityCreated(activity: Activity, state: Bundle?) {}
             override fun onActivityResumed(activity: Activity) {}
             override fun onActivityPaused(activity: Activity) {}
