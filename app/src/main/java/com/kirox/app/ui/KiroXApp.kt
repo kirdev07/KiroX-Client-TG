@@ -128,6 +128,7 @@ fun KiroXApp() {
             override suspend fun isMuted(chatId: Long) = telegramViewModel.chats.isMuted(chatId)
             override suspend fun setMuted(chatId: Long, muted: Boolean) = telegramViewModel.chats.setMuted(chatId, muted)
             override suspend fun clearHistory(chatId: Long) = telegramViewModel.chats.clearHistory(chatId)
+            override suspend fun setAutoDelete(chatId: Long, seconds: Int) = telegramViewModel.chats.setAutoDelete(chatId, seconds)
             override suspend fun deleteChat(chatId: Long) = telegramViewModel.chats.deleteChat(chatId)
         }
     }

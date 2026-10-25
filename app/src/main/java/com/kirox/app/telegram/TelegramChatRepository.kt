@@ -73,6 +73,9 @@ class TelegramChatRepository(private val client: TelegramClient) {
     }
 
     /** Deletes the chat history for this account only; the chat stays in the list. */
+    /** New messages disappear [seconds] after they are read (secret chats) or sent; 0 turns it off. */
+    suspend fun setAutoDelete(chatId: Long, seconds: Int) { client.query(TdApi.SetChatMessageAutoDeleteTime(chatId, seconds)) }
+
     suspend fun clearHistory(chatId: Long) { client.query(TdApi.DeleteChatHistory(chatId, false, false)) }
 
     /** Private chats: delete for this account and remove from the list. Groups and channels: leave. */
