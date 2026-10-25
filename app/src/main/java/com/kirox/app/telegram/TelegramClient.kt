@@ -104,7 +104,8 @@ class TelegramClient(context: Context) {
     /** Closes TDLib while the app is idle in the background; the next [start] or push opens it again. */
     @Synchronized
     fun pauseIfIdle() {
-        if (!isIdle() || client == null || !authorized) return
+        // Also before Ready: a half-open connection in a frozen process blocks pushes just the same.
+        if (!isIdle() || client == null) return
         paused = true
         send(TdApi.Close())
     }
