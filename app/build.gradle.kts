@@ -16,7 +16,12 @@ plugins {
 }
 
 // Firebase push is configured only when app/google-services.json is present (not committed).
-if (file("google-services.json").exists()) apply(plugin = "com.google.gms.google-services")
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+    // releaseCheck (package com.kirox.app.check) is a local R8 check build without Firebase:
+    // google-services.json has no client for it, so its config task is skipped.
+    tasks.matching { it.name == "processReleaseCheckGoogleServices" }.configureEach { enabled = false }
+}
 
 android {
     namespace = "com.kirox.app"
