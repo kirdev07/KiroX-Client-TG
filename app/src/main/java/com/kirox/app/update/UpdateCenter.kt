@@ -133,14 +133,13 @@ class UpdateCenter(private val context: Context) {
             }
             prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).apply()
             val list = JSONArray(body)
-            for (i in 0 until list.length()) {
-                val json = list.getJSONObject(i)
-                if (json.optBoolean("draft") || (json.optBoolean("prerelease") && !betaChannel)) continue
-                val release = parse(json) ?: continue
-                // Releases come newest first: the first one that is newer than this build wins.
-                return release.takeIf { AppVersion.isNewer(it.version, currentVersion) }
-            }
-            return null
+            // GitHub orders releases by the tagged commit's date, which is wrong when a tag points at an
+            // older commit, so pick the highest version rather than the first entry.
+            return (0 until list.length()).map { list.getJSONObject(it) }
+                .filterNot { it.optBoolean("draft") || (it.optBoolean("prerelease") && !betaChannel) }
+                .filter { AppVersion.isNewer(it.optString("tag_name").removePrefix("v"), currentVersion) }
+                .sortedWith { a, b -> if (AppVersion.isNewer(a.optString("tag_name").removePrefix("v"), b.optString("tag_name").removePrefix("v"))) -1 else 1 }
+                .firstNotNullOfOrNull(::parse)
         } finally {
             connection.disconnect()
         }
