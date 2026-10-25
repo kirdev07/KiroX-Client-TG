@@ -30,3 +30,6 @@ secrets.properties
 # Temporary UI screenshots and layout dumps in repository root
 /*.png
 /*.xml
+
+# Firebase config for push (contains project keys)
+app/google-services.json

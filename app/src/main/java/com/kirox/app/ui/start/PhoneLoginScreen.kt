@@ -33,6 +33,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -66,7 +70,9 @@ fun PhoneLoginScreen(
     ) {
         // Seasonal strip to the right of the logo; the form below stays clean.
         com.kirox.app.ui.components.SeasonalLayer(Modifier.fillMaxWidth().height(96.dp), freeZoneFraction = 0.42f..0.96f)
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 180.dp)) {
+        // The form scrolls above the buttons, so the keyboard never pushes buttons over it.
+        Column(Modifier.fillMaxSize()) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp)) {
             Spacer(Modifier.height(18.dp))
             BrandLogo()
             Spacer(Modifier.height(58.dp))
@@ -94,22 +100,26 @@ fun PhoneLoginScreen(
             if (externalStatus != null) Text(externalStatus, color = Fusion.colors.danger, fontSize = 13.sp, lineHeight = 18.sp)
         }
         Column(
-            modifier = Modifier.navigationBarsPadding().padding(horizontal = 24.dp, vertical = 20.dp).align(Alignment.BottomCenter),
+            modifier = Modifier.navigationBarsPadding().padding(horizontal = 24.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                "Войти по QR-коду",
-                color = if (busy) KiroXSecondary else KiroXWhite, fontSize = 15.sp, fontWeight = FontWeight.Medium,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).wrapContentHeight().clickable(enabled = !busy) {
-                    focusManager.clearFocus()
-                    onQrLogin()
-                },
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-            )
             PrimaryButton(text = if (busy) "Подключение…" else "Продолжить", onClick = {
                 focusManager.clearFocus()
                 if (!busy && state.validate()) onContinue(state.internationalNumber)
             })
+            // Second way in, styled as a quieter button; hidden while typing so only "Продолжить" sits above the keyboard.
+            val keyboardOpen = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
+            if (!keyboardOpen) Row(
+                Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(26.dp))
+                    .border(1.dp, Fusion.colors.outlineStrong, RoundedCornerShape(26.dp))
+                    .clickable(enabled = !busy) { focusManager.clearFocus(); onQrLogin() },
+                horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically
+            ) {
+                com.kirox.app.ui.icons.KiroXIcon(com.kirox.app.ui.icons.KiroXIcon.Qr, null, Modifier.size(20.dp), if (busy) KiroXSecondary else KiroXWhite)
+                Spacer(Modifier.width(10.dp))
+                Text("Войти по QR-коду", color = if (busy) KiroXSecondary else KiroXWhite, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            }
+        }
         }
     }
 }
@@ -171,7 +181,7 @@ private fun PhoneNumberField(state: PhoneEntryState) {
         Text(state.country.dialCode, color = KiroXWhite, fontSize = 17.sp, fontWeight = FontWeight.Medium)
         Box(Modifier.padding(horizontal = 14.dp).width(1.dp).height(28.dp).background(KiroXOutline))
         BasicTextField(
-            value = state.formattedNumber,
+            value = state.digits,
             onValueChange = state::updateNumber,
             modifier = Modifier.weight(1f).onFocusChanged { focused = it.isFocused },
             textStyle = TextStyle(color = KiroXWhite, fontSize = 17.sp),
@@ -179,6 +189,7 @@ private fun PhoneNumberField(state: PhoneEntryState) {
             keyboardActions = KeyboardActions(onDone = { state.validate() }),
             singleLine = true,
             cursorBrush = SolidColor(KiroXWhite),
+            visualTransformation = PhoneNumberVisualTransformation { state.formattedNumber },
             decorationBox = { inner ->
                 Box {
                     if (state.digits.isEmpty()) Text("700 000 00 00", color = Fusion.colors.textTertiary, fontSize = 17.sp)
@@ -186,6 +197,36 @@ private fun PhoneNumberField(state: PhoneEntryState) {
                 }
             }
         )
+    }
+}
+
+private class PhoneNumberVisualTransformation(
+    private val formattedValue: () -> String
+) : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        val formatted = formattedValue()
+        val originalLength = text.text.length
+        val originalToTransformed = IntArray(originalLength + 1)
+        var digitIndex = 0
+        originalToTransformed[0] = 0
+        formatted.forEachIndexed { index, character ->
+            if (character.isDigit() && digitIndex < originalLength) {
+                digitIndex++
+                originalToTransformed[digitIndex] = index + 1
+            }
+        }
+        while (digitIndex < originalLength) {
+            digitIndex++
+            originalToTransformed[digitIndex] = formatted.length
+        }
+        val mapping = object : OffsetMapping {
+            override fun originalToTransformed(offset: Int): Int =
+                originalToTransformed[offset.coerceIn(0, originalLength)]
+
+            override fun transformedToOriginal(offset: Int): Int =
+                formatted.take(offset.coerceIn(0, formatted.length)).count(Char::isDigit).coerceAtMost(originalLength)
+        }
+        return TransformedText(AnnotatedString(formatted), mapping)
     }
 }
 

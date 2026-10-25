@@ -97,7 +97,6 @@ object CallNotifications {
     fun manager(context: Context): NotificationManager = context.getSystemService(NotificationManager::class.java)
 
     fun ensureChannels(context: Context) {
-        if (Build.VERSION.SDK_INT < 26) return
         val incoming = NotificationChannel(CHANNEL_INCOMING, "Входящие звонки", NotificationManager.IMPORTANCE_HIGH).apply {
             setSound(
                 RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE),

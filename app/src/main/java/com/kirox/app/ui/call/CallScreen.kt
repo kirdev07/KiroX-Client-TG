@@ -165,9 +165,9 @@ private fun CallWindow(live: Boolean, earMode: Boolean) {
     val context = LocalContext.current
     val activity = context as? android.app.Activity
     DisposableEffect(live) {
-        if (live && activity != null && android.os.Build.VERSION.SDK_INT >= 27) { activity.setShowWhenLocked(true); activity.setTurnScreenOn(true) }
+        if (live && activity != null) { activity.setShowWhenLocked(true); activity.setTurnScreenOn(true) }
         onDispose {
-            if (activity != null && android.os.Build.VERSION.SDK_INT >= 27) { activity.setShowWhenLocked(false); activity.setTurnScreenOn(false) }
+            if (activity != null) { activity.setShowWhenLocked(false); activity.setTurnScreenOn(false) }
         }
     }
     DisposableEffect(earMode) {
@@ -324,7 +324,7 @@ private fun IncomingAlert(active: Boolean) {
         val ringtone = runCatching {
             RingtoneManager.getRingtone(context, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))?.apply {
                 audioAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).build()
-                if (android.os.Build.VERSION.SDK_INT >= 28) isLooping = true
+                isLooping = true
                 play()
             }
         }.getOrNull()
@@ -332,7 +332,7 @@ private fun IncomingAlert(active: Boolean) {
         val vibrator = context.getSystemService(Vibrator::class.java)
         val pattern = longArrayOf(0, 600, 900)
         runCatching {
-            if (android.os.Build.VERSION.SDK_INT >= 26) vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0)) else vibrator?.vibrate(pattern, 0)
+            vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
         }
         onDispose {
             runCatching { ringtone?.stop() }

@@ -15,16 +15,20 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Firebase push is configured only when app/google-services.json is present (not committed).
+if (file("google-services.json").exists()) apply(plugin = "com.google.gms.google-services")
+
 android {
     namespace = "com.kirox.app"
-    compileSdk = 36
+    compileSdk = 37
+    compileSdkMinor = 1
 
     defaultConfig {
         applicationId = "com.kirox.app"
-        minSdk = 23
-        targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        minSdk = 29
+        targetSdk = 37
+        versionCode = 2
+        versionName = "1.0.0-beta.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("int", "TELEGRAM_API_ID", secret("KIROX_API_ID", "kirox.apiId").toIntOrNull()?.toString() ?: "0")
         buildConfigField("boolean", "TELEGRAM_USE_TEST_DC", "false")
@@ -44,12 +48,24 @@ android {
         }
     }
 
+    signingConfigs {
+        // Release key lives outside the repository; its path and passwords come from kirox.properties.
+        val storePath = secret("KIROX_RELEASE_STORE_FILE")
+        if (storePath.isNotEmpty() && file(storePath).exists()) create("release") {
+            storeFile = file(storePath)
+            storePassword = secret("KIROX_RELEASE_STORE_PASSWORD")
+            keyAlias = secret("KIROX_RELEASE_KEY_ALIAS")
+            keyPassword = secret("KIROX_RELEASE_KEY_PASSWORD")
+        }
+    }
+
     buildTypes {
         debug {
             // Telegram test DC for safe auth testing: KIROX_USE_TEST_DC=true in kirox.properties. Never in release.
             buildConfigField("boolean", "TELEGRAM_USE_TEST_DC", (secret("KIROX_USE_TEST_DC") == "true").toString())
         }
         release {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -102,6 +118,8 @@ dependencies {
     implementation(libs.google.libphonenumber)
     implementation(libs.zxing.core)
     implementation(libs.androidx.datastore.preferences)
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-messaging")
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation("androidx.annotation:annotation:1.9.1")

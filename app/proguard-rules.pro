@@ -8,3 +8,10 @@
     public static int v(...);
     public static int d(...);
 }
+
+# Call engine: libkiroxvoip calls these classes, methods and fields by name over JNI.
+-keep class org.webrtc.** { *; }
+-keep class com.kirox.app.voip.NativeCall { *; }
+-keep class com.kirox.app.voip.VideoCapturerDevice { *; }
+-keepclasseswithmembernames class * { native <methods>; }
+-dontwarn org.webrtc.**

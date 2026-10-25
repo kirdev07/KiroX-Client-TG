@@ -1,5 +1,6 @@
 package com.kirox.app.ui.home
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -54,7 +55,7 @@ private const val IN_PROGRESS = "В разработке"
 // ---------- Settings: profile header + icon-tile rows (old Fusion layout) ----------
 
 @Composable
-internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Unit, onOpenCustomization: () -> Unit, onNotice: (String) -> Unit) {
+internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Unit, onOpenCustomization: () -> Unit, onOpenUpdates: () -> Unit, onNotice: (String) -> Unit) {
     val entries = listOf(
         KiroXIcon.Palette to "Кастомизация", KiroXIcon.Chats to "Чаты и папки", KiroXIcon.Bell to "Уведомления",
         KiroXIcon.Shield to "Конфиденциальность", KiroXIcon.Storage to "Данные и память", KiroXIcon.Devices to "Устройства",
@@ -76,6 +77,7 @@ internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Uni
             TileRow(icon, title, trailing = if (title == "Обновления") BuildConfig.VERSION_NAME else null) {
                 when (title) {
                     "Кастомизация" -> onOpenCustomization()
+                    "Обновления" -> onOpenUpdates()
                     "О KiroX" -> onNotice("KiroX ${BuildConfig.VERSION_NAME} — независимый клиент Telegram на TDLib")
                     "Telegram Premium" -> onNotice(if (profile?.isPremium == true) "Telegram Premium активен" else "Telegram Premium — $IN_PROGRESS")
                     else -> onNotice("«$title» — $IN_PROGRESS")
@@ -679,5 +681,78 @@ private fun BackTitle(title: String, onBack: () -> Unit) {
     Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
         TitleAction(KiroXIcon.Back, "Назад", onClick = onBack)
         Text(title, color = Fusion.colors.textPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** Updates: current version, beta channel, check / download / install from GitHub releases. */
+@Composable
+internal fun UpdatesScreen(updates: com.kirox.app.update.UpdateCenter, onBack: () -> Unit) {
+    BackHandler(onBack = onBack)
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val state by updates.state.collectAsStateWithLifecycle()
+    var beta by remember { mutableStateOf(updates.betaChannel) }
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
+        item { BackTitle("Обновления", onBack) }
+        item {
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                Text("KiroX ${updates.currentVersion}", color = Fusion.colors.textPrimary, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(4.dp))
+                val status = when (val s = state) {
+                    com.kirox.app.update.UpdateState.Idle -> "Нажмите «Проверить», чтобы узнать о новой версии"
+                    com.kirox.app.update.UpdateState.Checking -> "Проверяю…"
+                    com.kirox.app.update.UpdateState.UpToDate -> "У вас последняя версия"
+                    is com.kirox.app.update.UpdateState.Available -> "Доступна версия ${s.release.version}"
+                    is com.kirox.app.update.UpdateState.Downloading -> "Скачиваю ${s.release.version}: ${(s.progress * 100).toInt()}%"
+                    is com.kirox.app.update.UpdateState.Ready -> "Версия ${s.release.version} скачана и проверена"
+                    is com.kirox.app.update.UpdateState.Failed -> s.message
+                }
+                Text(status, color = if (state is com.kirox.app.update.UpdateState.Failed) Fusion.colors.danger else Fusion.colors.textSecondary, fontSize = 14.sp)
+            }
+        }
+        item {
+            val s = state
+            val (label, action) = when (s) {
+                is com.kirox.app.update.UpdateState.Available -> "Скачать ${s.release.version}" to { updates.download(s.release) }
+                is com.kirox.app.update.UpdateState.Ready -> "Установить" to { updates.install(s.file) }
+                is com.kirox.app.update.UpdateState.Failed -> (if (s.release != null) "Повторить" else "Проверить снова") to { s.release?.let(updates::download) ?: updates.check() }
+                is com.kirox.app.update.UpdateState.Checking, is com.kirox.app.update.UpdateState.Downloading -> "Подождите…" to {}
+                else -> "Проверить обновления" to { updates.check() }
+            }
+            Box(
+                Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(16.dp))
+                    .background(Fusion.colors.accent).clickable(enabled = s !is com.kirox.app.update.UpdateState.Checking && s !is com.kirox.app.update.UpdateState.Downloading, onClick = action),
+                contentAlignment = Alignment.Center
+            ) { Text(label, color = Fusion.colors.onAccent, fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
+            if (s is com.kirox.app.update.UpdateState.Downloading) androidx.compose.material3.LinearProgressIndicator(
+                progress = { s.progress }, modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(), color = Fusion.colors.accent, trackColor = Fusion.colors.surface2
+            )
+        }
+        item {
+            Row(Modifier.fillMaxWidth().clickable { beta = !beta; updates.betaChannel = beta }.heightIn(min = 56.dp).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Бета-версии", color = Fusion.colors.textPrimary, fontSize = 16.sp)
+                    Text("Новые функции раньше, но возможны ошибки", color = Fusion.colors.textSecondary, fontSize = 12.sp)
+                }
+                Switch(beta, { beta = it; updates.betaChannel = it }, colors = SwitchDefaults.colors(checkedThumbColor = Fusion.colors.onAccent, checkedTrackColor = Fusion.colors.accent, uncheckedThumbColor = Fusion.colors.textTertiary, uncheckedTrackColor = Fusion.colors.surface2, uncheckedBorderColor = Fusion.colors.outlineStrong))
+            }
+        }
+        val release = when (val s = state) {
+            is com.kirox.app.update.UpdateState.Available -> s.release
+            is com.kirox.app.update.UpdateState.Downloading -> s.release
+            is com.kirox.app.update.UpdateState.Ready -> s.release
+            else -> null
+        }
+        if (release != null && release.notes.isNotBlank()) {
+            item { SmallCaption("Что нового в ${release.version}") }
+            item { Text(release.notes.replace("\r", ""), color = Fusion.colors.textSecondary, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 20.dp)) }
+        }
+        item {
+            Text(
+                "Все версии на GitHub", color = Fusion.colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp).clickable {
+                    context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(com.kirox.app.update.UpdateCenter.RELEASES_URL)))
+                }
+            )
+        }
     }
 }

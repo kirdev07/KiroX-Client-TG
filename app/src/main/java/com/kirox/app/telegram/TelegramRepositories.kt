@@ -61,13 +61,20 @@ class TelegramAuthRepository(private val client: TelegramClient) {
             is TdApi.AuthorizationStateWaitTdlibParameters -> TelegramAuthState.Initializing
             is TdApi.AuthorizationStateWaitPhoneNumber -> TelegramAuthState.WaitPhoneNumber
             is TdApi.AuthorizationStateWaitCode -> TelegramAuthState.WaitCode(
-                state.codeInfo.phoneNumber.orEmpty(), codeLength(state.codeInfo.type), state.codeInfo.nextType != null, state.codeInfo.timeout
+                state.codeInfo.phoneNumber.orEmpty(), codeLength(state.codeInfo.type), state.codeInfo.nextType != null, state.codeInfo.timeout,
+                when (state.codeInfo.type) {
+                    is TdApi.AuthenticationCodeTypeTelegramMessage -> CodeDestination.App
+                    is TdApi.AuthenticationCodeTypeSms -> CodeDestination.Sms
+                    is TdApi.AuthenticationCodeTypeCall -> CodeDestination.Call
+                    is TdApi.AuthenticationCodeTypeFragment -> CodeDestination.Fragment
+                    else -> CodeDestination.Other
+                }
             )
             is TdApi.AuthorizationStateWaitPassword -> TelegramAuthState.WaitPassword(
                 state.passwordHint.orEmpty(), state.hasRecoveryEmailAddress, state.recoveryEmailAddressPattern.orEmpty()
             )
             is TdApi.AuthorizationStateWaitEmailAddress -> TelegramAuthState.WaitEmailAddress
-            is TdApi.AuthorizationStateWaitEmailCode -> TelegramAuthState.WaitEmailCode(state.codeInfo.length)
+            is TdApi.AuthorizationStateWaitEmailCode -> TelegramAuthState.WaitEmailCode(state.codeInfo.length, state.codeInfo.emailAddressPattern.orEmpty())
             is TdApi.AuthorizationStateWaitOtherDeviceConfirmation -> TelegramAuthState.WaitOtherDevice(state.link)
             is TdApi.AuthorizationStateWaitRegistration -> TelegramAuthState.WaitRegistration(
                 state.termsOfService?.text?.text.orEmpty(), state.termsOfService?.minUserAge ?: 0
