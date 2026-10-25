@@ -32,8 +32,8 @@ android {
         applicationId = "com.kirox.app"
         minSdk = 29
         targetSdk = 37
-        versionCode = 2
-        versionName = "1.0.0-beta.1"
+        versionCode = 3
+        versionName = "1.0.0-beta.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("int", "TELEGRAM_API_ID", secret("KIROX_API_ID", "kirox.apiId").toIntOrNull()?.toString() ?: "0")
         buildConfigField("boolean", "TELEGRAM_USE_TEST_DC", "false")
