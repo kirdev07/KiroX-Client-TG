@@ -32,6 +32,8 @@ class TelegramMessageRepository(
 
     init { client.addUpdateHandler(::handle) }
 
+    private var resumeChatId = 0L
+
     fun open(id: Long) = client.post {
         if (chatId == id) return@post
         if (chatId != 0L) client.send(TdApi.CloseChat(chatId))
@@ -46,6 +48,7 @@ class TelegramMessageRepository(
     }
 
     fun close(id: Long) = client.post {
+        if (resumeChatId == id) { resumeChatId = 0; _history.value = TelegramChatHistory() }
         if (chatId != id) return@post
         client.send(TdApi.CloseChat(id))
         chatId = 0; messages.clear(); viewed.clear()
@@ -147,8 +150,14 @@ class TelegramMessageRepository(
             }
             is TdApi.UpdateChatReadOutbox -> if (update.chatId == chatId) { lastReadOutbox = update.lastReadOutboxMessageId; schedulePublish() }
             is TdApi.UpdateUser, is TdApi.UpdateUserStatus -> if (chatId != 0L) schedulePublish()
-            is TdApi.UpdateAuthorizationState -> if (update.authorizationState is TdApi.AuthorizationStateClosed) {
-                chatId = 0; messages.clear(); viewed.clear(); _history.value = TelegramChatHistory()
+            is TdApi.UpdateAuthorizationState -> when (update.authorizationState) {
+                // After a background pause the open chat loads again; logout and account switch drop it.
+                is TdApi.AuthorizationStateClosed -> {
+                    resumeChatId = if (client.paused) chatId else 0
+                    chatId = 0; messages.clear(); viewed.clear()
+                    if (resumeChatId == 0L) _history.value = TelegramChatHistory()
+                }
+                is TdApi.AuthorizationStateReady -> if (resumeChatId != 0L) { open(resumeChatId); resumeChatId = 0 }
             }
         }
     }

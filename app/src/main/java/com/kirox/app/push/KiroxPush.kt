@@ -91,7 +91,7 @@ class KiroxPush(private val context: Context, private val client: TelegramClient
         log("push received, payload=${payload?.length ?: 0} chars")
         client.start()
         if (!payload.isNullOrBlank()) client.send(TdApi.ProcessPushNotification(payload))
-        client.post(SYNC_WINDOW_MS) { done() }
+        client.post(SYNC_WINDOW_MS) { client.pauseIfIdle(); done() }
     }
 
     fun unifiedToken(): String = prefs.getString(KEY_TOKEN, null) ?: UUID.randomUUID().toString().also { prefs.edit().putString(KEY_TOKEN, it).apply() }

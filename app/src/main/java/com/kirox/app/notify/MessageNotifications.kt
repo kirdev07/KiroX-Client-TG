@@ -44,7 +44,8 @@ class MessageNotifications(
             when (update) {
                 is TdApi.UpdateAuthorizationState -> when (update.authorizationState) {
                     is TdApi.AuthorizationStateReady -> enable()
-                    is TdApi.AuthorizationStateClosed -> { groups.keys.forEach(::cancel); groups.clear() }
+                    // A background pause keeps what is already shown; logout and account switch clear it.
+                    is TdApi.AuthorizationStateClosed -> { if (!client.paused) groups.keys.forEach(::cancel); groups.clear() }
                 }
                 is TdApi.UpdateActiveNotifications -> update.groups.forEach { group ->
                     apply(group.id, group.chatId, group.notifications, IntArray(0))

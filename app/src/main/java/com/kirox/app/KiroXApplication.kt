@@ -17,7 +17,7 @@ class KiroXApplication : Application() {
         removeLegacyDemoData()
         // The call engine is large: load it off the main thread, calls check NativeCall.available.
         Thread { com.kirox.app.voip.NativeCall.load(this) }.start()
-        com.kirox.app.voip.CallController(this, telegram.voip).start()
+        com.kirox.app.voip.CallController(this, telegram.voip, telegram.client).start()
         push // registers push channels once Telegram is signed in
         telegram.notifications // new-message notifications
         updates.checkDaily()

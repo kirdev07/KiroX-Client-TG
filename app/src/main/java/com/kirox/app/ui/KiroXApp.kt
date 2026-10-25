@@ -158,7 +158,9 @@ fun KiroXApp() {
     LaunchedEffect(authRevision) {
         when (telegramAuth) {
             TelegramAuthState.Ready -> if (stack.current.graph != NavGraph.Main) stack.resetTo(Screen.Chats)
-            TelegramAuthState.WaitPhoneNumber, TelegramAuthState.Initializing, TelegramAuthState.Closing, is TelegramAuthState.Blocked ->
+            // Initializing/Closing also happen when TDLib reopens after a background pause: keep the screen.
+            TelegramAuthState.Initializing, TelegramAuthState.Closing -> Unit
+            TelegramAuthState.WaitPhoneNumber, is TelegramAuthState.Blocked ->
                 if (stack.current.graph == NavGraph.Main || stack.current == Screen.AuthStep) stack.resetTo(Screen.Phone)
             else -> stack.resetTo(Screen.Phone, Screen.AuthStep)
         }

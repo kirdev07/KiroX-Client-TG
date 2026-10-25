@@ -32,6 +32,14 @@ class TelegramClient(context: Context) {
     private var session = TelegramSessionManager(appContext, accounts.active)
     @Volatile private var authorized = false
     private var loggingOut = false
+    /**
+     * True while TDLib is closed because the app is in the background. Android freezes cached
+     * processes, and an open but frozen connection makes Telegram skip push notifications.
+     */
+    @Volatile var paused = false
+        private set
+    /** Set by the app: whether nothing needs TDLib right now (no screen, no call). */
+    @Volatile var isIdle: () -> Boolean = { false }
     /** Slot of an abandoned sign-in, deleted once its client has closed. */
     private var discardOnClose: String? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
@@ -53,6 +61,7 @@ class TelegramClient(context: Context) {
      */
     @Synchronized
     fun start() {
+        paused = false
         if (client != null) return
         if (BuildConfig.TELEGRAM_API_ID <= 0 || BuildConfig.TELEGRAM_API_HASH.isBlank()) {
             _blocked.value = "API_ID и API_HASH не настроены в kirox.properties"
@@ -90,6 +99,14 @@ class TelegramClient(context: Context) {
             if (result is TdApi.Error) continuation.resumeWithException(TdException(result)) else continuation.resume(result as T)
         }
         if (!sent) continuation.resumeWithException(TdException(TdApi.Error(503, "TDLib ещё не готова")))
+    }
+
+    /** Closes TDLib while the app is idle in the background; the next [start] or push opens it again. */
+    @Synchronized
+    fun pauseIfIdle() {
+        if (!isIdle() || client == null || !authorized) return
+        paused = true
+        send(TdApi.Close())
     }
 
     /** Active account's session folder name. */
@@ -130,7 +147,7 @@ class TelegramClient(context: Context) {
                 accounts.active = accounts.accounts.value.first().session
             }
             loggingOut = false
-            start()
+            if (!paused) start()
         }
     }
 

@@ -15,12 +15,14 @@ import kotlinx.coroutines.launch
  * Ties calls to the rest of the system: an incoming call while the app is off screen becomes a
  * full-screen notification, and a call in progress runs in [CallService] so it survives leaving the app.
  */
-class CallController(private val app: Application, private val voip: TelegramVoipRepository) {
+class CallController(private val app: Application, private val voip: TelegramVoipRepository, private val client: com.kirox.app.telegram.TelegramClient) {
+    private var pauseJob: kotlinx.coroutines.Job? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var startedActivities = 0
     private val appVisible get() = startedActivities > 0
 
     fun start() {
+        client.isIdle = { !appVisible && voip.call.value == null }
         CallNotifications.ensureChannels(app)
         app.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) { startedActivities++; com.kirox.app.notify.AppVisibility.visible = true; update() }
@@ -36,6 +38,9 @@ class CallController(private val app: Application, private val voip: TelegramVoi
 
     private fun update() {
         val call = voip.call.value
+        // Background without a call: close TDLib after a grace period so Telegram sends pushes.
+        if (appVisible) { pauseJob?.cancel(); pauseJob = null; client.start() }
+        else if (call == null && pauseJob?.isActive != true) pauseJob = scope.launch { kotlinx.coroutines.delay(BACKGROUND_GRACE_MS); client.pauseIfIdle() }
         val notifications = CallNotifications.manager(app)
         if (call?.phase == CallPhase.Incoming && !appVisible) {
             runCatching { notifications.notify(CallNotifications.INCOMING_ID, CallNotifications.incoming(app, call)) }
@@ -46,3 +51,6 @@ class CallController(private val app: Application, private val voip: TelegramVoi
         if (call != null && call.phase.isLive() && call.phase != CallPhase.Incoming && appVisible) CallService.start(app)
     }
 }
+
+/** How long TDLib stays connected after the app leaves the screen. */
+private const val BACKGROUND_GRACE_MS = 30_000L
