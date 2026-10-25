@@ -249,7 +249,11 @@ private fun StatusLine(call: TelegramActiveCall) {
         is CallPhase.Active -> {
             var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
             LaunchedEffect(phase.sinceMillis) { while (true) { now = System.currentTimeMillis(); delay(500) } }
-            formatDuration(((now - phase.sinceMillis) / 1000).toInt())
+            when {
+                phase.reconnecting -> "Переподключение…"
+                call.signalBars <= 1 -> formatDuration(((now - phase.sinceMillis) / 1000).toInt()) + " · плохая связь"
+                else -> formatDuration(((now - phase.sinceMillis) / 1000).toInt())
+            }
         }
         is CallPhase.Ended -> when (phase.reason) {
             CallEndReason.Declined -> if (call.isOutgoing) "Звонок отклонён" else "Вы отклонили звонок"
@@ -261,6 +265,10 @@ private fun StatusLine(call: TelegramActiveCall) {
     }
     val muted = call.phase is CallPhase.Ended || call.phase is CallPhase.Failed
     Text(text, color = if (call.phase is CallPhase.Failed) CallRed else if (muted) Color(0x99FFFFFF) else Color(0xCCFFFFFF), fontSize = 16.sp, textAlign = TextAlign.Center)
+    if (call.phase is CallPhase.Active && call.remoteMuted) {
+        Spacer(Modifier.height(6.dp))
+        Text("У собеседника выключен микрофон", color = Color(0x99FFFFFF), fontSize = 13.sp, textAlign = TextAlign.Center)
+    }
 }
 
 @Composable

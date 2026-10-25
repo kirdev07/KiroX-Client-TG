@@ -37,8 +37,18 @@ class KiroxPush(private val context: Context, private val client: TelegramClient
         UnifiedPush.register(context, unifiedToken())
     }
 
+    /**
+     * Telegram rejects FCM for this api_id (APP_PUSH_APIKEY_MISSING); after a rejection it is not
+     * retried until the next app version.
+     */
     fun registerFirebase(token: String) {
-        client.send(TdApi.RegisterDevice(TdApi.DeviceTokenFirebaseCloudMessaging(token, false), LongArray(0))) { log("FCM register: $it") }
+        if (prefs.getInt(KEY_FCM_REJECTED, 0) == com.kirox.app.BuildConfig.VERSION_CODE) return
+        client.send(TdApi.RegisterDevice(TdApi.DeviceTokenFirebaseCloudMessaging(token, false), LongArray(0))) { result ->
+            log("FCM register: $result")
+            if (result is TdApi.Error && result.message.contains("APIKEY", ignoreCase = true)) {
+                prefs.edit().putInt(KEY_FCM_REJECTED, com.kirox.app.BuildConfig.VERSION_CODE).apply()
+            }
+        }
     }
 
     fun onUnifiedEndpoint(endpoint: String) {
@@ -58,7 +68,9 @@ class KiroxPush(private val context: Context, private val client: TelegramClient
     /** P-256 public key (uncompressed point) and auth secret, base64url, generated once. */
     private fun webPushKeys(): Pair<String, String> {
         val saved = prefs.getString(KEY_WEBPUSH_KEY, null) to prefs.getString(KEY_WEBPUSH_AUTH, null)
-        if (saved.first != null && saved.second != null) return saved.first!! to saved.second!!
+        val savedKey = saved.first
+        val savedAuth = saved.second
+        if (savedKey != null && savedAuth != null) return savedKey to savedAuth
         val generator = java.security.KeyPairGenerator.getInstance("EC").apply { initialize(java.security.spec.ECGenParameterSpec("secp256r1")) }
         val point = (generator.generateKeyPair().public as java.security.interfaces.ECPublicKey).w
         fun coord(value: java.math.BigInteger) = value.toByteArray().takeLast(32).toByteArray().let { ByteArray(32 - it.size) + it }
@@ -84,6 +96,7 @@ class KiroxPush(private val context: Context, private val client: TelegramClient
     private companion object {
         const val KEY_TOKEN = "unified_token"
         const val KEY_ENDPOINT = "unified_endpoint"
+        const val KEY_FCM_REJECTED = "fcm_rejected_version"
         const val KEY_WEBPUSH_KEY = "webpush_p256dh"
         const val KEY_WEBPUSH_AUTH = "webpush_auth"
     }

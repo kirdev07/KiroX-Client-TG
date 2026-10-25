@@ -120,7 +120,7 @@ class UpdateCenter(private val context: Context) {
             connection.setRequestProperty("User-Agent", "KiroX-Android")
             prefs.getString(KEY_ETAG, null)?.takeIf { prefs.contains(KEY_BODY) }?.let { connection.setRequestProperty("If-None-Match", it) }
             val body = when (val code = connection.responseCode) {
-                304 -> prefs.getString(KEY_BODY, "[]")!!
+                304 -> prefs.getString(KEY_BODY, null) ?: "[]"
                 200 -> connection.inputStream.bufferedReader().use { it.readText() }.also {
                     prefs.edit().putString(KEY_ETAG, connection.getHeaderField("ETag")).putString(KEY_BODY, it).apply()
                 }
@@ -207,7 +207,7 @@ class UpdateCenter(private val context: Context) {
     /** Same package, same signing certificate and a higher version code than the installed app. */
     private fun verifyPackage(file: File) {
         val pm = context.packageManager
-        val flags = if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else @Suppress("DEPRECATION") PackageManager.GET_SIGNATURES
+        val flags = PackageManager.GET_SIGNING_CERTIFICATES
         val archive = pm.getPackageArchiveInfo(file.path, flags) ?: fail(file, "Файл не является приложением Android")
         val installed = pm.getPackageInfo(context.packageName, flags)
         if (archive.packageName != context.packageName) fail(file, "Это другое приложение")
@@ -215,10 +215,10 @@ class UpdateCenter(private val context: Context) {
         if (certificates(archive) != certificates(installed)) fail(file, "Подпись не совпадает с установленной версией")
     }
 
-    private fun versionCode(info: PackageInfo): Long = if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else @Suppress("DEPRECATION") info.versionCode.toLong()
+    private fun versionCode(info: PackageInfo): Long = info.longVersionCode
 
     private fun certificates(info: PackageInfo): Set<String> {
-        val signatures = if (Build.VERSION.SDK_INT >= 28) info.signingInfo?.apkContentsSigners else @Suppress("DEPRECATION") info.signatures
+        val signatures = info.signingInfo?.apkContentsSigners
         return signatures.orEmpty().map { sig -> MessageDigest.getInstance("SHA-256").digest(sig.toByteArray()).joinToString("") { "%02x".format(it) } }.toSet()
     }
 
