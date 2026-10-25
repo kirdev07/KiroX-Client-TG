@@ -174,7 +174,7 @@ fun TelegramChatScreen(
         id = history.chatId,
         name = if (history.peerKind == TelegramPeerKind.Saved) "Избранное" else history.title,
         status = when (history.peerKind) {
-            TelegramPeerKind.User -> history.peerStatus?.let { TelegramFormat.status(it) }.orEmpty()
+            TelegramPeerKind.User -> (if (history.isSecret) "🔒 секретный чат · " else "") + history.peerStatus?.let { TelegramFormat.status(it) }.orEmpty()
             TelegramPeerKind.Bot -> "бот"
             TelegramPeerKind.Group -> "группа"
             TelegramPeerKind.Channel -> "канал"
@@ -182,8 +182,8 @@ fun TelegramChatScreen(
         },
         initial = history.title.take(1).uppercase(),
         photo = history.photo,
-        canVoiceCall = onCall != null && history.peerKind == TelegramPeerKind.User,
-        canVideoCall = onCall != null && history.peerKind == TelegramPeerKind.User
+        canVoiceCall = onCall != null && history.peerKind == TelegramPeerKind.User && !history.isSecret,
+        canVideoCall = onCall != null && history.peerKind == TelegramPeerKind.User && !history.isSecret
     )
 
     Scaffold(
@@ -463,7 +463,7 @@ internal fun TelegramMessage.toUi(time: String) = MessageUi(
 )
 
 /** Copies a picked content URI into the app cache so TDLib can upload it from a plain path. */
-private fun copyToCache(context: Context, uri: Uri): String? = runCatching {
+internal fun copyToCache(context: Context, uri: Uri): String? = runCatching {
     val name = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
         if (cursor.moveToFirst()) cursor.getString(0) else null
     }?.replace(Regex("[\\\\/:*?\"<>|]"), "_")?.takeIf { it.isNotBlank() } ?: "file"
@@ -495,7 +495,7 @@ private fun VoiceRecordingBar(elapsedMs: Long, level: Float, onCancel: () -> Uni
 }
 
 /** Duration (s), width and height of a local video; zeros when unreadable. */
-private fun videoMeta(path: String): Triple<Int, Int, Int> = runCatching {
+internal fun videoMeta(path: String): Triple<Int, Int, Int> = runCatching {
     android.media.MediaMetadataRetriever().use { r ->
         r.setDataSource(path)
         val ms = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0

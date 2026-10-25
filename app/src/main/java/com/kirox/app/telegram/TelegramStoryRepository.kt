@@ -34,6 +34,18 @@ class TelegramStoryRepository(
         }
     }
 
+    /** Posts a 24-hour story to the own profile; [everyone] = false shows it to contacts only. */
+    suspend fun postStory(path: String, isVideo: Boolean, durationS: Int, caption: String, everyone: Boolean) {
+        val file = TdApi.InputFileLocal(path)
+        val content: TdApi.InputStoryContent =
+            if (isVideo) TdApi.InputStoryContentVideo(file, IntArray(0), durationS.toDouble(), 0.0, false)
+            else TdApi.InputStoryContentPhoto(file, IntArray(0))
+        val privacy: TdApi.StoryPrivacySettings =
+            if (everyone) TdApi.StoryPrivacySettingsEveryone(LongArray(0)) else TdApi.StoryPrivacySettingsContacts(LongArray(0))
+        val text = caption.takeIf { it.isNotBlank() }?.let { TdApi.FormattedText(it, emptyArray()) }
+        client.query(TdApi.PostStory(users.myId(), content, null, text, privacy, IntArray(0), STORY_PERIOD_S, null, true, false))
+    }
+
     suspend fun story(chatId: Long, storyId: Int): TelegramStory? =
         runCatching { client.query(TdApi.GetStory(chatId, storyId, false)) }.getOrNull()?.let(::toStory)
 
@@ -71,6 +83,7 @@ class TelegramStoryRepository(
     }
 
     private companion object {
+        const val STORY_PERIOD_S = 86400
         const val MAX_PAGES = 5
         const val PUBLISH_DELAY_MS = 50L
     }

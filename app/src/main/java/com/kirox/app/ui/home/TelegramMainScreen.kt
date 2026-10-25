@@ -277,7 +277,8 @@ private fun ChatsTab(
             TitleAction(KiroXIcon.Compose, "Новое сообщение", onClick = onNewMessage)
             TitleAction(KiroXIcon.Search, "Поиск") { searching = true }
         }
-        StoriesRow(storyChats, profile?.name.orEmpty(), profile?.photo, onOpenStories) { onNotice(UiNotice("Публикация историй — В разработке")) }
+        val postStory = rememberStoryPoster { onNotice(UiNotice(it)) }
+        StoriesRow(storyChats, profile?.name.orEmpty(), profile?.photo, onOpenStories) { postStory() }
         val archiveUnread = lists.archive.chats.count { it.unreadCount > 0 || it.isMarkedUnread }
         SectionTabs(listOf((if (archiveUnread > 0) "Архив · $archiveUnread" else "Архив") to RealChatSection.Archive, "Сообщения" to RealChatSection.Messages), section) { section = it }
         if (section == RealChatSection.Messages && lists.folders.isNotEmpty()) {
