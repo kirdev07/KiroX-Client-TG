@@ -1,6 +1,7 @@
 package com.kirox.app.ui.home
 
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -55,7 +56,7 @@ private const val IN_PROGRESS = "В разработке"
 // ---------- Settings: profile header + icon-tile rows (old Fusion layout) ----------
 
 @Composable
-internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Unit, onOpenCustomization: () -> Unit, onOpenUpdates: () -> Unit, onNotice: (String) -> Unit) {
+internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Unit, onOpenCustomization: () -> Unit, onOpenUpdates: () -> Unit, onOpenDevices: () -> Unit, onNotice: (String) -> Unit) {
     val entries = listOf(
         KiroXIcon.Palette to "Кастомизация", KiroXIcon.Chats to "Чаты и папки", KiroXIcon.Bell to "Уведомления",
         KiroXIcon.Shield to "Конфиденциальность", KiroXIcon.Storage to "Данные и память", KiroXIcon.Devices to "Устройства",
@@ -78,6 +79,7 @@ internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Uni
                 when (title) {
                     "Кастомизация" -> onOpenCustomization()
                     "Обновления" -> onOpenUpdates()
+                    "Устройства" -> onOpenDevices()
                     "О KiroX" -> onNotice("KiroX ${BuildConfig.VERSION_NAME} — независимый клиент Telegram на TDLib")
                     "Telegram Premium" -> onNotice(if (profile?.isPremium == true) "Telegram Premium активен" else "Telegram Premium — $IN_PROGRESS")
                     else -> onNotice("«$title» — $IN_PROGRESS")
@@ -754,5 +756,100 @@ internal fun UpdatesScreen(updates: com.kirox.app.update.UpdateCenter, onBack: (
                 }
             )
         }
+    }
+}
+
+/** Settings → Devices: active sessions of the account; others can be terminated. */
+@Composable
+internal fun DevicesScreen(sessions: com.kirox.app.telegram.TelegramSessionsRepository, onBack: () -> Unit, onNotice: (String) -> Unit) {
+    BackHandler(onBack = onBack)
+    val scope = rememberCoroutineScope()
+    var list by remember { mutableStateOf<List<com.kirox.app.telegram.TelegramSession>?>(null) }
+    var failed by remember { mutableStateOf(false) }
+    var confirm by remember { mutableStateOf<com.kirox.app.telegram.TelegramSession?>(null) }
+    var confirmAll by remember { mutableStateOf(false) }
+    fun reload() {
+        scope.launch { runCatching { sessions.sessions() }.onSuccess { list = it; failed = false }.onFailure { failed = true } }
+    }
+    LaunchedEffect(Unit) { reload() }
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
+        item { BackTitle("Устройства", onBack) }
+        val current = list?.firstOrNull { it.isCurrent }
+        val others = list?.filterNot { it.isCurrent }.orEmpty()
+        when {
+            failed -> item { Text("Не удалось загрузить список устройств", color = Fusion.colors.textSecondary, modifier = Modifier.padding(20.dp)) }
+            list == null -> item {
+                Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { androidx.compose.material3.CircularProgressIndicator(color = Fusion.colors.textPrimary) }
+            }
+            else -> {
+                if (current != null) {
+                    item { SmallCaption("Это устройство") }
+                    item { SessionRow(current, onTerminate = null) }
+                }
+                if (others.isNotEmpty()) {
+                    item {
+                        Text(
+                            "Завершить все другие сеансы", color = Fusion.colors.danger, fontSize = 15.sp, fontWeight = FontWeight.Medium,
+                            modifier = Modifier.fillMaxWidth().clickable { confirmAll = true }.padding(horizontal = 20.dp, vertical = 14.dp)
+                        )
+                    }
+                    item { SmallCaption("Активные сеансы") }
+                    items(others, key = { it.id }) { session -> SessionRow(session, onTerminate = { confirm = session }) }
+                } else {
+                    item { Text("Других активных сеансов нет", color = Fusion.colors.textSecondary, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) }
+                }
+            }
+        }
+    }
+    confirm?.let { session ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirm = null },
+            containerColor = Fusion.colors.surface1,
+            title = { Text("Завершить сеанс?", color = Fusion.colors.textPrimary) },
+            text = { Text("«${session.device.ifBlank { session.application }}» выйдет из аккаунта.", color = Fusion.colors.textSecondary) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    confirm = null
+                    scope.launch { runCatching { sessions.terminate(session.id) }.onSuccess { reload() }.onFailure { onNotice("Не удалось завершить сеанс") } }
+                }) { Text("Завершить", color = Fusion.colors.danger) }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { confirm = null }) { Text("Отмена", color = Fusion.colors.textSecondary) } }
+        )
+    }
+    if (confirmAll) androidx.compose.material3.AlertDialog(
+        onDismissRequest = { confirmAll = false },
+        containerColor = Fusion.colors.surface1,
+        title = { Text("Завершить все другие сеансы?", color = Fusion.colors.textPrimary) },
+        text = { Text("Все устройства, кроме этого, выйдут из аккаунта.", color = Fusion.colors.textSecondary) },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = {
+                confirmAll = false
+                scope.launch { runCatching { sessions.terminateOthers() }.onSuccess { reload() }.onFailure { onNotice("Не удалось завершить сеансы") } }
+            }) { Text("Завершить", color = Fusion.colors.danger) }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmAll = false }) { Text("Отмена", color = Fusion.colors.textSecondary) } }
+    )
+}
+
+@Composable
+private fun SessionRow(session: com.kirox.app.telegram.TelegramSession, onTerminate: (() -> Unit)?) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(44.dp).clip(CircleShape).background(Fusion.colors.surface2), contentAlignment = Alignment.Center) {
+            IconGlyph(KiroXIcon.Devices, null, Modifier.size(22.dp), Fusion.colors.textPrimary)
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(session.device.ifBlank { "Устройство" }, color = Fusion.colors.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(session.application, color = Fusion.colors.textSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val details = listOfNotNull(
+                session.location.takeIf { it.isNotBlank() },
+                if (session.isCurrent) "в сети" else com.kirox.app.ui.format.TelegramFormat.chatTime(session.lastActive)
+            ).joinToString(" · ")
+            Text(details, color = Fusion.colors.textTertiary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (onTerminate != null) Text(
+            "Завершить", color = Fusion.colors.danger, fontSize = 14.sp,
+            modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClick = onTerminate).padding(horizontal = 12.dp, vertical = 10.dp)
+        )
     }
 }

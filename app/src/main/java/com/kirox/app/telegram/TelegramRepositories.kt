@@ -127,6 +127,7 @@ class TelegramServices(context: android.content.Context) {
     val messages = TelegramMessageRepository(client, chats, users)
     val calls = TelegramCallRepository(client, chats)
     val voip = TelegramVoipRepository(client, users)
+    val sessions = TelegramSessionsRepository(client)
     val notifications = com.kirox.app.notify.MessageNotifications(context.applicationContext, client, chats, users)
     val stories = TelegramStoryRepository(client, chats, users)
 }

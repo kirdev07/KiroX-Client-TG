@@ -69,7 +69,7 @@ private enum class MainTab(val item: FusionNavItem) {
     Settings(FusionNavItem("Настройки", KiroXIcon.Tune)),
     Profile(FusionNavItem("Профиль", KiroXIcon.ProfileCircle))
 }
-private enum class SubScreen { None, NewMessage, Customization, Themes, ChatStyle, Animations, Updates }
+private enum class SubScreen { None, NewMessage, Customization, Themes, ChatStyle, Animations, Updates, Devices }
 private enum class RealChatSection { Archive, Messages }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -148,6 +148,10 @@ fun TelegramMainScreen(
                         onOpenAnimations = { sub = SubScreen.Animations },
                         onBack = { sub = SubScreen.None }
                     )
+                    subScreen == SubScreen.Devices -> DevicesScreen(
+                        (androidx.compose.ui.platform.LocalContext.current.applicationContext as com.kirox.app.KiroXApplication).telegram.sessions,
+                        onBack = { sub = SubScreen.None }, onNotice = showNotice
+                    )
                     subScreen == SubScreen.Updates -> UpdatesScreen(
                         (androidx.compose.ui.platform.LocalContext.current.applicationContext as com.kirox.app.KiroXApplication).updates,
                         onBack = { sub = SubScreen.None }
@@ -163,7 +167,7 @@ fun TelegramMainScreen(
                     )
                     current == MainTab.Chats -> ChatsTab(lists, chatActions, connection, onOpenChat, storyChats, profile, { viewingStoriesOf = it.chatId }, onNewMessage = { sub = SubScreen.NewMessage }) { notice = it }
                     current == MainTab.Contacts -> ContactsTab(contacts, contactsLoading, onOpenContact, calls, onLoadCalls, onOpenChat, showNotice, onStartCall, onAddContact)
-                    current == MainTab.Settings -> SettingsTab(profile, onOpenProfile = { tab = MainTab.Profile }, onOpenCustomization = { sub = SubScreen.Customization }, onOpenUpdates = { sub = SubScreen.Updates }, onNotice = showNotice)
+                    current == MainTab.Settings -> SettingsTab(profile, onOpenProfile = { tab = MainTab.Profile }, onOpenCustomization = { sub = SubScreen.Customization }, onOpenUpdates = { sub = SubScreen.Updates }, onOpenDevices = { sub = SubScreen.Devices }, onNotice = showNotice)
                     else -> ProfileTab(profile, onOpenSettings = { tab = MainTab.Settings }, onOpenSaved = onOpenSavedMessages, onLogOut = onLogOut, onNotice = showNotice)
                 }
             }
