@@ -13,7 +13,6 @@ import android.os.Build
 import android.os.IBinder
 import com.kirox.app.KiroXApplication
 import com.kirox.app.MainActivity
-import com.kirox.app.R
 
 /**
  * Optional "background connection": a quiet foreground service keeps the process, and so TDLib,
@@ -34,7 +33,7 @@ class KeepConnectedService : Service() {
         manager.createNotificationChannel(NotificationChannel(CHANNEL, "Фоновое соединение", NotificationManager.IMPORTANCE_MIN).apply { setShowBadge(false) })
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE)
         val notification = Notification.Builder(this, CHANNEL)
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(android.R.drawable.stat_notify_chat)
             .setContentTitle("KiroX на связи")
             .setContentText("Сообщения приходят сразу")
             .setOngoing(true)
