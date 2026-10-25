@@ -57,6 +57,8 @@ class MessageNotifications(
     private fun enable() {
         client.send(TdApi.SetOption("notification_group_count_max", TdApi.OptionValueInteger(MAX_GROUPS)))
         client.send(TdApi.SetOption("notification_group_size_max", TdApi.OptionValueInteger(MAX_PER_GROUP)))
+        // A process started by a push has no visible screen: stay offline so Telegram keeps notifying.
+        client.send(TdApi.SetOption("online", TdApi.OptionValueBoolean(AppVisibility.visible)))
     }
 
     private fun apply(groupId: Int, chatId: Long, added: Array<TdApi.Notification>, removed: IntArray) {
