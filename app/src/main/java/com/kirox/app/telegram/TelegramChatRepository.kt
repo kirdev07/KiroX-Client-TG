@@ -38,6 +38,21 @@ class TelegramChatRepository(private val client: TelegramClient) {
 
     fun markUnread(chatId: Long) = act(TdApi.ToggleChatIsMarkedAsUnread(chatId, true))
 
+    /** End-to-end encrypted chat with [userId]; works only between this device and the peer's device. */
+    suspend fun createSecretChat(userId: Long): Long = client.query(TdApi.CreateNewSecretChat(userId)).id
+
+    /** New folder with the given chats; returns its id. */
+    suspend fun createFolder(name: String, chatIds: List<Long>): Int {
+        val folder = TdApi.ChatFolder(
+            TdApi.ChatFolderName(TdApi.FormattedText(name, emptyArray()), false), null, -1, false,
+            LongArray(0), chatIds.toLongArray(), LongArray(0), false, false, false, false, false, false, false, false
+        )
+        return client.query(TdApi.CreateChatFolder(folder)).id
+    }
+
+    /** Removes the folder only; its chats stay in the main list. */
+    suspend fun deleteFolder(id: Int) { client.query(TdApi.DeleteChatFolder(id, LongArray(0))) }
+
     /** New basic group with [userIds]; returns its chat id. */
     suspend fun createGroup(title: String, userIds: List<Long>): Long =
         client.query(TdApi.CreateNewBasicGroupChat(userIds.toLongArray(), title, 0)).chatId
@@ -58,6 +73,9 @@ class TelegramChatRepository(private val client: TelegramClient) {
     }
 
     /** Deletes the chat history for this account only; the chat stays in the list. */
+    /** New messages disappear [seconds] after they are read (secret chats) or sent; 0 turns it off. */
+    suspend fun setAutoDelete(chatId: Long, seconds: Int) { client.query(TdApi.SetChatMessageAutoDeleteTime(chatId, seconds)) }
+
     suspend fun clearHistory(chatId: Long) { client.query(TdApi.DeleteChatHistory(chatId, false, false)) }
 
     /** Private chats: delete for this account and remove from the list. Groups and channels: leave. */

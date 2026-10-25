@@ -277,13 +277,19 @@ private fun ChatsTab(
             TitleAction(KiroXIcon.Compose, "Новое сообщение", onClick = onNewMessage)
             TitleAction(KiroXIcon.Search, "Поиск") { searching = true }
         }
-        StoriesRow(storyChats, profile?.name.orEmpty(), profile?.photo, onOpenStories) { onNotice(UiNotice("Публикация историй — В разработке")) }
+        val postStory = rememberStoryPoster { onNotice(UiNotice(it)) }
+        StoriesRow(storyChats, profile?.name.orEmpty(), profile?.photo, onOpenStories) { postStory() }
         val archiveUnread = lists.archive.chats.count { it.unreadCount > 0 || it.isMarkedUnread }
         SectionTabs(listOf((if (archiveUnread > 0) "Архив · $archiveUnread" else "Архив") to RealChatSection.Archive, "Сообщения" to RealChatSection.Messages), section) { section = it }
-        if (section == RealChatSection.Messages && lists.folders.isNotEmpty()) {
+        var creatingFolder by remember { mutableStateOf(false) }
+        var deletingFolder by remember { mutableStateOf<com.kirox.app.telegram.TelegramFolder?>(null) }
+        if (creatingFolder) CreateFolderDialog(lists.main.chats, onDismiss = { creatingFolder = false }) { onNotice(UiNotice(it)) }
+        deletingFolder?.let { folder -> DeleteFolderDialog(folder, onDismiss = { deletingFolder = null }) { onNotice(UiNotice(it)) } }
+        if (section == RealChatSection.Messages) {
             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item { FolderChip("Все", folderId == null) { folderId = null } }
-                items(lists.folders, key = { it.id }) { folder -> FolderChip(folder.title.ifBlank { "Папка" }, folderId == folder.id) { folderId = folder.id } }
+                items(lists.folders, key = { it.id }) { folder -> FolderChip(folder.title.ifBlank { "Папка" }, folderId == folder.id, onLongClick = { deletingFolder = folder }) { folderId = folder.id } }
+                item { FolderChip("+ Папка", false) { creatingFolder = true } }
             }
             HorizontalDivider(color = Fusion.colors.outline)
         }
@@ -371,11 +377,11 @@ private fun Badge(text: String, strong: Boolean) {
 private fun compactCount(count: Int) = if (count > 999) "${count / 1000}K" else count.toString()
 
 @Composable
-private fun FolderChip(title: String, selected: Boolean, onClick: () -> Unit) {
+private fun FolderChip(title: String, selected: Boolean, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
     Text(
         title, color = if (selected) Fusion.colors.onAccent else Fusion.colors.textSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1,
         modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(if (selected) Fusion.colors.accent else Fusion.colors.surface2)
-            .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 8.dp)
+            .combinedClickable(onLongClick = onLongClick, onClick = onClick).padding(horizontal = 14.dp, vertical = 8.dp)
     )
 }
 

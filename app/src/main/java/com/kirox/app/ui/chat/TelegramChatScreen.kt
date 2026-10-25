@@ -55,6 +55,7 @@ interface TelegramChatMenuActions {
     suspend fun isMuted(chatId: Long): Boolean
     suspend fun setMuted(chatId: Long, muted: Boolean)
     suspend fun clearHistory(chatId: Long)
+    suspend fun setAutoDelete(chatId: Long, seconds: Int)
     suspend fun deleteChat(chatId: Long)
 }
 
@@ -126,6 +127,7 @@ fun TelegramChatScreen(
     var searchQuery by remember(history.chatId) { mutableStateOf("") }
     var muted by remember(history.chatId) { mutableStateOf<Boolean?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
+    var autoDeleteOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     // Search filters the loaded part of the conversation.
     val shownMessages = remember(history.messages, searchQuery) {
@@ -174,7 +176,7 @@ fun TelegramChatScreen(
         id = history.chatId,
         name = if (history.peerKind == TelegramPeerKind.Saved) "Избранное" else history.title,
         status = when (history.peerKind) {
-            TelegramPeerKind.User -> history.peerStatus?.let { TelegramFormat.status(it) }.orEmpty()
+            TelegramPeerKind.User -> (if (history.isSecret) "🔒 секретный чат · " else "") + history.peerStatus?.let { TelegramFormat.status(it) }.orEmpty()
             TelegramPeerKind.Bot -> "бот"
             TelegramPeerKind.Group -> "группа"
             TelegramPeerKind.Channel -> "канал"
@@ -182,8 +184,8 @@ fun TelegramChatScreen(
         },
         initial = history.title.take(1).uppercase(),
         photo = history.photo,
-        canVoiceCall = onCall != null && history.peerKind == TelegramPeerKind.User,
-        canVideoCall = onCall != null && history.peerKind == TelegramPeerKind.User
+        canVoiceCall = onCall != null && history.peerKind == TelegramPeerKind.User && !history.isSecret,
+        canVideoCall = onCall != null && history.peerKind == TelegramPeerKind.User && !history.isSecret
     )
 
     Scaffold(
@@ -354,6 +356,7 @@ fun TelegramChatScreen(
             val items = buildList {
                 add(Triple(KiroXIcon.Bell, if (muted == true) "Включить звук" else "Без звука", false))
                 add(Triple(KiroXIcon.Search, "Поиск", false))
+                if (history.peerKind == TelegramPeerKind.User) add(Triple(KiroXIcon.Refresh, "Автоудаление", false))
                 add(Triple(KiroXIcon.Delete, "Очистить историю", true))
                 add(Triple(KiroXIcon.Delete, if (history.peerKind == TelegramPeerKind.User || history.peerKind == TelegramPeerKind.Bot) "Удалить чат" else "Покинуть", true))
             }
@@ -364,6 +367,7 @@ fun TelegramChatScreen(
                         when (title) {
                             "Поиск" -> searching = true
                             "Очистить историю" -> confirmClear = true
+                            "Автоудаление" -> autoDeleteOpen = true
                             "Удалить чат", "Покинуть" -> confirmDelete = true
                             else -> {
                                 val target = muted != true
@@ -385,6 +389,26 @@ fun TelegramChatScreen(
             Spacer(Modifier.navigationBarsPadding().height(8.dp))
         }
     }
+    if (autoDeleteOpen && menu != null) AlertDialog(
+        onDismissRequest = { autoDeleteOpen = false },
+        containerColor = Fusion.colors.surface1,
+        title = { Text("Автоудаление сообщений", color = Fusion.colors.textPrimary) },
+        text = {
+            Column {
+                listOf(0 to "Выключено", 60 to "1 минута", 3600 to "1 час", 86400 to "1 день", 604800 to "1 неделя").forEach { (seconds, label) ->
+                    Text(label, color = Fusion.colors.textPrimary, fontSize = 16.sp, modifier = Modifier.fillMaxWidth().clickable {
+                        autoDeleteOpen = false
+                        scope.launch {
+                            runCatching { menu.setAutoDelete(history.chatId, seconds) }
+                                .onSuccess { notice = if (seconds == 0) "Автоудаление выключено" else "Новые сообщения удалятся через: $label" }
+                                .onFailure { notice = "Не удалось изменить автоудаление" }
+                        }
+                    }.padding(vertical = 12.dp))
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { autoDeleteOpen = false }) { Text("Отмена", color = Fusion.colors.textSecondary) } }
+    )
     if (confirmClear && menu != null) AlertDialog(
         onDismissRequest = { confirmClear = false },
         containerColor = Fusion.colors.surface1,
@@ -463,7 +487,7 @@ internal fun TelegramMessage.toUi(time: String) = MessageUi(
 )
 
 /** Copies a picked content URI into the app cache so TDLib can upload it from a plain path. */
-private fun copyToCache(context: Context, uri: Uri): String? = runCatching {
+internal fun copyToCache(context: Context, uri: Uri): String? = runCatching {
     val name = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
         if (cursor.moveToFirst()) cursor.getString(0) else null
     }?.replace(Regex("[\\\\/:*?\"<>|]"), "_")?.takeIf { it.isNotBlank() } ?: "file"
@@ -495,7 +519,7 @@ private fun VoiceRecordingBar(elapsedMs: Long, level: Float, onCancel: () -> Uni
 }
 
 /** Duration (s), width and height of a local video; zeros when unreadable. */
-private fun videoMeta(path: String): Triple<Int, Int, Int> = runCatching {
+internal fun videoMeta(path: String): Triple<Int, Int, Int> = runCatching {
     android.media.MediaMetadataRetriever().use { r ->
         r.setDataSource(path)
         val ms = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0

@@ -649,7 +649,7 @@ internal fun KiroXBadge(modifier: Modifier) {
 
 // ---------- New message ----------
 
-private enum class NewChatMode { Menu, Message, GroupMembers, GroupTitle, Channel }
+private enum class NewChatMode { Menu, Message, Secret, GroupMembers, GroupTitle, Channel }
 
 @Composable
 internal fun NewMessageScreen(
@@ -691,6 +691,7 @@ internal fun NewMessageScreen(
                 when (mode) {
                     NewChatMode.Menu -> "Новое сообщение"
                     NewChatMode.Message -> "Выберите контакт"
+                    NewChatMode.Secret -> "Секретный чат с…"
                     NewChatMode.GroupMembers -> if (members.isEmpty()) "Участники группы" else "Выбрано: ${members.size}"
                     NewChatMode.GroupTitle -> "Новая группа"
                     NewChatMode.Channel -> "Новый канал"
@@ -703,9 +704,15 @@ internal fun NewMessageScreen(
                 item { TileRow(KiroXIcon.Contacts, "Создать группу") { members = emptyList(); title = ""; mode = NewChatMode.GroupMembers } }
                 item { TileRow(KiroXIcon.Add, "Создать канал") { title = ""; description = ""; mode = NewChatMode.Channel } }
                 item { TileRow(KiroXIcon.Bookmark, "Избранное", onClick = onOpenSaved) }
-                item { TileRow(KiroXIcon.Shield, "Секретный чат") { onNotice("Секретные чаты — $IN_PROGRESS") } }
+                item { TileRow(KiroXIcon.Shield, "Секретный чат") { mode = NewChatMode.Secret } }
             }
-            NewChatMode.Message, NewChatMode.GroupMembers -> {
+            NewChatMode.Message, NewChatMode.Secret, NewChatMode.GroupMembers -> {
+                if (mode == NewChatMode.Secret) item {
+                    Text(
+                        "Сообщения шифруются на устройствах и хранятся только здесь и у собеседника — их нет в облаке и других клиентах.",
+                        color = Fusion.colors.textTertiary, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+                    )
+                }
                 val picking = mode == NewChatMode.GroupMembers
                 if (picking && members.isNotEmpty()) item {
                     Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(24.dp)).background(Fusion.colors.accent).clickable { mode = NewChatMode.GroupTitle }, contentAlignment = Alignment.Center) {
@@ -717,7 +724,13 @@ internal fun NewMessageScreen(
                     val checked = contact.id in members
                     Row(
                         Modifier.fillMaxWidth().clickable {
-                            if (picking) members = if (checked) members - contact.id else members + contact.id else onOpenContact(contact.id)
+                            when {
+                                picking -> members = if (checked) members - contact.id else members + contact.id
+                                mode == NewChatMode.Secret -> scope.launch {
+                                    runCatching { chats.createSecretChat(contact.id) }.onSuccess(onOpenChat).onFailure { onNotice("Не удалось создать секретный чат") }
+                                }
+                                else -> onOpenContact(contact.id)
+                            }
                         }.heightIn(min = 66.dp).padding(horizontal = 16.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
