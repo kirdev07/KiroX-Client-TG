@@ -75,6 +75,10 @@ interface CallActions {
     fun accept()
     fun hangUp()
     fun dismiss()
+    fun setMuted(muted: Boolean)
+    fun setCamera(on: Boolean)
+    fun switchCamera()
+    fun setVideoSinks(remote: org.webrtc.VideoSink?, local: org.webrtc.VideoSink?)
 }
 
 /** Full-screen call: outgoing, incoming, connected and finished states for voice and video. */
@@ -83,34 +87,116 @@ fun CallScreen(call: TelegramActiveCall, actions: CallActions) {
     val live = call.phase.isLive()
     BackHandler { if (!live) actions.dismiss() }
     IncomingAlert(call.phase == CallPhase.Incoming)
-
-    var micOff by rememberSaveable(call.id) { mutableStateOf(false) }
+    val talking = live && call.phase != CallPhase.Incoming
     var speaker by rememberSaveable(call.id) { mutableStateOf(call.isVideo) }
-    var camera by rememberSaveable(call.id) { mutableStateOf(call.isVideo) }
+    // Switch audio to call mode only once connected: during ringing other apps on the phone must not see a busy line.
+    CallAudioRoute(active = call.phase is CallPhase.Active || call.phase == CallPhase.Connecting, speaker = speaker)
+    CallWindow(live = live, earMode = talking && !speaker && !call.cameraOn && !call.remoteVideo)
+    val showVideo = TelegramVoipRepository.mediaAvailable && talking && (call.remoteVideo || call.cameraOn)
 
     Box(
         Modifier.fillMaxSize()
             .background(Brush.verticalGradient(listOf(Color(0xFF1C2633), Color(0xFF10151C), Color(0xFF050608))))
             .clickable(enabled = false) {}
     ) {
+        if (showVideo) CallVideo(call, actions)
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Spacer(Modifier.height(16.dp))
             TopLabel(call)
-            Spacer(Modifier.weight(0.6f))
-            PulsingAvatar(call, pulsing = call.phase is CallPhase.Calling || call.phase == CallPhase.Incoming || call.phase == CallPhase.Connecting)
-            Spacer(Modifier.height(28.dp))
-            Text(call.name, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
-            Spacer(Modifier.height(8.dp))
-            StatusLine(call)
-            Spacer(Modifier.weight(1f))
+            if (call.remoteVideo && talking) {
+                Spacer(Modifier.height(12.dp))
+                Text(call.name, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                StatusLine(call)
+                Spacer(Modifier.weight(1f))
+            } else {
+                Spacer(Modifier.weight(0.6f))
+                PulsingAvatar(call, pulsing = call.phase is CallPhase.Calling || call.phase == CallPhase.Incoming || call.phase == CallPhase.Connecting)
+                Spacer(Modifier.height(28.dp))
+                Text(call.name, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(8.dp))
+                StatusLine(call)
+                Spacer(Modifier.weight(1f))
+            }
             when {
                 call.phase == CallPhase.Incoming -> IncomingControls(call, actions)
-                live -> ActiveControls(call.isVideo, micOff, speaker, camera, { micOff = !micOff }, { speaker = !speaker }, { camera = !camera }, actions::hangUp)
+                live -> ActiveControls(
+                    call.isVideo || call.cameraOn, call.micMuted, speaker, call.cameraOn,
+                    { actions.setMuted(!call.micMuted) }, { speaker = !speaker }, { actions.setCamera(!call.cameraOn) }, actions::switchCamera, actions::hangUp
+                )
                 else -> RoundButton(KiroXIcon.Check, "Закрыть", Color.White, Color(0xFF10151C), size = 64.dp, onClick = actions::dismiss)
             }
             Spacer(Modifier.height(36.dp))
         }
-        if (call.isVideo && camera && live && call.phase != CallPhase.Incoming) SelfPreview(Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = 56.dp, end = 16.dp))
+    }
+}
+
+/** Remote video full screen and the own camera in a corner, rendered by WebRTC. */
+@Composable
+private fun CallVideo(call: TelegramActiveCall, actions: CallActions) {
+    val context = LocalContext.current
+    val remote = remember { org.webrtc.TextureViewRenderer(context) }
+    val local = remember { org.webrtc.TextureViewRenderer(context) }
+    DisposableEffect(Unit) {
+        val egl = com.kirox.app.voip.VideoCapturerDevice.getSharedEGLContext()
+        remote.init(egl, null)
+        local.init(egl, null)
+        remote.setScalingType(org.webrtc.RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+        local.setScalingType(org.webrtc.RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+        actions.setVideoSinks(remote, local)
+        onDispose {
+            actions.setVideoSinks(null, null)
+            remote.release()
+            local.release()
+        }
+    }
+    LaunchedEffect(call.frontCamera) { local.setMirror(call.frontCamera) }
+    Box(Modifier.fillMaxSize()) {
+        if (call.remoteVideo) androidx.compose.ui.viewinterop.AndroidView({ remote }, Modifier.fillMaxSize())
+        if (call.cameraOn) Box(
+            Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = 56.dp, end = 16.dp)
+                .size(104.dp, 148.dp).clip(RoundedCornerShape(18.dp)).border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(18.dp))
+        ) { androidx.compose.ui.viewinterop.AndroidView({ local }, Modifier.fillMaxSize()) }
+    }
+}
+
+/** Shows the call over the lock screen, and turns the screen off at the ear like a phone call. */
+@Composable
+private fun CallWindow(live: Boolean, earMode: Boolean) {
+    val context = LocalContext.current
+    val activity = context as? android.app.Activity
+    DisposableEffect(live) {
+        if (live && activity != null && android.os.Build.VERSION.SDK_INT >= 27) { activity.setShowWhenLocked(true); activity.setTurnScreenOn(true) }
+        onDispose {
+            if (activity != null && android.os.Build.VERSION.SDK_INT >= 27) { activity.setShowWhenLocked(false); activity.setTurnScreenOn(false) }
+        }
+    }
+    DisposableEffect(earMode) {
+        val power = context.getSystemService(android.os.PowerManager::class.java)
+        val lock = if (earMode && power?.isWakeLockLevelSupported(android.os.PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK) == true)
+            power.newWakeLock(android.os.PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "kirox:call-proximity").apply { acquire(3 * 60 * 60 * 1000L) }
+        else null
+        onDispose { if (lock?.isHeld == true) lock.release() }
+    }
+}
+
+/** Voice goes to the earpiece or the speaker while the call is connected. */
+@Composable
+private fun CallAudioRoute(active: Boolean, speaker: Boolean) {
+    val context = LocalContext.current
+    val audio = remember { context.getSystemService(android.media.AudioManager::class.java) }
+    DisposableEffect(active) {
+        if (!active || audio == null) return@DisposableEffect onDispose {}
+        val previousMode = audio.mode
+        audio.mode = android.media.AudioManager.MODE_IN_COMMUNICATION
+        onDispose {
+            @Suppress("DEPRECATION")
+            audio.isSpeakerphoneOn = false
+            audio.mode = previousMode
+        }
+    }
+    LaunchedEffect(active, speaker) {
+        @Suppress("DEPRECATION")
+        if (active) audio?.isSpeakerphoneOn = speaker
     }
 }
 
@@ -194,10 +280,11 @@ private fun IncomingControls(call: TelegramActiveCall, actions: CallActions) {
 @Composable
 private fun ActiveControls(
     isVideo: Boolean, micOff: Boolean, speaker: Boolean, camera: Boolean,
-    onMic: () -> Unit, onSpeaker: () -> Unit, onCamera: () -> Unit, onEnd: () -> Unit
+    onMic: () -> Unit, onSpeaker: () -> Unit, onCamera: () -> Unit, onFlip: () -> Unit, onEnd: () -> Unit
 ) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Top) {
-        LabeledButton("Динамик") { ToggleButton(KiroXIcon.Speaker, "Динамик", speaker, onSpeaker) }
+        if (isVideo && camera) LabeledButton("Повернуть") { ToggleButton(KiroXIcon.FlipCamera, "Сменить камеру", false, onFlip) }
+        else LabeledButton("Динамик") { ToggleButton(KiroXIcon.Speaker, "Динамик", speaker, onSpeaker) }
         LabeledButton(if (isVideo) "Камера" else "Видео") { ToggleButton(KiroXIcon.Video, "Камера", camera, onCamera, crossed = !camera) }
         LabeledButton(if (micOff) "Без звука" else "Микрофон") { ToggleButton(KiroXIcon.Voice, "Микрофон", micOff, onMic, crossed = micOff) }
         LabeledButton("Завершить") { RoundButton(KiroXIcon.CallEnd, "Завершить", CallRed, Color.White, size = 60.dp, onClick = onEnd) }
@@ -224,20 +311,6 @@ private fun RoundButton(icon: KiroXIcon, description: String, background: Color,
         IconGlyph(icon, description, Modifier.size(size * 0.42f), tint)
         if (crossed) Canvas(Modifier.size(size * 0.5f)) {
             drawLine(tint, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(this.size.width, this.size.height), 2.dp.toPx())
-        }
-    }
-}
-
-@Composable
-private fun SelfPreview(modifier: Modifier) {
-    Box(
-        modifier.size(104.dp, 148.dp).clip(RoundedCornerShape(18.dp)).background(Color(0xFF232C38)).border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(18.dp)),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            IconGlyph(KiroXIcon.Camera, null, Modifier.size(26.dp), Color(0x99FFFFFF))
-            Spacer(Modifier.height(6.dp))
-            Text("Вы", color = Color(0x99FFFFFF), fontSize = 12.sp)
         }
     }
 }

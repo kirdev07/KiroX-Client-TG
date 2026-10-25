@@ -13,6 +13,9 @@ class KiroXApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         removeLegacyDemoData()
+        // The call engine is large: load it off the main thread, calls check NativeCall.available.
+        Thread { com.kirox.app.voip.NativeCall.load(this) }.start()
+        com.kirox.app.voip.CallController(this, telegram.voip).start()
     }
 
     /** DEMO mode (≤ 0.1.x) kept fake data locally; it is gone, so drop its files. Telegram data is untouched. */

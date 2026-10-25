@@ -74,6 +74,41 @@ fun KiroXApp() {
             override fun accept() = telegramViewModel.voip.accept()
             override fun hangUp() = telegramViewModel.voip.hangUp()
             override fun dismiss() = telegramViewModel.voip.dismiss()
+            override fun setMuted(muted: Boolean) = telegramViewModel.voip.setMuted(muted)
+            override fun setCamera(on: Boolean) = telegramViewModel.voip.setCamera(on)
+            override fun switchCamera() = telegramViewModel.voip.switchCamera()
+            override fun setVideoSinks(remote: org.webrtc.VideoSink?, local: org.webrtc.VideoSink?) = telegramViewModel.voip.setVideoSinks(remote, local)
+        }
+    }
+    // Microphone (and camera for video) are asked right before a call starts or is answered.
+    var pendingCall by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val callPermissions = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+    ) { granted ->
+        val action = pendingCall
+        pendingCall = null
+        if (granted[android.Manifest.permission.RECORD_AUDIO] == true) action?.invoke()
+        else android.widget.Toast.makeText(context, "Без доступа к микрофону звонок невозможен", android.widget.Toast.LENGTH_LONG).show()
+    }
+    fun withCallPermissions(video: Boolean, action: () -> Unit) {
+        val needed = listOfNotNull(
+            android.Manifest.permission.RECORD_AUDIO,
+            if (video) android.Manifest.permission.CAMERA else null,
+            // The "call in progress" notification; the call works without it.
+            if (android.os.Build.VERSION.SDK_INT >= 33) android.Manifest.permission.POST_NOTIFICATIONS else null
+        )
+            .filter { androidx.core.content.ContextCompat.checkSelfPermission(context, it) != android.content.pm.PackageManager.PERMISSION_GRANTED }
+        if (needed.isEmpty()) action() else { pendingCall = action; callPermissions.launch(needed.toTypedArray()) }
+    }
+    val permittedCallActions = remember(callActions) {
+        object : com.kirox.app.ui.call.CallActions by callActions {
+            override fun accept() {
+                val video = telegramViewModel.voip.call.value?.isVideo == true
+                withCallPermissions(video) { callActions.accept() }
+            }
+            override fun setCamera(on: Boolean) {
+                if (on) withCallPermissions(video = true) { callActions.setCamera(true) } else callActions.setCamera(false)
+            }
         }
     }
     val storyChats by telegramViewModel.stories.storyChats.collectAsStateWithLifecycle()
@@ -177,7 +212,8 @@ fun KiroXApp() {
                                 weakDevice = weakDevice,
                                 onOpenSavedMessages = { scope.launch { runCatching { telegramViewModel.users.savedMessagesChatId() }.onSuccess(::openChat) } },
                                 onLogOut = telegramViewModel.auth::logOut,
-                                onStartCall = telegramViewModel.voip::start
+                                onStartCall = { userId, video -> withCallPermissions(video) { telegramViewModel.voip.start(userId, video) } },
+                                onAddContact = telegramViewModel.users::addContact
                             )
                         }
                         Screen.Conversation -> CompositionLocalProvider(LocalTelegramFiles provides telegramViewModel.files) {
@@ -191,7 +227,10 @@ fun KiroXApp() {
                                 onErrorShown = telegramViewModel.messages::clearError,
                                 forwardTargets = chatLists.main.chats,
                                 actions = actions,
-                                onBack = { stack.pop() }
+                                onBack = { stack.pop() },
+                                onCall = if (com.kirox.app.ui.call.callsEnabled) { video ->
+                                    withCallPermissions(video) { telegramViewModel.voip.start(chatId, video) }
+                                } else null
                             )
                         }
                     }
@@ -199,7 +238,7 @@ fun KiroXApp() {
             }
         }
         activeCall?.let { call ->
-            CompositionLocalProvider(LocalTelegramFiles provides telegramViewModel.files) { com.kirox.app.ui.call.CallScreen(call, callActions) }
+            CompositionLocalProvider(LocalTelegramFiles provides telegramViewModel.files) { com.kirox.app.ui.call.CallScreen(call, permittedCallActions) }
         }
     }
 }

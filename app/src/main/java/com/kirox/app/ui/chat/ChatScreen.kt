@@ -56,7 +56,7 @@ private val ChatSecondary: Color @Composable @ReadOnlyComposable get() = Fusion.
 private val ChatDivider: Color @Composable @ReadOnlyComposable get() = Fusion.colors.surface2
 
 @Composable
-internal fun ChatHeader(peer: ChatPeerUi, onBack: () -> Unit, onProfile: () -> Unit, onOverflow: () -> Unit) {
+internal fun ChatHeader(peer: ChatPeerUi, onBack: () -> Unit, onProfile: () -> Unit, onOverflow: () -> Unit, onCall: (isVideo: Boolean) -> Unit = {}) {
     val narrow = LocalConfiguration.current.screenWidthDp < 360
     Surface(color = Fusion.colors.background, tonalElevation = 0.dp, modifier = Modifier.statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -70,8 +70,8 @@ internal fun ChatHeader(peer: ChatPeerUi, onBack: () -> Unit, onProfile: () -> U
                     Text(peer.status, color = ChatSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
-            if (peer.canVoiceCall && !narrow) ChatIconButton(KiroXIcon.Call, "Голосовой звонок") {}
-            if (peer.canVideoCall && !narrow) ChatIconButton(KiroXIcon.Video, "Видеозвонок") {}
+            if (peer.canVoiceCall) ChatIconButton(KiroXIcon.Call, "Голосовой звонок") { onCall(false) }
+            if (peer.canVideoCall && !narrow) ChatIconButton(KiroXIcon.Video, "Видеозвонок") { onCall(true) }
             ChatIconButton(KiroXIcon.More, "Дополнительно", onOverflow)
         }
         HorizontalDivider(color = ChatDivider)

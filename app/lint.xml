@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Bundled WebRTC Java sources (BSD, third-party) are checked upstream, not here. -->
+<lint>
+    <issue id="all">
+        <ignore path="src/main/java/org/webrtc/**" />
+    </issue>
+</lint>

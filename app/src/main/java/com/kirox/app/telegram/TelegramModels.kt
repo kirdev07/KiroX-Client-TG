@@ -80,7 +80,9 @@ data class TelegramContact(
     val name: String,
     val username: String?,
     val status: TelegramUserStatus,
-    val photo: TelegramFileRef?
+    val photo: TelegramFileRef?,
+    /** Digits only, without "+"; empty when hidden. */
+    val phone: String = ""
 )
 
 enum class TelegramMessageKind { Text, Photo, Video, Voice, Document, Other }

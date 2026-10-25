@@ -29,6 +29,19 @@ android {
         buildConfigField("int", "TELEGRAM_API_ID", secret("KIROX_API_ID", "kirox.apiId").toIntOrNull()?.toString() ?: "0")
         buildConfigField("boolean", "TELEGRAM_USE_TEST_DC", "false")
         buildConfigField("String", "TELEGRAM_API_HASH", "\"${secret("KIROX_API_HASH", "kirox.apiHash").replace("\\", "\\\\").replace("\"", "\\\"")}\"")
+        // TDLib ships arm64 only; the call engine is built for the same ABI.
+        ndk { abiFilters += "arm64-v8a" }
+        externalNativeBuild {
+            cmake { arguments += listOf("-DANDROID_STL=c++_static", "-DANDROID_ARM_NEON=TRUE") }
+        }
+    }
+
+    ndkVersion = "27.2.12479018"
+    externalNativeBuild {
+        cmake {
+            path = file("../voip/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     buildTypes {

@@ -68,7 +68,9 @@ fun TelegramChatScreen(
     onErrorShown: () -> Unit,
     forwardTargets: List<TelegramChatItem>,
     actions: TelegramChatActions,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    /** Starts a call with the peer of a private chat (its chat id is the user id). */
+    onCall: ((isVideo: Boolean) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -128,13 +130,15 @@ fun TelegramChatScreen(
             else -> ""
         },
         initial = history.title.take(1).uppercase(),
-        photo = history.photo
+        photo = history.photo,
+        canVoiceCall = onCall != null && history.peerKind == TelegramPeerKind.User,
+        canVideoCall = onCall != null && history.peerKind == TelegramPeerKind.User
     )
 
     Scaffold(
         containerColor = Fusion.colors.background,
         contentWindowInsets = WindowInsets.statusBars,
-        topBar = { ChatHeader(peer, onBack, onProfile = {}, onOverflow = { notice = "Меню чата появится позже" }) },
+        topBar = { ChatHeader(peer, onBack, onProfile = {}, onOverflow = { notice = "Меню чата появится позже" }, onCall = { video -> onCall?.invoke(video) }) },
         bottomBar = {
             if (history.peerKind != TelegramPeerKind.Channel) ChatComposer(
                 value = input,

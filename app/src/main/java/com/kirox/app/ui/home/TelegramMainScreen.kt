@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.background
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -109,7 +110,8 @@ fun TelegramMainScreen(
     onEffectsQuality: (com.kirox.app.settings.EffectsQuality) -> Unit,
     weakDevice: Boolean,
     onLogOut: () -> Unit,
-    onStartCall: (userId: Long, isVideo: Boolean) -> Unit = { _, _ -> }
+    onStartCall: (userId: Long, isVideo: Boolean) -> Unit = { _, _ -> },
+    onAddContact: suspend (phone: String, firstName: String, lastName: String) -> Long? = { _, _, _ -> null }
 ) = androidx.compose.runtime.CompositionLocalProvider(com.kirox.app.ui.components.LocalSeasonalEffects provides seasonal) {
     var tab by rememberSaveable { mutableStateOf(MainTab.Chats) }
     var sub by rememberSaveable { mutableStateOf(SubScreen.None) }
@@ -156,7 +158,7 @@ fun TelegramMainScreen(
                         onBack = { sub = SubScreen.Customization }
                     )
                     current == MainTab.Chats -> ChatsTab(lists, chatActions, connection, onOpenChat, storyChats, profile, { viewingStoriesOf = it.chatId }, onNewMessage = { sub = SubScreen.NewMessage }) { notice = it }
-                    current == MainTab.Contacts -> ContactsTab(contacts, contactsLoading, onOpenContact, calls, onLoadCalls, onOpenChat, showNotice, onStartCall)
+                    current == MainTab.Contacts -> ContactsTab(contacts, contactsLoading, onOpenContact, calls, onLoadCalls, onOpenChat, showNotice, onStartCall, onAddContact)
                     current == MainTab.Settings -> SettingsTab(profile, onOpenProfile = { tab = MainTab.Profile }, onOpenCustomization = { sub = SubScreen.Customization }, onNotice = showNotice)
                     else -> ProfileTab(profile, onOpenSettings = { tab = MainTab.Settings }, onOpenSaved = onOpenSavedMessages, onLogOut = onLogOut, onNotice = showNotice)
                 }
@@ -372,41 +374,74 @@ private fun ContactsTab(
     onLoadCalls: () -> Unit,
     onOpenChat: (Long) -> Unit,
     onNotice: (String) -> Unit,
-    onStartCall: (userId: Long, isVideo: Boolean) -> Unit
+    onStartCall: (userId: Long, isVideo: Boolean) -> Unit,
+    onAddContact: suspend (phone: String, firstName: String, lastName: String) -> Long?
 ) {
     var showCalls by rememberSaveable { mutableStateOf(false) }
     var focusSearch by remember { mutableIntStateOf(0) }
+    var card by remember { mutableStateOf<Long?>(null) }
+    var adding by remember { mutableStateOf(false) }
     val noCalls = { onNotice("Звонки из KiroX пока недоступны: нужен отдельный VoIP-модуль") }
     // In a private chat the chat id equals the user id.
     val call: (Long, Boolean) -> Unit = { userId, video -> if (com.kirox.app.ui.call.callsEnabled) onStartCall(userId, video) else noCalls() }
     Column(Modifier.fillMaxSize()) {
         ScreenTitle("Контакты") {
             TitleAction(KiroXIcon.Search, "Поиск контактов") { showCalls = false; focusSearch++ }
-            TitleAction(KiroXIcon.Add, "Добавить контакт") { onNotice("Добавление контакта — В разработке") }
+            TitleAction(KiroXIcon.Add, "Добавить контакт") { adding = true }
         }
         SectionTabs(listOf("Контакты" to false, "Звонки" to true), showCalls) { showCalls = it }
         if (showCalls) CallsList(calls, onLoadCalls, onOpenChat) { item -> call(item.chatId, item.isVideo) }
-        else ContactsList(contacts, loading, focusSearch, onOpenContact, call)
+        else ContactsList(contacts, loading, focusSearch, onOpen = { card = it }, onCall = call)
     }
+    contacts.firstOrNull { it.id == card }?.let { contact ->
+        ContactCard(
+            contact,
+            onDismiss = { card = null },
+            onMessage = { card = null; onOpenContact(contact.id) },
+            onCall = { video -> card = null; call(contact.id, video) }
+        )
+    }
+    if (adding) AddContactDialog(
+        onDismiss = { adding = false },
+        onAdd = onAddContact,
+        onAdded = { userId -> adding = false; card = userId },
+        onNotice = onNotice
+    )
+}
+
+/** Online first, then alphabetical; search matches name, @username and phone digits. */
+internal fun filterContacts(contacts: List<TelegramContact>, query: String): List<TelegramContact> {
+    val q = query.trim()
+    val digits = q.filter(Char::isDigit)
+    val found = if (q.isEmpty()) contacts else contacts.filter {
+        it.name.contains(q, ignoreCase = true) ||
+            it.username?.contains(q.removePrefix("@"), ignoreCase = true) == true ||
+            (digits.length >= 3 && it.phone.contains(digits))
+    }
+    return found.sortedWith(compareBy<TelegramContact> { it.status != TelegramUserStatus.Online }.thenBy(String.CASE_INSENSITIVE_ORDER) { it.name })
 }
 
 @Composable
-private fun ContactsList(contacts: List<TelegramContact>, loading: Boolean, focusSearch: Int, onOpenContact: (Long) -> Unit, onCall: (Long, Boolean) -> Unit) {
+private fun ContactsList(contacts: List<TelegramContact>, loading: Boolean, focusSearch: Int, onOpen: (Long) -> Unit, onCall: (Long, Boolean) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var query by rememberSaveable { mutableStateOf("") }
-    val shown = remember(contacts, query) {
-        val q = query.trim()
-        if (q.isEmpty()) contacts else contacts.filter { it.name.contains(q, ignoreCase = true) || it.username?.contains(q.removePrefix("@"), ignoreCase = true) == true }
-    }
+    val shown = remember(contacts, query) { filterContacts(contacts, query) }
     Column(Modifier.fillMaxSize()) {
-        SearchField(query, "Поиск контактов", focusTrigger = focusSearch) { query = it }
+        SearchField(query, "Имя, @ник или номер", focusTrigger = focusSearch) { query = it }
         Box(Modifier.weight(1f)) {
             when {
                 contacts.isEmpty() && loading -> CenteredProgress()
                 contacts.isEmpty() -> EmptyState("Контактов пока нет")
                 shown.isEmpty() -> EmptyState("Ничего не найдено")
                 else -> LazyColumn(Modifier.fillMaxSize()) {
-                    items(shown, key = { it.id }) { contact -> ContactRow(contact, onMessage = { onOpenContact(contact.id) }, onCall = { onCall(contact.id, false) }, onVideo = { onCall(contact.id, true) }) }
+                    val online = shown.takeWhile { it.status == TelegramUserStatus.Online }
+                    val rest = shown.drop(online.size)
+                    if (online.isNotEmpty() && query.isBlank()) item(key = "h_online") { ContactSection("В сети") }
+                    items(online, key = { it.id }) { contact -> ContactRow(contact, onOpen = { onOpen(contact.id) }, onCall = { onCall(contact.id, false) }) }
+                    rest.groupBy { it.name.firstOrNull()?.uppercaseChar() ?: '#' }.forEach { (letter, group) ->
+                        if (query.isBlank()) item(key = "h_$letter") { ContactSection(letter.toString()) }
+                        items(group, key = { it.id }) { contact -> ContactRow(contact, onOpen = { onOpen(contact.id) }, onCall = { onCall(contact.id, false) }) }
+                    }
                 }
             }
         }
@@ -423,8 +458,13 @@ private fun ContactsList(contacts: List<TelegramContact>, loading: Boolean, focu
 }
 
 @Composable
-private fun ContactRow(contact: TelegramContact, onMessage: () -> Unit, onCall: () -> Unit, onVideo: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onMessage).heightIn(min = 72.dp).padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun ContactSection(title: String) {
+    Text(title, color = Fusion.colors.textTertiary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 4.dp))
+}
+
+@Composable
+private fun ContactRow(contact: TelegramContact, onOpen: () -> Unit, onCall: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onOpen).heightIn(min = 72.dp).padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         TelegramAvatar(contact.name, contact.photo, 50.dp)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -436,9 +476,98 @@ private fun ContactRow(contact: TelegramContact, onMessage: () -> Unit, onCall: 
             )
         }
         HeaderAction(KiroXIcon.Call, "Позвонить ${contact.name}", onCall)
-        HeaderAction(KiroXIcon.Video, "Видеозвонок ${contact.name}", onVideo)
     }
     HorizontalDivider(Modifier.padding(start = 78.dp), color = Fusion.colors.outline)
+}
+
+/** Bottom card: who it is and the three things you do with a contact. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun ContactCard(contact: TelegramContact, onDismiss: () -> Unit, onMessage: () -> Unit, onCall: (isVideo: Boolean) -> Unit) {
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Fusion.colors.surface1) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            TelegramAvatar(contact.name, contact.photo, 88.dp)
+            Spacer(Modifier.height(12.dp))
+            Text(contact.name, color = Fusion.colors.textPrimary, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(4.dp))
+            val subtitle = listOfNotNull(TelegramFormat.status(contact.status), contact.username?.let { "@$it" }).joinToString(" · ")
+            Text(subtitle, color = Fusion.colors.textSecondary, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(20.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                CardAction(KiroXIcon.Chat, "Написать", Modifier.weight(1f), onMessage)
+                CardAction(KiroXIcon.Call, "Звонок", Modifier.weight(1f)) { onCall(false) }
+                CardAction(KiroXIcon.Video, "Видео", Modifier.weight(1f)) { onCall(true) }
+            }
+            if (contact.phone.isNotBlank()) {
+                Spacer(Modifier.height(16.dp))
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Fusion.colors.surface2).padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text("Телефон", color = Fusion.colors.textSecondary, fontSize = 12.sp)
+                    Text(TelegramFormat.phone(contact.phone), color = Fusion.colors.textPrimary, fontSize = 16.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CardAction(icon: KiroXIcon, label: String, modifier: Modifier, onClick: () -> Unit) {
+    Column(
+        modifier.clip(RoundedCornerShape(16.dp)).background(Fusion.colors.surface2).clickable(onClick = onClick).padding(vertical = 14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        IconGlyph(icon, null, Modifier.size(24.dp), Fusion.colors.textPrimary)
+        Spacer(Modifier.height(6.dp))
+        Text(label, color = Fusion.colors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+    }
+}
+
+@Composable
+private fun AddContactDialog(
+    onDismiss: () -> Unit,
+    onAdd: suspend (phone: String, firstName: String, lastName: String) -> Long?,
+    onAdded: (Long) -> Unit,
+    onNotice: (String) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var first by rememberSaveable { mutableStateOf("") }
+    var last by rememberSaveable { mutableStateOf("") }
+    var phone by rememberSaveable { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    val digits = phone.filter(Char::isDigit)
+    val canAdd = first.isNotBlank() && digits.length >= 7 && !busy
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        containerColor = Fusion.colors.surface1,
+        title = { Text("Новый контакт", color = Fusion.colors.textPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ContactField(first, "Имя") { first = it }
+                ContactField(last, "Фамилия (необязательно)") { last = it }
+                ContactField(phone, "Номер телефона", androidx.compose.ui.text.input.KeyboardType.Phone) { phone = it }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(enabled = canAdd, onClick = {
+                busy = true
+                scope.launch {
+                    val result = runCatching { onAdd(digits, first.trim(), last.trim()) }
+                    busy = false
+                    result.onSuccess { id -> if (id != null) onAdded(id) else onNotice("Этого номера нет в Telegram") }
+                        .onFailure { onNotice("Не удалось добавить контакт") }
+                }
+            }) { Text(if (busy) "Добавляю…" else "Добавить", color = if (canAdd) Fusion.colors.textPrimary else Fusion.colors.textTertiary) }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss, enabled = !busy) { Text("Отмена", color = Fusion.colors.textSecondary) } }
+    )
+}
+
+@Composable
+private fun ContactField(value: String, label: String, keyboard: androidx.compose.ui.text.input.KeyboardType = androidx.compose.ui.text.input.KeyboardType.Text, onChange: (String) -> Unit) {
+    androidx.compose.material3.OutlinedTextField(
+        value, onChange, singleLine = true, label = { Text(label) },
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = keyboard),
+        modifier = Modifier.fillMaxWidth()
+    )
 }
 
 // ---------- Shared pieces ----------

@@ -86,6 +86,16 @@ class TelegramUserRepository(private val client: TelegramClient) {
         return client.query(TdApi.CreatePrivateChat(me.id, false)).id
     }
 
+    /**
+     * Adds a contact by phone number. Returns the Telegram user id, or null when the number
+     * is not registered in Telegram.
+     */
+    suspend fun addContact(phone: String, firstName: String, lastName: String): Long? {
+        val contact = TdApi.ImportedContact(phone, firstName, lastName, null)
+        val result = client.query(TdApi.ImportContacts(arrayOf(contact)))
+        return result.userIds.firstOrNull()?.takeIf { it != 0L }
+    }
+
     private companion object { const val PUBLISH_DELAY_MS = 50L }
 }
 
@@ -93,7 +103,7 @@ internal fun TdApi.User.displayName(): String =
     listOf(firstName, lastName).filter { !it.isNullOrBlank() }.joinToString(" ").ifBlank { "Удалённый аккаунт" }
 
 internal fun TdApi.User.toContact() = TelegramContact(
-    id, displayName(), usernames?.activeUsernames?.firstOrNull(), status.toStatus(), profilePhoto?.small?.toRef()
+    id, displayName(), usernames?.activeUsernames?.firstOrNull(), status.toStatus(), profilePhoto?.small?.toRef(), phoneNumber.orEmpty()
 )
 
 internal fun TdApi.User.toProfile(bio: String, birthday: String = "") = TelegramUserProfile(
