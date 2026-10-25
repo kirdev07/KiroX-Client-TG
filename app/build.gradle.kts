@@ -24,6 +24,9 @@ if (file("google-services.json").exists()) {
 }
 
 android {
+    // Native libraries (TDLib, call engine) are ~50 MB raw and ~20 MB compressed: compress them in the
+    // APK so downloads and updates are about half the size; Android unpacks them once on install.
+    packaging { jniLibs { useLegacyPackaging = true } }
     namespace = "com.kirox.app"
     compileSdk = 37
     compileSdkMinor = 1
