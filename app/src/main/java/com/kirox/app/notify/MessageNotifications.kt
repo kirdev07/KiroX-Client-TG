@@ -86,7 +86,8 @@ class MessageNotifications(
     private fun show(groupId: Int, group: Group, alert: Boolean) {
         val title = chats.chat(group.chatId)?.title.orEmpty().ifBlank { "Telegram" }
         val style = NotificationCompat.MessagingStyle(Person.Builder().setName("Вы").build())
-            .setConversationTitle(title)
+            // In a private chat the sender already names it; a title there shows up as "Name: Name".
+            .setConversationTitle(title.takeIf { group.items.any { it.sender.isNotBlank() && it.sender != title } })
             .setGroupConversation(group.items.map { it.sender }.distinct().size > 1)
         group.items.forEach { item ->
             style.addMessage(item.text, item.date * 1000L, Person.Builder().setName(item.sender.ifBlank { title }).build())
