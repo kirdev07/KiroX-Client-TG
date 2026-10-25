@@ -41,6 +41,18 @@ class TelegramChatRepository(private val client: TelegramClient) {
     /** End-to-end encrypted chat with [userId]; works only between this device and the peer's device. */
     suspend fun createSecretChat(userId: Long): Long = client.query(TdApi.CreateNewSecretChat(userId)).id
 
+    /** New folder with the given chats; returns its id. */
+    suspend fun createFolder(name: String, chatIds: List<Long>): Int {
+        val folder = TdApi.ChatFolder(
+            TdApi.ChatFolderName(TdApi.FormattedText(name, emptyArray()), false), null, -1, false,
+            LongArray(0), chatIds.toLongArray(), LongArray(0), false, false, false, false, false, false, false, false
+        )
+        return client.query(TdApi.CreateChatFolder(folder)).id
+    }
+
+    /** Removes the folder only; its chats stay in the main list. */
+    suspend fun deleteFolder(id: Int) { client.query(TdApi.DeleteChatFolder(id, LongArray(0))) }
+
     /** New basic group with [userIds]; returns its chat id. */
     suspend fun createGroup(title: String, userIds: List<Long>): Long =
         client.query(TdApi.CreateNewBasicGroupChat(userIds.toLongArray(), title, 0)).chatId
