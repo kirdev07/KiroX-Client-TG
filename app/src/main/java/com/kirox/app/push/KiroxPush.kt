@@ -82,11 +82,16 @@ class KiroxPush(private val context: Context, private val client: TelegramClient
         return keys
     }
 
-    /** Starts TDLib if the process was woken by a push, and hands it the payload when there is one. */
-    fun wake(payload: String?) {
+    /**
+     * Starts TDLib if the process was woken by a push, and hands it the payload when there is one.
+     * [done] runs once TDLib had time to sync and show notifications, so the caller can let the
+     * process go; Android may kill a background process right after a broadcast returns.
+     */
+    fun wake(payload: String?, done: () -> Unit = {}) {
         log("push received, payload=${payload?.length ?: 0} chars")
         client.start()
         if (!payload.isNullOrBlank()) client.send(TdApi.ProcessPushNotification(payload))
+        client.post(SYNC_WINDOW_MS) { client.pauseIfIdle(); done() }
     }
 
     fun unifiedToken(): String = prefs.getString(KEY_TOKEN, null) ?: UUID.randomUUID().toString().also { prefs.edit().putString(KEY_TOKEN, it).apply() }
@@ -99,6 +104,8 @@ class KiroxPush(private val context: Context, private val client: TelegramClient
         const val KEY_FCM_REJECTED = "fcm_rejected_version"
         const val KEY_WEBPUSH_KEY = "webpush_p256dh"
         const val KEY_WEBPUSH_AUTH = "webpush_auth"
+        /** Broadcast receivers get about 10 s with goAsync(); TDLib connects and fetches within that. */
+        const val SYNC_WINDOW_MS = 8_500L
     }
 }
 
@@ -109,7 +116,10 @@ class KiroxFirebaseService : FirebaseMessagingService() {
     override fun onNewToken(token: String) = push.registerFirebase(token)
 
     override fun onMessageReceived(message: RemoteMessage) {
-        push.wake(JSONObject(message.data as Map<*, *>).toString())
+        // FCM allows about 20 s here; block until TDLib had its sync window.
+        val latch = java.util.concurrent.CountDownLatch(1)
+        push.wake(JSONObject(message.data as Map<*, *>).toString()) { latch.countDown() }
+        latch.await(10, java.util.concurrent.TimeUnit.SECONDS)
     }
 }
 
@@ -137,10 +147,15 @@ object UnifiedPush {
 class UnifiedPushReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val push = context.push
-        if (intent.getStringExtra("token") != push.unifiedToken()) return
+        // Only the distributor can address this receiver. A registration left from an earlier install
+        // may carry an older token, and its messages must still wake the app.
         when (intent.action) {
             "org.unifiedpush.android.connector.NEW_ENDPOINT" -> intent.getStringExtra("endpoint")?.let(push::onUnifiedEndpoint)
-            "org.unifiedpush.android.connector.MESSAGE" -> push.wake(null)
+            "org.unifiedpush.android.connector.MESSAGE" -> {
+                // Keep the process alive while TDLib syncs; returning at once lets Android kill it.
+                val pending = goAsync()
+                push.wake(null) { pending.finish() }
+            }
         }
     }
 }

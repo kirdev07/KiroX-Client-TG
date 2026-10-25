@@ -58,8 +58,11 @@ fun PhoneLoginScreen(
     onContinue: (String) -> Unit = {},
     onQrLogin: () -> Unit = {},
     externalStatus: String? = null,
-    busy: Boolean = false
+    busy: Boolean = false,
+    /** Set while adding a second account: goes back to the signed-in one. */
+    onCancel: (() -> Unit)? = null
 ) {
+    if (onCancel != null) androidx.activity.compose.BackHandler(onBack = onCancel)
     val focusManager = LocalFocusManager.current
     Box(
         modifier = Modifier
@@ -107,6 +110,10 @@ fun PhoneLoginScreen(
                 focusManager.clearFocus()
                 if (!busy && state.validate()) onContinue(state.internationalNumber)
             })
+            if (onCancel != null) Text(
+                "Вернуться к аккаунту", color = KiroXSecondary, fontSize = 15.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onCancel).padding(vertical = 10.dp)
+            )
             // Second way in, styled as a quieter button; hidden while typing so only "Продолжить" sits above the keyboard.
             val keyboardOpen = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
             if (!keyboardOpen) Row(

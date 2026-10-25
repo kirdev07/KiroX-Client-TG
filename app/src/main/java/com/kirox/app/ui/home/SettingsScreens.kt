@@ -101,6 +101,13 @@ internal fun NotificationSettingsScreen(onBack: () -> Unit, onNotice: (String) -
                 }
             }
         }
+        item { SmallCaption("Доставка") }
+        item {
+            var keep by remember { mutableStateOf(com.kirox.app.notify.KeepConnectedService.isEnabled(context)) }
+            ToggleRow("Фоновое соединение", "Сообщения приходят сразу, даже если система не будит KiroX по пушу. В шторке будет тихое уведомление «KiroX на связи».", keep) {
+                keep = it; com.kirox.app.notify.KeepConnectedService.setEnabled(context, it)
+            }
+        }
         item { SmallCaption("Система") }
         item {
             LinkRow("Звук и вибрация", "Системные настройки уведомлений KiroX") {

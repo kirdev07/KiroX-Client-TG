@@ -58,6 +58,8 @@ private const val IN_PROGRESS = "В разработке"
 @Composable
 internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Unit, onOpenCustomization: () -> Unit, onOpenUpdates: () -> Unit, onOpenDevices: () -> Unit, onEditProfile: () -> Unit, onOpenSection: (String) -> Unit, onNotice: (String) -> Unit) {
     val pickPhoto = rememberProfilePhotoPicker(onNotice)
+    var showAccounts by remember { mutableStateOf(false) }
+    if (showAccounts) AccountsSheet { showAccounts = false }
     val entries = listOf(
         KiroXIcon.Palette to "Кастомизация", KiroXIcon.Chats to "Чаты и папки", KiroXIcon.Bell to "Уведомления",
         KiroXIcon.Shield to "Конфиденциальность", KiroXIcon.Storage to "Данные и память", KiroXIcon.Devices to "Устройства",
@@ -94,7 +96,7 @@ internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Uni
                             .clip(RoundedCornerShape(24.dp)).background(Fusion.colors.surface1).padding(horizontal = 18.dp, vertical = 14.dp),
                         decorationBox = { inner -> Box { if (query.isEmpty()) Text("Поиск настроек", color = Fusion.colors.textTertiary, fontSize = 16.sp); inner() } }
                     )
-                    ProfileHeader(profile, onEdit = onEditProfile, onAccounts = { onNotice("Несколько аккаунтов — $IN_PROGRESS") }, onAvatar = onOpenProfile, onCamera = pickPhoto)
+                    ProfileHeader(profile, onEdit = onEditProfile, onAccounts = { showAccounts = true }, onAvatar = onOpenProfile, onCamera = pickPhoto)
                 }
             }
         }
@@ -872,7 +874,7 @@ internal fun UpdatesScreen(updates: com.kirox.app.update.UpdateCenter, onBack: (
         }
         if (release != null && release.notes.isNotBlank()) {
             item { SmallCaption("Что нового в ${release.version}") }
-            item { Text(release.notes.replace("\r", ""), color = Fusion.colors.textSecondary, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 20.dp)) }
+            item { Text(releaseNotesText(release.notes, Fusion.colors.textPrimary), color = Fusion.colors.textSecondary, fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(horizontal = 20.dp)) }
         }
         item {
             Text(
@@ -1083,3 +1085,56 @@ private fun EditField(value: String, hint: String, singleLine: Boolean = true, o
         decorationBox = { inner -> Box { if (value.isEmpty()) Text(hint, color = Fusion.colors.textTertiary, fontSize = 16.sp); inner() } }
     )
 }
+
+/** The small Markdown subset used in release notes: headings, "- " bullets and **bold**. The top "## KiroX …" title is dropped. */
+private fun releaseNotesText(markdown: String, strong: androidx.compose.ui.graphics.Color): androidx.compose.ui.text.AnnotatedString =
+    androidx.compose.ui.text.buildAnnotatedString {
+        var lines = markdown.replace("\r", "").lines().dropWhile { it.isBlank() }
+        if (lines.firstOrNull()?.startsWith("## ") == true) lines = lines.drop(1).dropWhile { it.isBlank() }
+        lines.forEachIndexed { index, raw ->
+            if (index > 0) append('\n')
+            if (raw.startsWith("#")) {
+                withStyle(androidx.compose.ui.text.SpanStyle(color = strong, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)) { append(raw.trimStart('#').trim()) }
+                return@forEachIndexed
+            }
+            val line = if (raw.startsWith("- ")) "•  " + raw.drop(2) else raw
+            line.split("**").forEachIndexed { i, part ->
+                if (i % 2 == 1) withStyle(androidx.compose.ui.text.SpanStyle(color = strong, fontWeight = FontWeight.SemiBold)) { append(part) } else append(part)
+            }
+        }
+    }
+
+/** Accounts on this device: switch between them or add one. Only the chosen account is online. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun AccountsSheet(onDismiss: () -> Unit) {
+    val client = (androidx.compose.ui.platform.LocalContext.current.applicationContext as com.kirox.app.KiroXApplication).telegram.client
+    val accounts by client.accounts.accounts.collectAsState()
+    val active = client.activeSession
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Fusion.colors.surface1) {
+        Text("Аккаунты", color = Fusion.colors.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+        accounts.forEach { account ->
+            val current = account.session == active
+            Row(
+                Modifier.fillMaxWidth().clickable { onDismiss(); if (!current) client.switchTo(account.session) }.heightIn(min = 60.dp).padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TelegramAvatar(account.title.ifBlank { "?" }, null, 40.dp)
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(account.title.ifBlank { "Вход не завершён" }, color = Fusion.colors.textPrimary, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (account.phone.isNotBlank()) Text("+" + account.phone.trimStart('+'), color = Fusion.colors.textSecondary, fontSize = 13.sp)
+                }
+                if (current) IconGlyph(KiroXIcon.Check, null, Modifier.size(22.dp), Fusion.colors.accent)
+            }
+        }
+        if (accounts.size < MAX_ACCOUNTS) TileRow(KiroXIcon.Add, "Добавить аккаунт") { onDismiss(); client.addAccount() }
+        Text(
+            "Уведомления приходят только от выбранного аккаунта.",
+            color = Fusion.colors.textTertiary, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+        )
+        Spacer(Modifier.navigationBarsPadding().height(8.dp))
+    }
+}
+
+private const val MAX_ACCOUNTS = 3
