@@ -27,7 +27,13 @@ class TdException(val error: TdApi.Error) : Exception(error.message)
  */
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class TelegramClient(context: Context) {
-    private val session = TelegramSessionManager(context.applicationContext)
+    private val appContext = context.applicationContext
+    val accounts = TelegramAccounts(appContext)
+    private var session = TelegramSessionManager(appContext, accounts.active)
+    @Volatile private var authorized = false
+    private var loggingOut = false
+    /** Slot of an abandoned sign-in, deleted once its client has closed. */
+    private var discardOnClose: String? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
     private val updateHandlers = CopyOnWriteArrayList<(TdApi.Object) -> Unit>()
     private val failureHandlers = CopyOnWriteArrayList<(String) -> Unit>()
@@ -52,6 +58,7 @@ class TelegramClient(context: Context) {
             _blocked.value = "API_ID и API_HASH не настроены в kirox.properties"
             return
         }
+        session = TelegramSessionManager(appContext, accounts.active)
         try {
             Client.execute<TdApi.Ok>(TdApi.SetLogVerbosityLevel(1))
             Client.setLogMessageHandler(1) { _, _ -> /* Never persist TDLib logs in the app. */ }
@@ -85,11 +92,44 @@ class TelegramClient(context: Context) {
         if (!sent) continuation.resumeWithException(TdException(TdApi.Error(503, "TDLib ещё не готова")))
     }
 
+    /** Active account's session folder name. */
+    val activeSession: String get() = session.name
+
+    /** Closes the running account and opens [sessionName]; repositories reset on `Closed` as after a logout. */
+    fun switchTo(sessionName: String) {
+        if (sessionName == session.name && client != null) return
+        accounts.active = sessionName
+        if (!send(TdApi.Close())) start()
+    }
+
+    /** Opens a fresh slot, which starts at the phone number screen. */
+    fun addAccount() = switchTo(accounts.create())
+
+    /** Leaves a sign-in that was not finished and goes back to a signed-in account. */
+    fun cancelNewAccount() {
+        if (authorized) return
+        val abandoned = session.name
+        val back = accounts.accounts.value.firstOrNull { it.session != abandoned } ?: return
+        accounts.remove(abandoned)
+        discardOnClose = abandoned
+        switchTo(back.session)
+    }
+
     private fun dispatch(update: TdApi.Object) {
         if (update is TdApi.UpdateAuthorizationState) handleLifecycle(update.authorizationState)
         updateHandlers.forEach { it(update) }
         if (update is TdApi.UpdateAuthorizationState && update.authorizationState is TdApi.AuthorizationStateClosed) {
             client = null
+            discardOnClose?.let { TelegramSessionManager(appContext, it).reset() }
+            discardOnClose = null
+            // A logged-out extra account leaves the list; the next one opens instead of an empty sign-in.
+            if (loggingOut && accounts.accounts.value.size > 1) {
+                val gone = session.name
+                accounts.remove(gone)
+                session.reset()
+                accounts.active = accounts.accounts.value.first().session
+            }
+            loggingOut = false
             start()
         }
     }
@@ -97,6 +137,8 @@ class TelegramClient(context: Context) {
     private fun fail(message: String) = failureHandlers.forEach { it(message) }
 
     private fun handleLifecycle(state: TdApi.AuthorizationState) {
+        authorized = state is TdApi.AuthorizationStateReady
+        if (state is TdApi.AuthorizationStateLoggingOut) loggingOut = true
         when (state) {
             is TdApi.AuthorizationStateWaitTdlibParameters -> sendParameters()
             is TdApi.AuthorizationStateReady -> encryptLegacyDatabase()

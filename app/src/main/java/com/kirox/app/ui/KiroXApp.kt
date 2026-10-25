@@ -58,6 +58,9 @@ fun KiroXApp() {
     val recoveryCodeSent by telegramViewModel.auth.recoveryCodeSent.collectAsStateWithLifecycle()
     val connection by telegramViewModel.connection.state.collectAsStateWithLifecycle()
     val profile by telegramViewModel.users.profile.collectAsStateWithLifecycle()
+    val tdClient = remember { (context.applicationContext as com.kirox.app.KiroXApplication).telegram.client }
+    val accounts by tdClient.accounts.accounts.collectAsStateWithLifecycle()
+    LaunchedEffect(profile) { profile?.let { tdClient.accounts.describe(tdClient.activeSession, it.name, it.phoneNumber) } }
     val chatLists by telegramViewModel.chats.lists.collectAsStateWithLifecycle()
     val contacts by telegramViewModel.users.contacts.collectAsStateWithLifecycle()
     val contactsLoading by telegramViewModel.users.contactsLoading.collectAsStateWithLifecycle()
@@ -196,7 +199,8 @@ fun KiroXApp() {
                             onContinue = telegramViewModel.auth::phone,
                             onQrLogin = telegramViewModel.auth::requestQr,
                             externalStatus = telegramBlocked ?: (telegramAuth as? TelegramAuthState.Blocked)?.message ?: telegramError,
-                            busy = telegramBusy
+                            busy = telegramBusy,
+                            onCancel = if (accounts.size > 1) tdClient::cancelNewAccount else null
                         )
                         Screen.Countries -> CountryPickerScreen(state, onBack = { stack.pop() })
                         Screen.AuthStep -> TelegramAuthStepScreen(telegramAuth, telegramViewModel.auth, telegramBusy, telegramError, recoveryCodeSent)
