@@ -34,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -60,6 +61,8 @@ import com.kirox.app.telegram.TelegramVoipRepository
 import com.kirox.app.telegram.isLive
 import com.kirox.app.ui.components.TelegramAvatar
 import com.kirox.app.ui.icons.KiroXIcon
+import com.kirox.app.voip.CallAudioRoute
+import com.kirox.app.voip.CallAudioRouter
 import com.kirox.app.ui.icons.KiroXIcon as IconGlyph
 import com.kirox.app.ui.theme.Fusion
 import kotlinx.coroutines.delay
@@ -88,10 +91,11 @@ fun CallScreen(call: TelegramActiveCall, actions: CallActions) {
     BackHandler { if (!live) actions.dismiss() }
     IncomingAlert(call.phase == CallPhase.Incoming)
     val talking = live && call.phase != CallPhase.Incoming
-    var speaker by rememberSaveable(call.id) { mutableStateOf(call.isVideo) }
     // Switch audio to call mode only once connected: during ringing other apps on the phone must not see a busy line.
-    CallAudioRoute(active = call.phase is CallPhase.Active || call.phase == CallPhase.Connecting, speaker = speaker)
-    CallWindow(live = live, earMode = talking && !speaker && !call.cameraOn && !call.remoteVideo)
+    val router = callAudioRouter(call.id, active = call.phase is CallPhase.Active || call.phase == CallPhase.Connecting, video = call.isVideo)
+    val route by router.route.collectAsState()
+    val routes by router.available.collectAsState()
+    CallWindow(live = live, earMode = talking && route == CallAudioRoute.Earpiece && !call.cameraOn && !call.remoteVideo)
     val showVideo = TelegramVoipRepository.mediaAvailable && talking && (call.remoteVideo || call.cameraOn)
 
     Box(
@@ -120,8 +124,8 @@ fun CallScreen(call: TelegramActiveCall, actions: CallActions) {
             when {
                 call.phase == CallPhase.Incoming -> IncomingControls(call, actions)
                 live -> ActiveControls(
-                    call.isVideo || call.cameraOn, call.micMuted, speaker, call.cameraOn,
-                    { actions.setMuted(!call.micMuted) }, { speaker = !speaker }, { actions.setCamera(!call.cameraOn) }, actions::switchCamera, actions::hangUp
+                    call.isVideo || call.cameraOn, call.micMuted, route, routes.size > 2, call.cameraOn,
+                    { actions.setMuted(!call.micMuted) }, router::toggle, { actions.setCamera(!call.cameraOn) }, actions::switchCamera, actions::hangUp
                 )
                 else -> RoundButton(KiroXIcon.Check, "Закрыть", Color.White, Color(0xFF10151C), size = 64.dp, onClick = actions::dismiss)
             }
@@ -179,25 +183,27 @@ private fun CallWindow(live: Boolean, earMode: Boolean) {
     }
 }
 
-/** Voice goes to the earpiece or the speaker while the call is connected. */
+/**
+ * Call audio routing for [callId]: switched on while [active] (connected), back to normal after.
+ * Asks for the Bluetooth permission once on Android 12+, so a connected headset can be used.
+ */
 @Composable
-private fun CallAudioRoute(active: Boolean, speaker: Boolean) {
+private fun callAudioRouter(callId: Int, active: Boolean, video: Boolean): CallAudioRouter {
     val context = LocalContext.current
-    val audio = remember { context.getSystemService(android.media.AudioManager::class.java) }
-    DisposableEffect(active) {
-        if (!active || audio == null) return@DisposableEffect onDispose {}
-        val previousMode = audio.mode
-        audio.mode = android.media.AudioManager.MODE_IN_COMMUNICATION
-        onDispose {
-            @Suppress("DEPRECATION")
-            audio.isSpeakerphoneOn = false
-            audio.mode = previousMode
+    val router = remember(callId) { CallAudioRouter(context) }
+    val bluetoothPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted && active) { router.stop(); router.start(video) } }
+    DisposableEffect(router, active) {
+        if (active) {
+            router.start(video)
+            if (android.os.Build.VERSION.SDK_INT >= 31 &&
+                context.checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) runCatching { bluetoothPermission.launch(android.Manifest.permission.BLUETOOTH_CONNECT) }
         }
+        onDispose { router.stop() }
     }
-    LaunchedEffect(active, speaker) {
-        @Suppress("DEPRECATION")
-        if (active) audio?.isSpeakerphoneOn = speaker
-    }
+    return router
 }
 
 @Composable
@@ -287,12 +293,15 @@ private fun IncomingControls(call: TelegramActiveCall, actions: CallActions) {
 
 @Composable
 private fun ActiveControls(
-    isVideo: Boolean, micOff: Boolean, speaker: Boolean, camera: Boolean,
+    isVideo: Boolean, micOff: Boolean, route: CallAudioRoute, manyRoutes: Boolean, camera: Boolean,
     onMic: () -> Unit, onSpeaker: () -> Unit, onCamera: () -> Unit, onFlip: () -> Unit, onEnd: () -> Unit
 ) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Top) {
         if (isVideo && camera) LabeledButton("Повернуть") { ToggleButton(KiroXIcon.FlipCamera, "Сменить камеру", false, onFlip) }
-        else LabeledButton("Динамик") { ToggleButton(KiroXIcon.Speaker, "Динамик", speaker, onSpeaker) }
+        // With only the phone and the speaker the button is a speaker switch; with a headset it cycles routes.
+        else LabeledButton(if (manyRoutes) route.label else "Динамик") {
+            ToggleButton(KiroXIcon.Speaker, "Звук: ${route.label}", route != CallAudioRoute.Earpiece, onSpeaker)
+        }
         LabeledButton(if (isVideo) "Камера" else "Видео") { ToggleButton(KiroXIcon.Video, "Камера", camera, onCamera, crossed = !camera) }
         LabeledButton(if (micOff) "Без звука" else "Микрофон") { ToggleButton(KiroXIcon.Voice, "Микрофон", micOff, onMic, crossed = micOff) }
         LabeledButton("Завершить") { RoundButton(KiroXIcon.CallEnd, "Завершить", CallRed, Color.White, size = 60.dp, onClick = onEnd) }
