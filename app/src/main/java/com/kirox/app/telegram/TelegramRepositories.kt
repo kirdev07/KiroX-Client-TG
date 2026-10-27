@@ -127,6 +127,8 @@ class TelegramServices(context: android.content.Context) {
     /** Reports Wi-Fi / mobile / no network to TDLib so it reconnects right after a network change. */
     val network = ConnectionMonitor(context, client)
     val messages = TelegramMessageRepository(client, chats, users)
+    /** "печатает…" and other member activity, ours sent with SendChatAction. */
+    val activity = TelegramChatActionRepository(client, chats, users)
     val calls = TelegramCallRepository(client, chats)
     val voip = TelegramVoipRepository(client, users)
     val sessions = TelegramSessionsRepository(client)

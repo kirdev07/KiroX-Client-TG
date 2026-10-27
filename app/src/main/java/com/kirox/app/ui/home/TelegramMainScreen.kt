@@ -72,6 +72,9 @@ private enum class MainTab(val item: FusionNavItem) {
 private enum class SubScreen { None, NewMessage, Customization, Themes, ChatStyle, Animations, Updates, Devices, ProfileEdit, Notifications, Privacy, Storage, Premium, Advanced }
 private enum class RealChatSection { Archive, Messages }
 
+/** chatId → "печатает…"-style line shown in a chat row instead of its last message. */
+val LocalChatActivityLines = androidx.compose.runtime.compositionLocalOf<Map<Long, String>> { emptyMap() }
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TelegramMainScreen(
@@ -354,8 +357,9 @@ private fun ChatRow(chat: TelegramChatItem, onLongClick: (() -> Unit)? = null, o
             }
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                val preview = if (chat.draft != null) "Черновик: ${chat.draft}" else chat.preview
-                Text(preview, color = if (chat.draft != null) Fusion.colors.danger else Fusion.colors.textSecondary, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                val activity = LocalChatActivityLines.current[chat.id]
+                val preview = activity ?: if (chat.draft != null) "Черновик: ${chat.draft}" else chat.preview
+                Text(preview, color = if (activity != null) Fusion.colors.textPrimary else if (chat.draft != null) Fusion.colors.danger else Fusion.colors.textSecondary, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 if (chat.unreadMentionCount > 0) Badge("@", strong = true)
                 if (chat.unreadCount > 0 || chat.isMarkedUnread) Badge(if (chat.unreadCount > 0) compactCount(chat.unreadCount) else "", strong = !chat.isMuted)
                 else if (chat.isPinned) IconGlyph(KiroXIcon.Pin, "Закреплён", Modifier.padding(start = 6.dp).size(15.dp), Fusion.colors.textTertiary)

@@ -15,5 +15,6 @@ class TelegramViewModel(application: Application) : AndroidViewModel(application
     val voip = services.voip
     val stories = services.stories
     val connection = services.connection
+    val activity = services.activity
     init { services.client.start() }
 }

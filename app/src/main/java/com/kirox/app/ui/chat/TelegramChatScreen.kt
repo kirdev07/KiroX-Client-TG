@@ -72,6 +72,8 @@ interface TelegramChatActions {
     fun forward(toChatId: Long, messageIds: List<Long>)
     /** Stores the unsent text as the chat's Telegram draft; blank text clears it. */
     fun saveDraft(chatId: Long, text: String) {}
+    /** Our activity in the chat (typing, recording); null cancels it. */
+    fun setActivity(chatId: Long, activity: com.kirox.app.telegram.ChatActivity?) {}
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -85,7 +87,9 @@ fun TelegramChatScreen(
     onBack: () -> Unit,
     /** Starts a call with the peer of a private chat (its chat id is the user id). */
     onCall: ((isVideo: Boolean) -> Unit)? = null,
-    menu: TelegramChatMenuActions? = null
+    menu: TelegramChatMenuActions? = null,
+    /** What someone in this chat is doing now ("печатает…"); replaces the status line while set. */
+    activityLine: String? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -117,11 +121,15 @@ fun TelegramChatScreen(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
     ) { granted -> if (granted) startRecording() else notice = "Без доступа к микрофону голосовое не записать" }
     LaunchedEffect(recording) {
+        val chatId = history.chatId
         while (recording) {
             recordLevel = recorder.sampleLevel()
             recordMs = recorder.elapsedMs
+            // Throttled by the repository to one request every few seconds.
+            if (chatId != 0L) actions.setActivity(chatId, com.kirox.app.telegram.ChatActivity.RecordingVoice)
             kotlinx.coroutines.delay(100)
         }
+        if (chatId != 0L) actions.setActivity(chatId, null)
     }
     DisposableEffect(Unit) { onDispose { recorder.stop(discard = true); VoicePlayer.stop() } }
     // Drafts: the chat's Telegram draft fills an empty input once; unsent text is saved back when
@@ -201,7 +209,7 @@ fun TelegramChatScreen(
     val peer = ChatPeerUi(
         id = history.chatId,
         name = if (history.peerKind == TelegramPeerKind.Saved) "Избранное" else history.title,
-        status = when (history.peerKind) {
+        status = activityLine ?: when (history.peerKind) {
             TelegramPeerKind.User -> (if (history.isSecret) "🔒 секретный чат · " else "") + history.peerStatus?.let { TelegramFormat.status(it) }.orEmpty()
             TelegramPeerKind.Bot -> "бот"
             TelegramPeerKind.Group -> "группа"
@@ -241,7 +249,13 @@ fun TelegramChatScreen(
                 value = input,
                 reply = replyTo,
                 editing = editing,
-                onValueChange = { input = it },
+                onValueChange = { value ->
+                    // Typing is reported only for new text, not for edits or cursor moves.
+                    if (editing == null && value.text != input.text && history.chatId != 0L && history.peerKind != TelegramPeerKind.Saved) {
+                        actions.setActivity(history.chatId, if (value.text.isEmpty()) null else com.kirox.app.telegram.ChatActivity.Typing)
+                    }
+                    input = value
+                },
                 onCancelContext = { replyTo = null; editing = null; input = TextFieldValue() },
                 onAttach = { attachments = true },
                 onEmoji = { input = input.copy(text = input.text + "🙂", selection = androidx.compose.ui.text.TextRange(input.text.length + "🙂".length)) },

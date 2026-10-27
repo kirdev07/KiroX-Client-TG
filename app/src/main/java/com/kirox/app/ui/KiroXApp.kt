@@ -206,7 +206,10 @@ fun KiroXApp() {
                         )
                         Screen.Countries -> CountryPickerScreen(state, onBack = { stack.pop() })
                         Screen.AuthStep -> TelegramAuthStepScreen(telegramAuth, telegramViewModel.auth, telegramBusy, telegramError, recoveryCodeSent)
-                        Screen.Chats -> CompositionLocalProvider(LocalTelegramFiles provides telegramViewModel.files) {
+                        Screen.Chats -> CompositionLocalProvider(
+                            LocalTelegramFiles provides telegramViewModel.files,
+                            com.kirox.app.ui.home.LocalChatActivityLines provides telegramViewModel.activity.lines.collectAsStateWithLifecycle().value
+                        ) {
                             TelegramMainScreen(
                                 chatLists, chatActions, chatError, telegramViewModel.chats::clearError, contacts, contactsLoading, profile, connection,
                                 onOpenChat = ::openChat,
@@ -244,7 +247,8 @@ fun KiroXApp() {
                             val chatId = openChatId
                             LaunchedEffect(chatId) { telegramViewModel.messages.open(chatId) }
                             DisposableEffect(chatId) { onDispose { telegramViewModel.messages.close(chatId) } }
-                            val actions = remember { TelegramMessageActions(telegramViewModel.messages) }
+                            val actions = remember { TelegramMessageActions(telegramViewModel.messages, telegramViewModel.activity) }
+                            val activityLines by telegramViewModel.activity.lines.collectAsStateWithLifecycle()
                             TelegramChatScreen(
                                 history = if (history.chatId == chatId) history else TelegramChatHistory(chatId = chatId),
                                 error = messageError,
@@ -253,6 +257,7 @@ fun KiroXApp() {
                                 actions = actions,
                                 onBack = { stack.pop() },
                                 menu = chatMenu,
+                                activityLine = activityLines[chatId],
                                 onCall = if (com.kirox.app.ui.call.callsEnabled) { video ->
                                     withCallPermissions(video) { telegramViewModel.voip.start(chatId, video) }
                                 } else null
@@ -268,7 +273,10 @@ fun KiroXApp() {
     }
 }
 
-private class TelegramMessageActions(private val repository: TelegramMessageRepository) : TelegramChatActions {
+private class TelegramMessageActions(
+    private val repository: TelegramMessageRepository,
+    private val activityRepository: com.kirox.app.telegram.TelegramChatActionRepository
+) : TelegramChatActions {
     override fun loadOlder() = repository.loadOlder()
     override fun sendText(text: String, replyToMessageId: Long?) = repository.sendText(text, replyToMessageId)
     override fun sendPhoto(path: String, caption: String) = repository.sendPhoto(path, caption)
@@ -280,6 +288,7 @@ private class TelegramMessageActions(private val repository: TelegramMessageRepo
     override fun delete(messageIds: List<Long>, forEveryone: Boolean) = repository.delete(messageIds, forEveryone)
     override fun forward(toChatId: Long, messageIds: List<Long>) = repository.forward(toChatId, messageIds)
     override fun saveDraft(chatId: Long, text: String) = repository.saveDraft(chatId, text)
+    override fun setActivity(chatId: Long, activity: com.kirox.app.telegram.ChatActivity?) = activityRepository.send(chatId, activity)
 }
 
 private class TelegramStoryActionsImpl(private val repository: TelegramStoryRepository) : TelegramStoryActions {
