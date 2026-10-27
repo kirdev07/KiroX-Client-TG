@@ -71,6 +71,8 @@ class TelegramClient(context: Context) {
             return
         }
         session = TelegramSessionManager(appContext, accounts.active)
+        // A notification peek may have this account open: let it close first, then start again.
+        if (SessionLocks.isHeld(session.name)) { SessionLocks.whenFree(session.name) { start() }; return }
         try {
             Client.execute<TdApi.Ok>(TdApi.SetLogVerbosityLevel(1))
             Client.setLogMessageHandler(1) { _, _ -> /* Never persist TDLib logs in the app. */ }

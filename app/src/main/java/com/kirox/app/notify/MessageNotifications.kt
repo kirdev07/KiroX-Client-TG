@@ -187,7 +187,7 @@ class MessageNotifications(
     }
 
     companion object {
-        private const val CHANNEL = "messages"
+        internal const val CHANNEL = "messages"
         private const val TAG = "kirox-messages"
         private const val MAX_GROUPS = 10L
         private const val MAX_PER_GROUP = 6L

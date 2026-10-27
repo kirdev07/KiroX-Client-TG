@@ -29,6 +29,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) openAccountFrom(intent)
         enableEdgeToEdge()
         setContent {
             val palette by (application as KiroXApplication).settings.palette.collectAsStateWithLifecycle()
@@ -51,5 +52,18 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        openAccountFrom(intent)
+    }
+
+    /** A notification of another signed-in account opens that account. */
+    private fun openAccountFrom(intent: android.content.Intent?) {
+        val session = intent?.getStringExtra(com.kirox.app.notify.AccountPeek.EXTRA_SESSION) ?: return
+        intent.removeExtra(com.kirox.app.notify.AccountPeek.EXTRA_SESSION)
+        val client = (application as KiroXApplication).telegram.client
+        if (client.accounts.accounts.value.any { it.session == session }) client.switchTo(session)
     }
 }
