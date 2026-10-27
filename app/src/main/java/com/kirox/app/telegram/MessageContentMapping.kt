@@ -105,3 +105,42 @@ internal fun entitiesOf(text: TdApi.FormattedText?): List<TelegramTextEntity> =
         }
         TelegramTextEntity(entity.offset, entity.length, type, url)
     }
+
+
+internal fun pollOf(content: TdApi.MessageContent?): TelegramPoll? {
+    val poll = (content as? TdApi.MessagePoll)?.poll ?: return null
+    val quiz = poll.type as? TdApi.PollTypeQuiz
+    val voted = poll.options.any { it.isChosen }
+    return TelegramPoll(
+        question = poll.question?.text.orEmpty(),
+        options = poll.options.mapIndexed { index, option ->
+            TelegramPollOption(option.text?.text.orEmpty(), option.votePercentage, option.voterCount, option.isChosen, quiz?.correctOptionIds?.contains(index) == true)
+        },
+        totalVoters = poll.totalVoterCount,
+        isClosed = poll.isClosed,
+        multipleAnswers = poll.allowsMultipleAnswers,
+        isQuiz = quiz != null,
+        isAnonymous = poll.isAnonymous,
+        canVote = !poll.isClosed && poll.voteRestrictionReason == null && (!voted || poll.allowsRevoting),
+        voted = voted
+    )
+}
+
+/** Inline keyboard of a bot message; callback and URL buttons work, others are shown disabled. */
+internal fun inlineButtonsOf(markup: TdApi.ReplyMarkup?): List<List<TelegramButton>> =
+    (markup as? TdApi.ReplyMarkupInlineKeyboard)?.rows.orEmpty().map { row ->
+        row.map { button ->
+            when (val type = button.type) {
+                is TdApi.InlineKeyboardButtonTypeCallback -> TelegramButton(button.text, TelegramButton.Kind.Callback, data = type.data)
+                is TdApi.InlineKeyboardButtonTypeUrl -> TelegramButton(button.text, TelegramButton.Kind.Url, url = type.url)
+                else -> TelegramButton(button.text, TelegramButton.Kind.Other)
+            }
+        }
+    }.filter { it.isNotEmpty() }
+
+/** Texts of a custom reply keyboard. */
+internal fun replyKeyboardOf(markup: TdApi.ReplyMarkup?): List<List<String>>? = when (markup) {
+    is TdApi.ReplyMarkupShowKeyboard -> markup.rows.map { row -> row.map { it.text } }.filter { it.isNotEmpty() }
+    is TdApi.ReplyMarkupRemoveKeyboard -> emptyList()
+    else -> null
+}

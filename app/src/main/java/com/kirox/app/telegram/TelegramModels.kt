@@ -142,9 +142,37 @@ data class TelegramMessage(
     val albumId: Long = 0,
     /** Comments under a channel post; null when the post has no comments. */
     val commentCount: Int? = null,
+    val poll: TelegramPoll? = null,
+    /** Inline buttons under a bot message, by rows. */
+    val buttons: List<List<TelegramButton>> = emptyList(),
     /** Message this one answers, in the same chat; 0 when none. */
     val replyToMessageId: Long = 0
 )
+
+/** A poll or quiz in a message. */
+data class TelegramPoll(
+    val question: String,
+    val options: List<TelegramPollOption>,
+    val totalVoters: Int,
+    val isClosed: Boolean,
+    val multipleAnswers: Boolean,
+    val isQuiz: Boolean,
+    val isAnonymous: Boolean,
+    /** Whether this account may still vote (not closed, not restricted, not voted unless revoting). */
+    val canVote: Boolean,
+    val voted: Boolean
+)
+
+data class TelegramPollOption(val text: String, val percent: Int, val voters: Int, val chosen: Boolean, val correct: Boolean)
+
+/** A button under a bot message. */
+data class TelegramButton(val text: String, val kind: Kind, val url: String? = null, val data: ByteArray? = null) {
+    enum class Kind { Callback, Url, Other }
+    override fun equals(other: Any?): Boolean = other is TelegramButton && other.text == text && other.kind == kind && other.url == url && other.data.contentEqualsNullable(data)
+    override fun hashCode(): Int = (text.hashCode() * 31 + kind.hashCode()) * 31 + (url?.hashCode() ?: 0)
+}
+
+private fun ByteArray?.contentEqualsNullable(other: ByteArray?): Boolean = if (this == null) other == null else other != null && contentEquals(other)
 
 /** A message found by the global search, with its chat for the result row. */
 data class TelegramFoundMessage(val chatId: Long, val messageId: Long, val chatTitle: String, val text: String, val date: Int, val photo: TelegramFileRef?)
@@ -174,7 +202,9 @@ data class TelegramChatHistory(
     /** Set for a comment thread or forum topic: shown as the header title instead of the chat. */
     val threadTitle: String? = null,
     /** Forum supergroup opened as a whole: the screen shows its topics. */
-    val isForum: Boolean = false
+    val isForum: Boolean = false,
+    /** Custom keyboard a bot sent (rows of button texts); empty when none. */
+    val replyKeyboard: List<List<String>> = emptyList()
 )
 
 /** A topic of a forum supergroup. */

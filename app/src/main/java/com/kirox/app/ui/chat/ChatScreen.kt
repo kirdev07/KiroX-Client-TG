@@ -89,7 +89,7 @@ internal fun ChatSearchField(value: String, onChange: (String) -> Unit, onClose:
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAppearance, pinned: Boolean = false, showAuthor: Boolean = false, onLongClick: () -> Unit, onReply: () -> Unit, onNotice: (String) -> Unit = {}, selected: Boolean = false, onClick: (() -> Unit)? = null, onQuote: (Long) -> Unit = {}, highlighted: Boolean = false, onComments: (() -> Unit)? = null) {
+internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAppearance, pinned: Boolean = false, showAuthor: Boolean = false, onLongClick: () -> Unit, onReply: () -> Unit, onNotice: (String) -> Unit = {}, selected: Boolean = false, onClick: (() -> Unit)? = null, onQuote: (Long) -> Unit = {}, highlighted: Boolean = false, onComments: (() -> Unit)? = null, onVote: (List<Int>) -> Unit = {}, onButton: (com.kirox.app.telegram.TelegramButton) -> Unit = {}) {
     if (message.direction == MessageDirection.System) {
         Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
             Text(message.text, color = ChatSecondary, fontSize = 11.sp, modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Fusion.colors.surface2).padding(horizontal = 12.dp, vertical = 5.dp))
@@ -136,7 +136,10 @@ internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAp
                 MessageKind.Audio -> { if (media != null) AudioMessage(media); Caption() }
                 MessageKind.Document -> { if (media != null) DocumentMessage(media, onNotice) else MessageText(message.text, message.entities, textScale); Caption() }
                 MessageKind.Sticker -> if (media != null) StickerMessage(media, message.thumbnail) else MessageText(message.text, message.entities, textScale)
-                MessageKind.Text -> MessageText(message.text, message.entities, textScale)
+                MessageKind.Text -> {
+                    val poll = message.poll
+                    if (poll != null) PollView(poll, onVote) else MessageText(message.text, message.entities, textScale)
+                }
             }
             Spacer(Modifier.height(4.dp))
             Row(Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically) {
@@ -145,6 +148,23 @@ internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAp
             }
             if (message.reactions.isNotEmpty()) {
                 Row(Modifier.padding(top = 5.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) { message.reactions.forEach { reaction -> Text("${reaction.emoji} ${reaction.count}", color = ChatWhite, fontSize = 11.sp, modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(if (reaction.selected) Fusion.colors.textTertiary else Fusion.colors.surface3).padding(horizontal = 8.dp, vertical = 4.dp)) } }
+            }
+            if (message.buttons.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                message.buttons.forEach { row ->
+                    Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        row.forEach { button ->
+                            Text(
+                                button.text + if (button.kind == com.kirox.app.telegram.TelegramButton.Kind.Url) " ↗" else "",
+                                color = if (button.kind == com.kirox.app.telegram.TelegramButton.Kind.Other) ChatSecondary else ChatWhite,
+                                fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                modifier = Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(Fusion.colors.surface3)
+                                    .clickable(enabled = button.kind != com.kirox.app.telegram.TelegramButton.Kind.Other) { onButton(button) }.padding(horizontal = 8.dp, vertical = 9.dp)
+                            )
+                        }
+                    }
+                }
             }
             val comments = message.commentCount
             if (comments != null && onComments != null) {
@@ -285,7 +305,7 @@ internal fun ChatComposer(value: TextFieldValue, reply: MessageUi?, editing: Mes
 @Composable internal fun MessageActionsSheet(message: MessageUi, onDismiss: () -> Unit, onReply: () -> Unit, onReaction: (String) -> Unit, onAction: (String) -> Unit, reactions: Boolean = true, hidden: Set<String> = emptySet(), isPinned: Boolean = false, reactionChoices: List<String> = DEFAULT_REACTIONS) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Fusion.colors.surface1, contentColor = ChatWhite) {
         if (reactions) Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceAround) { reactionChoices.forEach { emoji -> Text(emoji, fontSize = 23.sp, modifier = Modifier.clip(CircleShape).clickable { onReaction(emoji) }.padding(9.dp)) } }
-        val actions = buildList { add(KiroXIcon.Reply to "Ответить"); if (message.text.isNotBlank() && message.kind != MessageKind.Voice) add(KiroXIcon.Copy to "Копировать"); if (message.media != null && message.kind != MessageKind.Sticker || message.kind == MessageKind.Photo) add(KiroXIcon.Storage to "Сохранить"); add(KiroXIcon.Forward to "Переслать"); add(KiroXIcon.Pin to if (isPinned) "Открепить" else "Закрепить"); if (message.canEdit) add(KiroXIcon.Edit to "Редактировать"); if (message.canDelete) add(KiroXIcon.Delete to "Удалить"); add(KiroXIcon.Check to "Выбрать") }.filterNot { it.second in hidden }
+        val actions = buildList { add(KiroXIcon.Reply to "Ответить"); if (message.text.isNotBlank() && message.kind != MessageKind.Voice) add(KiroXIcon.Copy to "Копировать"); if (message.text.isNotBlank() && message.kind == MessageKind.Text && message.poll == null) add(KiroXIcon.Info to "Перевести"); if (message.media != null && message.kind != MessageKind.Sticker || message.kind == MessageKind.Photo) add(KiroXIcon.Storage to "Сохранить"); add(KiroXIcon.Forward to "Переслать"); add(KiroXIcon.Pin to if (isPinned) "Открепить" else "Закрепить"); if (message.canEdit) add(KiroXIcon.Edit to "Редактировать"); if (message.canDelete) add(KiroXIcon.Delete to "Удалить"); add(KiroXIcon.Check to "Выбрать") }.filterNot { it.second in hidden }
         actions.forEach { (icon, title) -> Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable { if (title == "Ответить") onReply() else onAction(title) }.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { IconGlyph(icon, null, Modifier.size(22.dp), ChatWhite); Spacer(Modifier.width(16.dp)); Text(title, color = if (title == "Удалить") Fusion.colors.danger else ChatWhite, fontSize = 15.sp) } }
         Spacer(Modifier.navigationBarsPadding())
     }
@@ -303,6 +323,68 @@ internal fun commentsLabel(count: Int): String {
         else -> "комментариев"
     }
     return "$count $word"
+}
+
+/**
+ * Poll or quiz: tap an option to vote (several, then «Голосовать», when multiple answers are
+ * allowed); after voting or closing, results with percentages; the quiz answer is marked.
+ */
+@Composable
+private fun PollView(poll: com.kirox.app.telegram.TelegramPoll, onVote: (List<Int>) -> Unit) {
+    var picked by remember(poll) { mutableStateOf(setOf<Int>()) }
+    val showResults = poll.voted || poll.isClosed
+    Column(Modifier.widthIn(min = 220.dp)) {
+        Text(poll.question, color = ChatWhite, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        Text(
+            listOf(if (poll.isQuiz) "Викторина" else if (poll.isAnonymous) "Анонимный опрос" else "Опрос", if (poll.isClosed) "завершён" else null).filterNotNull().joinToString(" · "),
+            color = ChatSecondary, fontSize = 11.sp
+        )
+        Spacer(Modifier.height(6.dp))
+        poll.options.forEachIndexed { index, option ->
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(enabled = poll.canVote && !showResults || poll.canVote && poll.multipleAnswers) {
+                    if (poll.multipleAnswers) picked = if (index in picked) picked - index else picked + index else onVote(listOf(index))
+                }.padding(vertical = 5.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val mark = when {
+                        showResults && poll.isQuiz && option.correct -> "✓"
+                        showResults -> "${option.percent}%"
+                        poll.multipleAnswers -> if (index in picked) "☑" else "☐"
+                        else -> "○"
+                    }
+                    Text(mark, color = ChatWhite, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.widthIn(min = 36.dp))
+                    Text(option.text, color = ChatWhite, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                    if (option.chosen) Text("•", color = ChatWhite, fontSize = 16.sp)
+                }
+                if (showResults) Box(Modifier.padding(start = 36.dp, top = 3.dp).fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)).background(Fusion.colors.surface3)) {
+                    Box(Modifier.fillMaxWidth(option.percent / 100f).height(3.dp).background(if (poll.isQuiz && !option.correct && option.chosen) Fusion.colors.danger else ChatWhite))
+                }
+            }
+        }
+        if (poll.multipleAnswers && poll.canVote && picked.isNotEmpty()) Text(
+            "Голосовать", color = ChatWhite, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 6.dp).clip(RoundedCornerShape(12.dp)).background(Fusion.colors.surface3).clickable { onVote(picked.sorted()); picked = emptySet() }.padding(horizontal = 14.dp, vertical = 7.dp)
+        )
+        Spacer(Modifier.height(4.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(pollVotersLabel(poll.totalVoters), color = ChatSecondary, fontSize = 11.sp, modifier = Modifier.weight(1f))
+            if (poll.voted && poll.canVote && !poll.isQuiz) Text("Отменить голос", color = ChatSecondary, fontSize = 11.sp, modifier = Modifier.clickable { onVote(emptyList()) })
+        }
+    }
+}
+
+/** "Нет голосов", "1 голос", "3 голоса", "7 голосов". */
+internal fun pollVotersLabel(count: Int): String {
+    if (count <= 0) return "Нет голосов"
+    val mod100 = count % 100
+    val mod10 = count % 10
+    return "$count " + when {
+        mod100 in 11..14 -> "голосов"
+        mod10 == 1 -> "голос"
+        mod10 in 2..4 -> "голоса"
+        else -> "голосов"
+    }
 }
 
 /** Reactions offered before the chat's own list loads. */

@@ -80,6 +80,36 @@ class TelegramMessageRepository(
         openLoaded(chatId)
     }
 
+    /** Votes for options at [indices] (empty retracts the vote). */
+    fun vote(messageId: Long, indices: List<Int>) = act { id -> TdApi.SetPollAnswer(id, messageId, indices.toIntArray()) }
+
+    fun stopPoll(messageId: Long) = act { id -> TdApi.StopPoll(id, messageId, null) }
+
+    /** Sends a poll; [correctOption] makes it a quiz with that right answer. */
+    fun sendPoll(question: String, options: List<String>, anonymous: Boolean, multipleAnswers: Boolean, correctOption: Int?) = act { id ->
+        val type: TdApi.InputPollType = if (correctOption != null) TdApi.InputPollTypeQuiz(intArrayOf(correctOption), TdApi.FormattedText("", emptyArray()), null)
+        else TdApi.InputPollTypeRegular(false)
+        TdApi.SendMessage(id, topic, null, null, null, TdApi.InputMessagePoll(
+            TdApi.FormattedText(question, emptyArray()),
+            options.map { TdApi.InputPollOption(TdApi.FormattedText(it, emptyArray()), null) }.toTypedArray(),
+            null, null, anonymous, multipleAnswers && correctOption == null, true, false, emptyArray(), false, false, type, 0, 0, false
+        ))
+    }
+
+    /** Presses a bot's inline button; returns the bot's answer (text to show, URL to open) or null. */
+    suspend fun pressButton(messageId: Long, button: TelegramButton): Pair<String, String?>? {
+        val id = chatId.takeIf { it != 0L } ?: return null
+        val data = button.data ?: return null
+        val answer = client.query(TdApi.GetCallbackQueryAnswer(id, messageId, TdApi.CallbackQueryPayloadData(data)))
+        return answer.text.orEmpty() to answer.url?.takeIf { it.isNotBlank() }
+    }
+
+    /** Message text translated to [language] (ISO code, e.g. "ru") by Telegram. */
+    suspend fun translate(messageId: Long, language: String): String? {
+        val id = chatId.takeIf { it != 0L } ?: return null
+        return runCatching { client.query(TdApi.TranslateMessageText(id, messageId, language, "")).text }.getOrNull()
+    }
+
     /** Topics of a forum supergroup, pinned first as Telegram orders them. */
     suspend fun forumTopics(chatId: Long): List<TelegramForumTopic> = runCatching {
         client.query(TdApi.GetForumTopics(chatId, "", 0, 0, 0, FORUM_TOPICS_LIMIT)).topics.map { t ->
@@ -328,7 +358,11 @@ class TelegramMessageRepository(
                 schedulePublish()
             }
             is TdApi.UpdateMessageContent -> if (update.chatId == chatId) messages[update.messageId]?.let { it.content = update.newContent; schedulePublish() }
-            is TdApi.UpdateMessageEdited -> if (update.chatId == chatId) messages[update.messageId]?.let { it.editDate = update.editDate; schedulePublish() }
+            is TdApi.UpdateMessageEdited -> if (update.chatId == chatId) messages[update.messageId]?.let { it.editDate = update.editDate; it.replyMarkup = update.replyMarkup; schedulePublish() }
+            is TdApi.UpdatePoll -> messages.values.firstOrNull { (it.content as? TdApi.MessagePoll)?.poll?.id == update.poll.id }?.let { message ->
+                (message.content as TdApi.MessagePoll).poll = update.poll
+                schedulePublish()
+            }
             is TdApi.UpdateMessageInteractionInfo -> if (update.chatId == chatId) messages[update.messageId]?.let { it.interactionInfo = update.interactionInfo; schedulePublish() }
             is TdApi.UpdateDeleteMessages -> if (update.chatId == chatId && update.isPermanent) {
                 update.messageIds.forEach { messages.remove(it) }; schedulePublish()
@@ -399,6 +433,8 @@ class TelegramMessageRepository(
             pinnedIds = pinnedIds.toSet(),
             jumpTo = jumpTarget.takeIf { it in messages } ?: 0L,
             threadTitle = threadTitle,
+            // The newest keyboard a bot sent (or removed) in the open chat.
+            replyKeyboard = messages.values.reversed().asSequence().filter { !it.isOutgoing }.mapNotNull { replyKeyboardOf(it.replyMarkup) }.firstOrNull().orEmpty(),
             isForum = topic == null && chats.isForum(id)
         )
         markViewed(id)
@@ -437,6 +473,8 @@ class TelegramMessageRepository(
             media = mediaInfo.first,
             thumbnail = mediaInfo.second,
             albumId = mediaAlbumId,
+            poll = pollOf(content),
+            buttons = inlineButtonsOf(replyMarkup),
             commentCount = interactionInfo?.replyInfo?.replyCount?.takeIf { isChannelPost },
             replyToMessageId = reply?.takeIf { it.chatId == 0L || it.chatId == chatId }?.messageId ?: 0L,
             date = date,

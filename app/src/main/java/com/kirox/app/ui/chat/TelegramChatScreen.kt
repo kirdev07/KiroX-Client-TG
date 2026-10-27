@@ -8,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -88,6 +89,11 @@ interface TelegramChatActions {
     suspend fun search(query: String, fromMessageId: Long): Pair<List<TelegramMessage>, Long> = emptyList<TelegramMessage>() to 0L
     suspend fun availableReactions(messageId: Long): List<String>? = null
     suspend fun forumTopics(chatId: Long): List<com.kirox.app.telegram.TelegramForumTopic> = emptyList()
+    fun vote(messageId: Long, indices: List<Int>) {}
+    fun sendPoll(question: String, options: List<String>, anonymous: Boolean, multipleAnswers: Boolean, correctOption: Int?) {}
+    /** Bot's answer to an inline button: text to show and URL to open. */
+    suspend fun pressButton(messageId: Long, button: com.kirox.app.telegram.TelegramButton): Pair<String, String?>? = null
+    suspend fun translate(messageId: Long, language: String): String? = null
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -131,6 +137,9 @@ fun TelegramChatScreen(
     var reactionChoices by remember { mutableStateOf(DEFAULT_REACTIONS) }
     var attachments by rememberSaveable { mutableStateOf(false) }
     var stickerPanel by rememberSaveable { mutableStateOf(false) }
+    var showBotKeyboard by remember(history.chatId) { mutableStateOf(true) }
+    var creatingPoll by remember { mutableStateOf(false) }
+    var translation by remember { mutableStateOf<Pair<String, String?>?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     var videoNote by remember { mutableStateOf(false) }
     val noteCameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
@@ -260,6 +269,8 @@ fun TelegramChatScreen(
         }
     }
     val files = com.kirox.app.ui.components.LocalTelegramFiles.current
+    val linkOpener = LocalLinkOpener.current
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
     /** Downloads the message's file if needed, then copies it to Downloads/KiroX. */
     fun saveMedia(message: MessageUi) {
         val file = message.media?.file ?: message.photo ?: return
@@ -359,7 +370,15 @@ fun TelegramChatScreen(
                     recordPaused = false
                     if (note != null) actions.sendVoice(note.file.absolutePath, note.durationSeconds, note.waveform) else notice = "Слишком короткое голосовое"
                 }
-            ) else if ((history.peerKind != TelegramPeerKind.Channel || history.threadTitle != null) && !history.isForum) ChatComposer(
+            ) else if ((history.peerKind != TelegramPeerKind.Channel || history.threadTitle != null) && !history.isForum) Column {
+                if (history.replyKeyboard.isNotEmpty() && showBotKeyboard) BotKeyboard(history.replyKeyboard) { text -> actions.sendText(text, null) }
+                if (history.replyKeyboard.isNotEmpty()) Text(
+                    if (showBotKeyboard) "Скрыть клавиатуру бота" else "Клавиатура бота",
+                    color = Fusion.colors.textSecondary, fontSize = 12.sp,
+                    modifier = Modifier.fillMaxWidth().background(Fusion.colors.background).clickable { showBotKeyboard = !showBotKeyboard }.padding(vertical = 6.dp),
+                    textAlign = TextAlign.Center
+                )
+                ChatComposer(
                 value = input,
                 reply = replyTo,
                 editing = editing,
@@ -387,6 +406,7 @@ fun TelegramChatScreen(
                 },
                 appearance = appearance
             )
+            }
         }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
@@ -434,6 +454,16 @@ fun TelegramChatScreen(
                         onClick = if (selectedIds.isNotEmpty() && row.message.direction != MessageDirection.System) ({ selectedIds = selectedIds.toggle(row.message.id) }) else null,
                         onQuote = { id -> actions.jumpTo(id) },
                         highlighted = row.message.id == highlighted,
+                        onVote = { indices -> actions.vote(row.message.id, indices) },
+                        onButton = { button ->
+                            val url = button.url
+                            if (url != null) linkOpener?.invoke(url) ?: runCatching { uriHandler.openUri(url) }
+                            else scope.launch {
+                                val answer = runCatching { actions.pressButton(row.message.id, button) }.getOrNull()
+                                answer?.first?.takeIf { it.isNotBlank() }?.let { notice = it }
+                                answer?.second?.let { link -> linkOpener?.invoke(link) ?: runCatching { uriHandler.openUri(link) } }
+                            }
+                        },
                         onComments = if (history.peerKind == TelegramPeerKind.Channel && history.threadTitle == null && onOpenComments != null) ({ onOpenComments(row.message.id) }) else null
                     )
                 }
@@ -457,6 +487,7 @@ fun TelegramChatScreen(
             attachments = false
             when (choice) {
                 "Фото и видео" -> pickPhoto.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                "Опрос" -> creatingPoll = true
                 "Видеосообщение" -> {
                     val needed = arrayOf(android.Manifest.permission.CAMERA, android.Manifest.permission.RECORD_AUDIO)
                     if (needed.all { context.checkSelfPermission(it) == android.content.pm.PackageManager.PERMISSION_GRANTED }) videoNote = true
@@ -469,6 +500,7 @@ fun TelegramChatScreen(
             add(KiroXIcon.Media to "Фото и видео")
             if (history.peerKind != TelegramPeerKind.Channel) add(KiroXIcon.Camera to "Видеосообщение")
             add(KiroXIcon.File to "Файл")
+            if (!history.isSecret) add(KiroXIcon.Sliders to "Опрос")
         },
         footer = if (input.text.isNotBlank()) "Текст из поля ввода станет подписью" else null
     )
@@ -494,6 +526,13 @@ fun TelegramChatScreen(
                     "Закрепить" -> { actions.pin(message.id); notice = "Сообщение закреплено" }
                     "Открепить" -> actions.unpin(message.id)
                     "Выбрать" -> selectedIds = setOf(message.id)
+                    "Перевести" -> {
+                        translation = message.text to null
+                        scope.launch {
+                            val language = Locale.getDefault().language.ifBlank { "ru" }
+                            translation = message.text to (actions.translate(message.id, language) ?: "Перевод недоступен")
+                        }
+                    }
                 }
             },
             reactions = history.peerKind != TelegramPeerKind.Saved,
@@ -503,6 +542,31 @@ fun TelegramChatScreen(
                 if (history.isSecret) add("Закрепить")
                 if (source?.canEdit != true) add("Редактировать")
                 if (source?.delivery == TelegramDelivery.Sending) { add("Переслать"); add("Ответить") }
+            }
+        )
+    }
+    if (creatingPoll) PollCreateDialog(onDismiss = { creatingPoll = false }) { question, options, anonymous, multiple, correct ->
+        creatingPoll = false
+        actions.sendPoll(question, options, anonymous, multiple, correct)
+    }
+    translation?.let { (original, translated) ->
+        AlertDialog(
+            onDismissRequest = { translation = null },
+            containerColor = Fusion.colors.surface2,
+            title = { Text("Перевод", color = Fusion.colors.textPrimary) },
+            text = {
+                Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    if (translated == null) CircularProgressIndicator(Modifier.size(22.dp), color = Fusion.colors.textPrimary, strokeWidth = 2.dp)
+                    else Text(translated, color = Fusion.colors.textPrimary, fontSize = 15.sp)
+                    Spacer(Modifier.height(12.dp))
+                    Text(original, color = Fusion.colors.textSecondary, fontSize = 13.sp)
+                }
+            },
+            confirmButton = {
+                Row {
+                    if (translated != null) TextButton(onClick = { clipboard.setText(AnnotatedString(translated)); notice = "Перевод скопирован"; translation = null }) { Text("Копировать", color = Fusion.colors.textPrimary) }
+                    TextButton(onClick = { translation = null }) { Text("Закрыть", color = Fusion.colors.textSecondary) }
+                }
             }
         )
     }
@@ -735,7 +799,9 @@ internal fun TelegramMessage.toUi(time: String) = MessageUi(
     media = media,
     thumbnail = thumbnail,
     entities = entities,
-    commentCount = commentCount
+    commentCount = commentCount,
+    poll = poll,
+    buttons = buttons
 )
 
 /** Copies a picked content URI into the app cache so TDLib can upload it from a plain path. */
@@ -911,5 +977,86 @@ private fun ForumTopicsList(chatId: Long, actions: TelegramChatActions, onOpen: 
                 }
             }
         }
+    }
+}
+
+
+/** Custom keyboard a bot sent: each button sends its text. */
+@Composable
+private fun BotKeyboard(rows: List<List<String>>, onPress: (String) -> Unit) {
+    Column(Modifier.fillMaxWidth().background(Fusion.colors.surface1).padding(6.dp).heightIn(max = 260.dp).verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+        rows.forEach { row ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { text ->
+                    Text(
+                        text, color = Fusion.colors.textPrimary, fontSize = 14.sp, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(Fusion.colors.surface3).clickable { onPress(text) }.padding(horizontal = 8.dp, vertical = 11.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** New poll: question, 2–10 options, anonymous, several answers, or a quiz with one right answer. */
+@Composable
+private fun PollCreateDialog(onDismiss: () -> Unit, onCreate: (String, List<String>, Boolean, Boolean, Int?) -> Unit) {
+    var question by remember { mutableStateOf("") }
+    var options by remember { mutableStateOf(listOf("", "")) }
+    var anonymous by remember { mutableStateOf(true) }
+    var multiple by remember { mutableStateOf(false) }
+    var quiz by remember { mutableStateOf(false) }
+    var correct by remember { mutableStateOf(0) }
+    val filled = options.map { it.trim() }.filter { it.isNotEmpty() }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Fusion.colors.surface2,
+        title = { Text("Новый опрос", color = Fusion.colors.textPrimary) },
+        text = {
+            Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                PollField("Вопрос", question) { question = it.take(300) }
+                options.forEachIndexed { index, value ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (quiz) Text(if (correct == index) "◉" else "○", color = Fusion.colors.textPrimary, fontSize = 16.sp, modifier = Modifier.clickable { correct = index }.padding(end = 8.dp))
+                        Box(Modifier.weight(1f)) { PollField("Вариант ${index + 1}", value) { text -> options = options.toMutableList().also { it[index] = text.take(100) } } }
+                    }
+                }
+                if (options.size < 10) Text("+ Добавить вариант", color = Fusion.colors.textPrimary, fontSize = 14.sp, modifier = Modifier.clickable { options = options + "" }.padding(vertical = 8.dp))
+                PollToggle("Анонимный", anonymous) { anonymous = it }
+                PollToggle("Несколько ответов", multiple && !quiz, enabled = !quiz) { multiple = it }
+                PollToggle("Викторина", quiz) { quiz = it; if (it) multiple = false }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = question.isNotBlank() && filled.size >= 2 && (!quiz || options.getOrNull(correct)?.isNotBlank() == true),
+                onClick = {
+                    // The right answer's index among the options that are actually sent.
+                    val correctIndex = if (quiz) options.take(correct + 1).count { it.isNotBlank() } - 1 else null
+                    onCreate(question.trim(), filled, anonymous, multiple, correctIndex)
+                }
+            ) { Text("Отправить", color = Fusion.colors.textPrimary) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена", color = Fusion.colors.textSecondary) } }
+    )
+}
+
+@Composable
+private fun PollField(label: String, value: String, onChange: (String) -> Unit) {
+    OutlinedTextField(
+        value, onChange, label = { Text(label) }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedTextColor = Fusion.colors.textPrimary, unfocusedTextColor = Fusion.colors.textPrimary,
+            focusedBorderColor = Fusion.colors.textPrimary, unfocusedBorderColor = Fusion.colors.outlineStrong,
+            focusedLabelColor = Fusion.colors.textPrimary, unfocusedLabelColor = Fusion.colors.textSecondary, cursorColor = Fusion.colors.textPrimary
+        )
+    )
+}
+
+@Composable
+private fun PollToggle(title: String, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(enabled = enabled) { onChange(!checked) }.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, color = if (enabled) Fusion.colors.textPrimary else Fusion.colors.textTertiary, fontSize = 15.sp, modifier = Modifier.weight(1f))
+        Switch(checked, onChange, enabled = enabled)
     }
 }
