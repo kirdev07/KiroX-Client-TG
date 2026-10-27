@@ -279,6 +279,7 @@ private class TelegramMessageActions(private val repository: TelegramMessageRepo
     override fun edit(messageId: Long, text: String) = repository.edit(messageId, text)
     override fun delete(messageIds: List<Long>, forEveryone: Boolean) = repository.delete(messageIds, forEveryone)
     override fun forward(toChatId: Long, messageIds: List<Long>) = repository.forward(toChatId, messageIds)
+    override fun saveDraft(chatId: Long, text: String) = repository.saveDraft(chatId, text)
 }
 
 private class TelegramStoryActionsImpl(private val repository: TelegramStoryRepository) : TelegramStoryActions {

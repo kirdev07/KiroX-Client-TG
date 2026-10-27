@@ -123,7 +123,9 @@ data class TelegramChatHistory(
     val loadingOlder: Boolean = false,
     val reachedStart: Boolean = false,
     /** End-to-end encrypted secret chat; its chat id is not the peer's user id. */
-    val isSecret: Boolean = false
+    val isSecret: Boolean = false,
+    /** Unsent text saved in Telegram for this chat (synced with other devices), empty if none. */
+    val draft: String = ""
 )
 
 enum class TelegramCallKind { Incoming, Outgoing, Missed, Unanswered }

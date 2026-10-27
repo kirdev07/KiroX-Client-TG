@@ -70,6 +70,8 @@ interface TelegramChatActions {
     fun edit(messageId: Long, text: String)
     fun delete(messageIds: List<Long>, forEveryone: Boolean)
     fun forward(toChatId: Long, messageIds: List<Long>)
+    /** Stores the unsent text as the chat's Telegram draft; blank text clears it. */
+    fun saveDraft(chatId: Long, text: String) {}
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -122,11 +124,29 @@ fun TelegramChatScreen(
         }
     }
     DisposableEffect(Unit) { onDispose { recorder.stop(discard = true); VoicePlayer.stop() } }
+    // Drafts: the chat's Telegram draft fills an empty input once; unsent text is saved back when
+    // leaving the chat or the app. Text being edited is an existing message, not a draft.
+    var draftLoaded by remember(history.chatId) { mutableStateOf(false) }
+    LaunchedEffect(history.chatId, history.draft) {
+        if (history.chatId == 0L || draftLoaded) return@LaunchedEffect
+        draftLoaded = true
+        if (input.text.isEmpty() && history.draft.isNotEmpty()) input = TextFieldValue(history.draft, androidx.compose.ui.text.TextRange(history.draft.length))
+    }
+    // Last applied state; on a chat switch the old chat's onDispose runs before this is updated,
+    // so it still holds that chat's text and not the next chat's input.
+    val pendingDraft = remember { DraftHolder() }
+    SideEffect {
+        pendingDraft.chatId = history.chatId
+        pendingDraft.text = if (editing == null && draftLoaded) input.text else null
+    }
     // Another chat or the background: a voice note does not keep playing, an unsent recording is dropped.
-    DisposableEffect(history.chatId) { onDispose { VoicePlayer.stop() } }
+    DisposableEffect(history.chatId) {
+        onDispose { VoicePlayer.stop(); pendingDraft.save(actions) }
+    }
     androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) {
         VoicePlayer.stop()
         if (recording) { recorder.stop(discard = true); recording = false }
+        pendingDraft.save(actions)
     }
     var menuOpen by remember { mutableStateOf(false) }
     var searching by remember(history.chatId) { mutableStateOf(false) }
@@ -536,3 +556,14 @@ internal fun videoMeta(path: String): Triple<Int, Int, Int> = runCatching {
         Triple((ms / 1000).toInt(), w, h)
     }
 }.getOrDefault(Triple(0, 0, 0))
+
+/** Unsent text of the chat on screen, as of the last composition; not state, so writes cause no recomposition. */
+private class DraftHolder {
+    var chatId = 0L
+    var text: String? = null
+
+    fun save(actions: TelegramChatActions) {
+        val value = text ?: return
+        if (chatId != 0L) actions.saveDraft(chatId, value)
+    }
+}

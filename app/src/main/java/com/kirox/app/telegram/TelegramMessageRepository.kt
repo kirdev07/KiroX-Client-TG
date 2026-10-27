@@ -102,6 +102,20 @@ class TelegramMessageRepository(
 
     fun forward(toChatId: Long, messageIds: List<Long>) = act { id -> TdApi.ForwardMessages(toChatId, null, id, messageIds.toLongArray(), null, false, false) }
 
+    /**
+     * Saves [text] as the Telegram draft of [chatId] (any chat, not only the open one), or clears it
+     * when blank. Skipped when the draft already holds this text, so leaving a chat is not a request.
+     */
+    fun saveDraft(chatId: Long, text: String) = client.post {
+        val chat = chats.chat(chatId) ?: return@post
+        if (text.isBlank() && chat.draftMessage == null) return@post
+        if (draftText(chat) == text) return@post
+        val draft = text.takeIf { it.isNotBlank() }?.let {
+            TdApi.DraftMessage(null, (System.currentTimeMillis() / 1000).toInt(), TdApi.DraftMessageContentText(TdApi.FormattedText(it, emptyArray()), null), 0, null)
+        }
+        client.send(TdApi.SetChatDraftMessage(chatId, null, draft)) { result -> if (result is TdApi.Error) _error.value = humanError(result) }
+    }
+
     fun clearError() { _error.value = null }
 
     private fun act(build: (Long) -> TdApi.Function<*>) = client.post {
@@ -191,7 +205,8 @@ class TelegramMessageRepository(
             messages = mapped,
             loadingOlder = loadingOlder,
             reachedStart = reachedStart,
-            isSecret = type is TdApi.ChatTypeSecret
+            isSecret = type is TdApi.ChatTypeSecret,
+            draft = chat?.let(::draftText).orEmpty()
         )
         markViewed(id)
     }
@@ -269,6 +284,10 @@ class TelegramMessageRepository(
         const val PUBLISH_DELAY_MS = 32L
     }
 }
+
+/** Text of the chat's draft, empty when there is none. */
+internal fun draftText(chat: TdApi.Chat): String =
+    (chat.draftMessage?.content as? TdApi.DraftMessageContentText)?.text?.text.orEmpty()
 
 /** Largest photo size not wider than ~1280 px, falling back to the smallest available. */
 internal fun bestPhoto(photo: TdApi.Photo): TdApi.PhotoSize? =
