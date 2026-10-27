@@ -113,11 +113,11 @@ fun TelegramChatScreen(
     var forwarding by remember { mutableStateOf<MessageUi?>(null) }
     var attachments by rememberSaveable { mutableStateOf(false) }
     var stickerPanel by rememberSaveable { mutableStateOf(false) }
+    var notice by remember { mutableStateOf<String?>(null) }
     var videoNote by remember { mutableStateOf(false) }
     val noteCameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
         if (granted.values.all { it }) videoNote = true else notice = "Для видеосообщения нужны камера и микрофон"
     }
-    var notice by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
 
     val isGroup = history.peerKind == TelegramPeerKind.Group

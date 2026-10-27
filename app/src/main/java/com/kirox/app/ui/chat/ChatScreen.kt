@@ -18,6 +18,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -188,7 +189,7 @@ internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAp
                         onHorizontalDrag = { change, _ -> path?.let { VoicePlayer.seek(it, change.position.x / size.width) } }
                     )
                 }.pointerInput(path, playing) {
-                    androidx.compose.foundation.gestures.detectTapGestures { offset ->
+                    detectTapGestures { offset ->
                         val p = path ?: return@detectTapGestures
                         if (playing) VoicePlayer.seek(p, offset.x / size.width) else VoicePlayer.toggle(context, p)
                     }
