@@ -44,8 +44,8 @@ class AccountPeek(context: Context) {
                     is TdApi.AuthorizationStateWaitTdlibParameters -> client?.send(parameters(session, key), null)
                     is TdApi.AuthorizationStateReady -> {
                         client?.send(TdApi.SetOption("online", TdApi.OptionValueBoolean(false)), null)
-                        client?.send(TdApi.SetOption("notification_group_count_max", TdApi.OptionValueInteger(GROUPS)), null)
-                        client?.send(TdApi.SetOption("notification_group_size_max", TdApi.OptionValueInteger(GROUP_SIZE)), null)
+                        client?.send(TdApi.SetOption("notification_group_count_max", TdApi.OptionValueInteger(GROUPS.toLong())), null)
+                        client?.send(TdApi.SetOption("notification_group_size_max", TdApi.OptionValueInteger(GROUP_SIZE.toLong())), null)
                     }
                     is TdApi.AuthorizationStateClosed -> com.kirox.app.telegram.SessionLocks.release(account.session)
                     is TdApi.AuthorizationStateWaitPhoneNumber, is TdApi.AuthorizationStateLoggingOut -> client?.send(TdApi.Close(), null)
