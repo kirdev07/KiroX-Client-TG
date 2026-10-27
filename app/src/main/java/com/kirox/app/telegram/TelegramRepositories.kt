@@ -132,6 +132,7 @@ class TelegramServices(context: android.content.Context) {
     /** "печатает…" and other member activity, ours sent with SendChatAction. */
     val activity = TelegramChatActionRepository(client, chats, users)
     val stickers = TelegramStickerRepository(client)
+    val groupCalls = TelegramGroupCallRepository(client, chats, users)
     val calls = TelegramCallRepository(client, chats)
     val voip = TelegramVoipRepository(client, users)
     val sessions = TelegramSessionsRepository(client)

@@ -75,6 +75,15 @@ fun KiroXApp() {
     val messageError by telegramViewModel.messages.error.collectAsStateWithLifecycle()
     val callsState by telegramViewModel.calls.state.collectAsStateWithLifecycle()
     val activeCall by telegramViewModel.voip.call.collectAsStateWithLifecycle()
+    val groupCall by telegramViewModel.groupCalls.call.collectAsStateWithLifecycle()
+    var groupCallNotice by remember { mutableStateOf<String?>(null) }
+    val groupCallActions = remember {
+        object : com.kirox.app.ui.call.GroupCallActions {
+            override fun setMuted(muted: Boolean) = telegramViewModel.groupCalls.setMuted(muted)
+            override fun leave() = telegramViewModel.groupCalls.leave()
+            override fun dismiss() = telegramViewModel.groupCalls.dismiss()
+        }
+    }
     val callActions = remember {
         object : com.kirox.app.ui.call.CallActions {
             override fun accept() = telegramViewModel.voip.accept()
@@ -284,7 +293,15 @@ fun KiroXApp() {
                                 onOpenTopic = { topic -> openThread = ThreadSpec.Topic(chatId, topic.id, topic.title); stack.push(Screen.Thread) },
                                 onCall = if (com.kirox.app.ui.call.callsEnabled) { video ->
                                     withCallPermissions(video) { telegramViewModel.voip.start(chatId, video) }
-                                } else null
+                                } else null,
+                                onGroupCall = if (com.kirox.app.ui.call.callsEnabled) ({
+                                    withCallPermissions(false) {
+                                        scope.launch {
+                                            runCatching { telegramViewModel.groupCalls.join(chatId) }
+                                                .onFailure { groupCallNotice = it.message ?: "Не удалось войти в видеочат" }
+                                        }
+                                    }
+                                }) else null
                             )
                         }
                         Screen.Thread -> CompositionLocalProvider(
@@ -320,6 +337,16 @@ fun KiroXApp() {
                     }
                 }
             }
+        }
+        groupCall?.let { call ->
+            CompositionLocalProvider(LocalTelegramFiles provides telegramViewModel.files) { com.kirox.app.ui.call.GroupCallScreen(call, groupCallActions) }
+        }
+        groupCallNotice?.let { text ->
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { groupCallNotice = null },
+                text = { androidx.compose.material3.Text(text) },
+                confirmButton = { androidx.compose.material3.TextButton(onClick = { groupCallNotice = null }) { androidx.compose.material3.Text("Понятно") } }
+            )
         }
         activeCall?.let { call ->
             CompositionLocalProvider(LocalTelegramFiles provides telegramViewModel.files) { com.kirox.app.ui.call.CallScreen(call, permittedCallActions) }

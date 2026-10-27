@@ -115,7 +115,9 @@ fun TelegramChatScreen(
     /** Opens the comments of a channel post (by its message id). */
     onOpenComments: ((Long) -> Unit)? = null,
     /** Opens a topic of the forum shown in this screen. */
-    onOpenTopic: ((com.kirox.app.telegram.TelegramForumTopic) -> Unit)? = null
+    onOpenTopic: ((com.kirox.app.telegram.TelegramForumTopic) -> Unit)? = null,
+    /** Joins (or starts) the video chat of a group or channel. */
+    onGroupCall: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -327,7 +329,8 @@ fun TelegramChatScreen(
         },
         initial = history.title.take(1).uppercase(),
         photo = history.photo,
-        canVoiceCall = onCall != null && history.peerKind == TelegramPeerKind.User && !history.isSecret,
+        canVoiceCall = onCall != null && history.peerKind == TelegramPeerKind.User && !history.isSecret ||
+            onGroupCall != null && history.threadTitle == null && (history.peerKind == TelegramPeerKind.Group || history.peerKind == TelegramPeerKind.Channel),
         canVideoCall = onCall != null && history.peerKind == TelegramPeerKind.User && !history.isSecret
     )
 
@@ -353,7 +356,7 @@ fun TelegramChatScreen(
                     menuOpen = true
                     scope.launch { muted = runCatching { menu.isMuted(history.chatId) }.getOrNull() }
                 }
-            }, onCall = { video -> onCall?.invoke(video) })
+            }, onCall = { video -> if (history.peerKind == TelegramPeerKind.User) onCall?.invoke(video) else onGroupCall?.invoke() })
                 history.pinned?.let { pinned -> PinnedBar(pinned, count = history.pinnedIds.size) { actions.jumpTo(pinned.id) } }
             }
         },

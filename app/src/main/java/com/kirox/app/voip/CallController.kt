@@ -23,7 +23,7 @@ class CallController(private val app: Application, private val voip: TelegramVoi
 
     fun start() {
         // With the background connection on, TDLib stays connected and is never paused.
-        client.isIdle = { !appVisible && voip.call.value == null && !com.kirox.app.notify.KeepConnectedService.isEnabled(app) }
+        client.isIdle = { !appVisible && voip.call.value == null && (app as com.kirox.app.KiroXApplication).telegram.groupCalls.call.value == null && !com.kirox.app.notify.KeepConnectedService.isEnabled(app) }
         CallNotifications.ensureChannels(app)
         app.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) { startedActivities++; com.kirox.app.notify.AppVisibility.visible = true; update() }
