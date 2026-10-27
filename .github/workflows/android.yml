@@ -1,0 +1,46 @@
+name: Android build
+
+on:
+  push:
+    branches: [main, "feature/**", "fix/**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The release key and Telegram API keys are not in the repository; the debug build runs without them.
+      - name: Unit tests
+        run: ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest
+
+      - name: Debug APK
+        run: ./gradlew --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Lint
+        run: ./gradlew --no-daemon :app:lintDebug
+        continue-on-error: true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kirox-debug
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/reports/
+          if-no-files-found: ignore
+          retention-days: 14
