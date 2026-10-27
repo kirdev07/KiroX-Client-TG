@@ -356,6 +356,10 @@ private class TelegramStoryActionsImpl(private val repository: TelegramStoryRepo
     override suspend fun story(chatId: Long, storyId: Int): TelegramStory? = repository.story(chatId, storyId)
     override fun open(chatId: Long, storyId: Int) = repository.open(chatId, storyId)
     override fun close(chatId: Long, storyId: Int) = repository.close(chatId, storyId)
+    override suspend fun react(chatId: Long, storyId: Int, emoji: String?) = repository.react(chatId, storyId, emoji)
+    override suspend fun reply(chatId: Long, storyId: Int, text: String) = repository.reply(chatId, storyId, text)
+    override suspend fun delete(chatId: Long, storyId: Int) = repository.delete(chatId, storyId)
+    override suspend fun viewers(storyId: Int) = repository.viewers(storyId)
 }
 
 private class TelegramChatListActionsImpl(private val repository: TelegramChatRepository, private val messages: TelegramMessageRepository) : TelegramChatListActions {

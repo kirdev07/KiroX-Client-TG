@@ -224,8 +224,22 @@ data class TelegramStory(
     val image: TelegramFileRef?,
     val aspect: Float,
     val isVideo: Boolean,
-    val caption: String
+    val caption: String,
+    /** Video file of a video story. */
+    val video: TelegramFileRef? = null,
+    /** Seconds; shown time of a video story. */
+    val durationS: Double = 0.0,
+    val canReply: Boolean = false,
+    val canDelete: Boolean = false,
+    /** Own story: views (and who viewed) can be shown. */
+    val canSeeViews: Boolean = false,
+    val viewCount: Int = 0,
+    /** Emoji reaction this account set, or null. */
+    val chosenReaction: String? = null
 )
+
+/** Someone who viewed an own story, with the reaction they left. */
+data class TelegramStoryViewer(val name: String, val photo: TelegramFileRef?, val date: Int, val reaction: String?)
 
 data class TelegramUserProfile(
     val id: Long,
