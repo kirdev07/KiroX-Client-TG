@@ -26,10 +26,28 @@ jobs:
 
       # The release key and Telegram API keys are not in the repository; the debug build runs without them.
       - name: Unit tests
-        run: ./gradlew --no-daemon --stacktrace :app:testDebugUnitTest
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon :app:testDebugUnitTest 2>&1 | tee -a build.log
 
       - name: Debug APK
-        run: ./gradlew --no-daemon --stacktrace :app:assembleDebug
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon :app:assembleDebug 2>&1 | tee -a build.log
+
+      # Compiler errors and failed tests as annotations, readable without the full log.
+      - name: Report errors
+        if: failure()
+        run: |
+          grep -E '^e: |error:|FAILED|What went wrong' -A3 build.log | head -60 | while IFS= read -r line; do
+            echo "::error title=build::${line//%/%25}"
+          done
+          for f in app/build/test-results/testDebugUnitTest/*.xml; do
+            [ -f "$f" ] || continue
+            grep -o '<testcase name="[^"]*" classname="[^"]*"[^>]*>[[:space:]]*<failure message="[^"]*"' "$f" | head -20 | while IFS= read -r line; do
+              echo "::error title=test::${line//%/%25}"
+            done
+          done
 
       - name: Lint
         run: ./gradlew --no-daemon :app:lintDebug
