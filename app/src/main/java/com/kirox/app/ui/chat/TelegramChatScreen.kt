@@ -77,6 +77,8 @@ interface TelegramChatActions {
     fun setActivity(chatId: Long, activity: com.kirox.app.telegram.ChatActivity?) {}
     /** 2–10 photos and videos as one album; a null meta marks a photo. */
     fun sendAlbum(items: List<Pair<String, com.kirox.app.telegram.VideoMeta?>>, caption: String) {}
+    fun sendPanelItem(item: com.kirox.app.telegram.TelegramPanelItem, replyToMessageId: Long?) {}
+    fun sendVideoNote(path: String, durationSeconds: Int, length: Int) {}
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -92,7 +94,9 @@ fun TelegramChatScreen(
     onCall: ((isVideo: Boolean) -> Unit)? = null,
     menu: TelegramChatMenuActions? = null,
     /** What someone in this chat is doing now ("печатает…"); replaces the status line while set. */
-    activityLine: String? = null
+    activityLine: String? = null,
+    /** Stickers and GIFs for the panel; emoji only when null. */
+    stickers: StickerPanelSource? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -108,6 +112,11 @@ fun TelegramChatScreen(
     var deleting by remember { mutableStateOf<MessageUi?>(null) }
     var forwarding by remember { mutableStateOf<MessageUi?>(null) }
     var attachments by rememberSaveable { mutableStateOf(false) }
+    var stickerPanel by rememberSaveable { mutableStateOf(false) }
+    var videoNote by remember { mutableStateOf(false) }
+    val noteCameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
+        if (granted.values.all { it }) videoNote = true else notice = "Для видеосообщения нужны камера и микрофон"
+    }
     var notice by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
 
@@ -117,6 +126,7 @@ fun TelegramChatScreen(
     var recording by remember { mutableStateOf(false) }
     var recordLevel by remember { mutableStateOf(0f) }
     var recordMs by remember { mutableStateOf(0L) }
+    var recordPaused by remember { mutableStateOf(false) }
     fun startRecording() {
         if (recorder.start()) { recording = true; recordMs = 0 } else notice = "Не удалось начать запись"
     }
@@ -283,10 +293,13 @@ fun TelegramChatScreen(
             if (recording) VoiceRecordingBar(
                 elapsedMs = recordMs,
                 level = recordLevel,
-                onCancel = { recorder.stop(discard = true); recording = false },
+                paused = recordPaused,
+                onPause = { if (recorder.isPaused) recorder.resume() else recorder.pause(); recordPaused = recorder.isPaused },
+                onCancel = { recorder.stop(discard = true); recording = false; recordPaused = false },
                 onSend = {
                     val note = recorder.stop()
                     recording = false
+                    recordPaused = false
                     if (note != null) actions.sendVoice(note.file.absolutePath, note.durationSeconds, note.waveform) else notice = "Слишком короткое голосовое"
                 }
             ) else if (history.peerKind != TelegramPeerKind.Channel) ChatComposer(
@@ -302,7 +315,7 @@ fun TelegramChatScreen(
                 },
                 onCancelContext = { replyTo = null; editing = null; input = TextFieldValue() },
                 onAttach = { attachments = true },
-                onEmoji = { input = input.copy(text = input.text + "🙂", selection = androidx.compose.ui.text.TextRange(input.text.length + "🙂".length)) },
+                onEmoji = { stickerPanel = true },
                 onSend = {
                     val text = input.text.trim()
                     if (text.isNotEmpty()) {
@@ -359,9 +372,21 @@ fun TelegramChatScreen(
         onDismiss = { attachments = false },
         onPick = { choice ->
             attachments = false
-            if (choice == "Фото и видео") pickPhoto.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) else pickFile.launch("*/*")
+            when (choice) {
+                "Фото и видео" -> pickPhoto.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                "Видеосообщение" -> {
+                    val needed = arrayOf(android.Manifest.permission.CAMERA, android.Manifest.permission.RECORD_AUDIO)
+                    if (needed.all { context.checkSelfPermission(it) == android.content.pm.PackageManager.PERMISSION_GRANTED }) videoNote = true
+                    else noteCameraPermission.launch(needed)
+                }
+                else -> pickFile.launch("*/*")
+            }
         },
-        actions = listOf(KiroXIcon.Media to "Фото и видео", KiroXIcon.File to "Файл"),
+        actions = buildList {
+            add(KiroXIcon.Media to "Фото и видео")
+            if (history.peerKind != TelegramPeerKind.Channel) add(KiroXIcon.Camera to "Видеосообщение")
+            add(KiroXIcon.File to "Файл")
+        },
         footer = if (input.text.isNotBlank()) "Текст из поля ввода станет подписью" else null
     )
     selected?.let { message ->
@@ -389,6 +414,31 @@ fun TelegramChatScreen(
             }
         )
     }
+    if (videoNote) {
+        val chatId = history.chatId
+        LaunchedEffect(Unit) { actions.setActivity(chatId, com.kirox.app.telegram.ChatActivity.RecordingVideoNote) }
+        VideoNoteRecorder(
+            onDone = { note -> videoNote = false; actions.sendVideoNote(note.file.absolutePath, note.durationSeconds, note.length) },
+            onCancel = { videoNote = false; actions.setActivity(chatId, null) },
+            onError = { message -> videoNote = false; actions.setActivity(chatId, null); notice = message }
+        )
+    }
+    if (stickerPanel) StickerPanel(
+        source = stickers,
+        onEmoji = { emoji ->
+            // Inserted at the cursor, replacing a selection, like a keyboard would.
+            val start = minOf(input.selection.start, input.selection.end)
+            val end = maxOf(input.selection.start, input.selection.end)
+            val text = input.text.replaceRange(start, end, emoji)
+            input = TextFieldValue(text, androidx.compose.ui.text.TextRange(start + emoji.length))
+        },
+        onSend = { item ->
+            actions.sendPanelItem(item, replyTo?.id)
+            replyTo = null
+            stickerPanel = false
+        },
+        onDismiss = { stickerPanel = false }
+    )
     deleting?.let { message ->
         AlertDialog(
             onDismissRequest = { deleting = null },
@@ -591,17 +641,21 @@ internal fun copyToCache(context: Context, uri: Uri): String? = runCatching {
 
 /** Shown instead of the composer while a voice note is being recorded. */
 @Composable
-private fun VoiceRecordingBar(elapsedMs: Long, level: Float, onCancel: () -> Unit, onSend: () -> Unit) {
+private fun VoiceRecordingBar(elapsedMs: Long, level: Float, paused: Boolean, onPause: () -> Unit, onCancel: () -> Unit, onSend: () -> Unit) {
     Surface(color = Fusion.colors.background) {
         Row(
             Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 10.dp, vertical = 8.dp)
                 .clip(RoundedCornerShape(26.dp)).background(Fusion.colors.surface1).padding(start = 18.dp, end = 6.dp).heightIn(min = 52.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(Modifier.size((10 + 8 * level).dp).clip(androidx.compose.foundation.shape.CircleShape).background(Fusion.colors.danger))
+            Box(Modifier.size((10 + 8 * level).dp).clip(androidx.compose.foundation.shape.CircleShape).background(if (paused) Fusion.colors.textTertiary else Fusion.colors.danger))
             Spacer(Modifier.width(12.dp))
             Text("%d:%02d".format(elapsedMs / 60000, elapsedMs / 1000 % 60), color = Fusion.colors.textPrimary, fontSize = 16.sp)
             Spacer(Modifier.weight(1f))
+            Text(
+                if (paused) "▶" else "❚❚", color = Fusion.colors.textPrimary, fontSize = 14.sp,
+                modifier = Modifier.clip(RoundedCornerShape(16.dp)).clickable(onClickLabel = if (paused) "Продолжить запись" else "Пауза", onClick = onPause).padding(horizontal = 14.dp, vertical = 12.dp)
+            )
             Text("Отмена", color = Fusion.colors.textSecondary, fontSize = 15.sp, modifier = Modifier.clip(RoundedCornerShape(16.dp)).clickable(onClick = onCancel).padding(horizontal = 14.dp, vertical = 12.dp))
             Box(Modifier.size(44.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Fusion.colors.accent).clickable(onClick = onSend), contentAlignment = Alignment.Center) {
                 com.kirox.app.ui.icons.KiroXIcon(com.kirox.app.ui.icons.KiroXIcon.Send, "Отправить голосовое", Modifier.size(22.dp), Fusion.colors.onAccent)

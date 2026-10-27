@@ -16,6 +16,7 @@ class TelegramViewModel(application: Application) : AndroidViewModel(application
     val stories = services.stories
     val connection = services.connection
     val activity = services.activity
+    val stickers = services.stickers
     /** Chat id for a t.me / tg: link, or null when Telegram does not resolve it. */
     suspend fun resolveLink(link: TelegramLink): Long? = services.client.resolveLink(link)
     init { services.client.start() }

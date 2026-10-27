@@ -101,7 +101,11 @@ data class TelegramMedia(
     val title: String = "",
     val performer: String = "",
     /** Sticker formats other than static WEBP are animated and drawn from their thumbnail for now. */
-    val animatedSticker: Boolean = false
+    val animatedSticker: Boolean = false,
+    /** Voice note loudness, 0–31 per bar, as Telegram sends it; empty when unknown. */
+    val waveform: List<Int> = emptyList(),
+    /** TGS (Lottie) sticker; WEBM ones are video stickers. */
+    val lottieSticker: Boolean = false
 )
 
 /** Formatting of a message text; offsets and lengths are in UTF-16 units, as in Kotlin strings. */

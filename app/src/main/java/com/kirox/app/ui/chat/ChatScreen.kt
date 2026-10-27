@@ -128,7 +128,7 @@ internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAp
                 MessageKind.Video -> { if (media != null) VideoMessage(media, message.thumbnail) else MediaPlaceholder(message.kind); Caption() }
                 MessageKind.Animation -> { if (media != null) AnimationMessage(media, message.thumbnail) else MediaPlaceholder(message.kind); Caption() }
                 MessageKind.VideoNote -> if (media != null) VideoNoteMessage(media, message.thumbnail) else MediaPlaceholder(message.kind)
-                MessageKind.Voice -> VoiceMessage(message.text, message.photo)
+                MessageKind.Voice -> VoiceMessage(message.text, message.photo, message.media?.waveform.orEmpty())
                 MessageKind.Audio -> { if (media != null) AudioMessage(media); Caption() }
                 MessageKind.Document -> { if (media != null) DocumentMessage(media, onNotice) else MessageText(message.text, message.entities, textScale); Caption() }
                 MessageKind.Sticker -> if (media != null) StickerMessage(media, message.thumbnail) else MessageText(message.text, message.entities, textScale)
@@ -148,27 +148,87 @@ internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAp
 
 @Composable private fun QuoteBlock(quote: QuoteUi) { Row(Modifier.fillMaxWidth()) { Box(Modifier.width(2.dp).height(36.dp).background(ChatWhite)); Spacer(Modifier.width(7.dp)); Column { Text(quote.author, color = ChatWhite, fontSize = 11.sp, fontWeight = FontWeight.SemiBold); Text(quote.text, color = ChatSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) } } }
 @Composable private fun MediaPlaceholder(kind: MessageKind) { Box(Modifier.fillMaxWidth().height(132.dp).clip(RoundedCornerShape(12.dp)).background(Fusion.colors.surface3), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { IconGlyph(if (kind == MessageKind.Video) KiroXIcon.Video else KiroXIcon.Media, null, Modifier.size(28.dp), ChatSecondary); Text(if (kind == MessageKind.Video) "Видео" else "Фото", color = ChatSecondary, fontSize = 12.sp) } } }
-/** Voice note: tap plays or stops it; the file downloads on first view. */
-@Composable private fun VoiceMessage(duration: String, file: com.kirox.app.telegram.TelegramFileRef?) {
+/**
+ * Voice note: play/pause, waveform that fills while playing (tap or drag on it to seek),
+ * elapsed time and a 1× / 1.5× / 2× speed chip. The file downloads on first view.
+ */
+@Composable private fun VoiceMessage(duration: String, file: com.kirox.app.telegram.TelegramFileRef?, waveform: List<Int>) {
     val files = com.kirox.app.ui.components.LocalTelegramFiles.current
     val path by remember(file?.id, files) {
         if (file != null && files != null) files.observe(file, 16) else kotlinx.coroutines.flow.MutableStateFlow(file?.localPath)
     }.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
     val playingPath by VoicePlayer.playingPath.collectAsState()
+    val speed by VoicePlayer.speed.collectAsState()
     val playing = path != null && playingPath == path
-    Row(
-        Modifier.clip(RoundedCornerShape(12.dp)).clickable(enabled = path != null) { path?.let { VoicePlayer.toggle(context, it) } },
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(Modifier.size(36.dp).clip(CircleShape).background(Fusion.colors.surface3), contentAlignment = Alignment.Center) {
+    var progress by remember(path) { mutableFloatStateOf(0f) }
+    var positionMs by remember(path) { mutableStateOf(0) }
+    LaunchedEffect(playing) {
+        while (playing) { progress = VoicePlayer.progress; positionMs = VoicePlayer.positionMs; kotlinx.coroutines.delay(50) }
+        progress = 0f
+    }
+    val bars = remember(waveform) { voiceBars(waveform) }
+    val played = ChatWhite
+    val rest = ChatSecondary.copy(alpha = 0.5f)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier.size(38.dp).clip(CircleShape).background(Fusion.colors.surface3).clickable(enabled = path != null) { path?.let { VoicePlayer.toggle(context, it) } },
+            contentAlignment = Alignment.Center
+        ) {
             if (path == null) androidx.compose.material3.CircularProgressIndicator(Modifier.size(16.dp), color = ChatWhite, strokeWidth = 2.dp)
             else Text(if (playing) "❚❚" else "▶", color = ChatWhite, fontSize = 13.sp)
         }
         Spacer(Modifier.width(9.dp))
-        Box(Modifier.width(110.dp).height(2.dp).background(if (playing) ChatWhite else ChatSecondary))
-        Spacer(Modifier.width(8.dp))
-        Text(duration, color = ChatSecondary, fontSize = 11.sp)
+        Column {
+            androidx.compose.foundation.Canvas(
+                Modifier.width(150.dp).height(26.dp).pointerInput(path, playing) {
+                    if (!playing) return@pointerInput
+                    detectHorizontalDragGestures(
+                        onDragEnd = {},
+                        onHorizontalDrag = { change, _ -> path?.let { VoicePlayer.seek(it, change.position.x / size.width) } }
+                    )
+                }.pointerInput(path, playing) {
+                    androidx.compose.foundation.gestures.detectTapGestures { offset ->
+                        val p = path ?: return@detectTapGestures
+                        if (playing) VoicePlayer.seek(p, offset.x / size.width) else VoicePlayer.toggle(context, p)
+                    }
+                }
+            ) {
+                val step = size.width / bars.size
+                val barWidth = (step * 0.6f).coerceAtLeast(1.5f)
+                bars.forEachIndexed { index, level ->
+                    val height = (size.height * (0.15f + 0.85f * level)).coerceAtLeast(2f)
+                    val x = index * step + (step - barWidth) / 2
+                    drawRoundRect(
+                        if (index.toFloat() / bars.size < progress) played else rest,
+                        topLeft = androidx.compose.ui.geometry.Offset(x, (size.height - height) / 2),
+                        size = androidx.compose.ui.geometry.Size(barWidth, height),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(barWidth / 2)
+                    )
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(if (playing) "%d:%02d".format(positionMs / 60000, positionMs / 1000 % 60) else duration, color = ChatSecondary, fontSize = 11.sp)
+                if (playing) {
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        if (speed == 1f) "1×" else if (speed == 1.5f) "1.5×" else "2×", color = ChatWhite, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(Fusion.colors.surface3).clickable(onClickLabel = "Скорость", onClick = VoicePlayer::cycleSpeed).padding(horizontal = 6.dp, vertical = 1.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 40 bars of 0–1 from Telegram's 0–31 waveform; a flat line when the note has none. */
+internal fun voiceBars(waveform: List<Int>, count: Int = 40): List<Float> {
+    if (waveform.isEmpty()) return List(count) { 0.1f }
+    val peak = waveform.maxOrNull()?.coerceAtLeast(1) ?: 1
+    return List(count) { i ->
+        val from = i * waveform.size / count
+        val to = ((i + 1) * waveform.size / count).coerceAtLeast(from + 1).coerceAtMost(waveform.size)
+        (waveform.subList(from, to).maxOrNull() ?: 0).toFloat() / peak
     }
 }
 private fun deliveryGlyph(state: DeliveryState) = when (state) { DeliveryState.Sending -> "◷"; DeliveryState.Sent -> "✓"; DeliveryState.Delivered, DeliveryState.Read -> "✓✓"; DeliveryState.Failed -> "!"; DeliveryState.None -> "" }

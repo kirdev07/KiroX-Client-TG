@@ -48,13 +48,30 @@ internal fun mediaOf(content: TdApi.MessageContent?): Pair<TelegramMedia?, Teleg
     is TdApi.MessageDocument -> content.document.let { d ->
         TelegramMedia(d.document.toRef(), d.document.sizeOrExpected(), mimeType = d.mimeType.orEmpty(), title = d.fileName.orEmpty()) to d.thumbnail?.file?.toRef()
     }
-    is TdApi.MessageSticker -> content.sticker.let { s ->
-        TelegramMedia(
-            s.sticker.toRef(), s.sticker.sizeOrExpected(), width = s.width, height = s.height,
-            title = s.emoji.orEmpty(), animatedSticker = s.format !is TdApi.StickerFormatWebp
-        ) to s.thumbnail?.file?.toRef()
+    is TdApi.MessageSticker -> stickerMedia(content.sticker)
+    is TdApi.MessageVoiceNote -> content.voiceNote.let { v ->
+        TelegramMedia(v.voice.toRef(), v.voice.sizeOrExpected(), v.duration, mimeType = v.mimeType.orEmpty(), waveform = decodeWaveform(v.waveform)) to null
     }
     else -> null to null
+}
+
+/** Sticker as message media; also used by the sticker panel. */
+internal fun stickerMedia(s: TdApi.Sticker): Pair<TelegramMedia, TelegramFileRef?> = TelegramMedia(
+    s.sticker.toRef(), s.sticker.sizeOrExpected(), width = s.width, height = s.height,
+    title = s.emoji.orEmpty(), animatedSticker = s.format !is TdApi.StickerFormatWebp, lottieSticker = s.format is TdApi.StickerFormatTgs
+) to s.thumbnail?.file?.toRef()
+
+/** Telegram's voice waveform: 5-bit values packed little-endian into bytes. */
+internal fun decodeWaveform(bytes: ByteArray?): List<Int> {
+    if (bytes == null || bytes.isEmpty()) return emptyList()
+    val count = bytes.size * 8 / 5
+    return List(count) { i ->
+        val bit = i * 5
+        val index = bit / 8
+        val low = bytes[index].toInt() and 0xFF
+        val high = if (index + 1 < bytes.size) bytes[index + 1].toInt() and 0xFF else 0
+        ((low or (high shl 8)) shr (bit % 8)) and 0x1F
+    }
 }
 
 private fun TdApi.File.sizeOrExpected(): Long = if (size > 0) size else expectedSize

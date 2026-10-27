@@ -133,6 +133,15 @@ dependencies {
     // Video, GIF, video note and music playback (Apache-2.0).
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
+    // Animated TGS stickers (Lottie, Apache-2.0).
+    implementation(libs.lottie.compose)
+    // Video note recording: CameraX capture, Media3 square crop (both Apache-2.0).
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.video)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.androidx.media3.transformer)
+    implementation(libs.androidx.media3.effect)
     implementation("androidx.annotation:annotation:1.9.1")
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

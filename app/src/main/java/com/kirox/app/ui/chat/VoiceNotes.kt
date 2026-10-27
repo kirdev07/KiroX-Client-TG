@@ -22,7 +22,31 @@ class VoiceRecorder(private val context: Context) {
     private val levels = ArrayList<Int>()
 
     val isRecording: Boolean get() = recorder != null
-    val elapsedMs: Long get() = if (startedAt == 0L) 0 else android.os.SystemClock.elapsedRealtime() - startedAt
+    var isPaused = false
+        private set
+    private var pausedAt = 0L
+    private var pausedTotal = 0L
+
+    /** Pauses recording; the time paused is not counted in the note. */
+    fun pause() {
+        val active = recorder ?: return
+        if (isPaused || !runCatching { active.pause() }.isSuccess) return
+        isPaused = true
+        pausedAt = android.os.SystemClock.elapsedRealtime()
+    }
+
+    fun resume() {
+        val active = recorder ?: return
+        if (!isPaused || !runCatching { active.resume() }.isSuccess) return
+        pausedTotal += android.os.SystemClock.elapsedRealtime() - pausedAt
+        isPaused = false
+    }
+    /** Recorded time, without pauses. */
+    val elapsedMs: Long get() {
+        if (startedAt == 0L) return 0
+        val now = if (isPaused) pausedAt else android.os.SystemClock.elapsedRealtime()
+        return now - startedAt - pausedTotal
+    }
 
     fun start(): Boolean {
         stop(discard = true)
@@ -41,6 +65,8 @@ class VoiceRecorder(private val context: Context) {
             recorder = created
             file = target
             startedAt = android.os.SystemClock.elapsedRealtime()
+            isPaused = false
+            pausedTotal = 0
             levels.clear()
             true
         }.getOrElse {
@@ -52,6 +78,7 @@ class VoiceRecorder(private val context: Context) {
 
     /** Samples the input level (call ~10 times a second while recording). */
     fun sampleLevel(): Float {
+        if (isPaused) return 0f
         val amplitude = runCatching { recorder?.maxAmplitude ?: 0 }.getOrDefault(0)
         levels += amplitude
         return (amplitude / 32767f).coerceIn(0f, 1f)
@@ -63,6 +90,8 @@ class VoiceRecorder(private val context: Context) {
         val durationMs = elapsedMs
         recorder = null
         startedAt = 0
+        isPaused = false
+        pausedTotal = 0
         val ok = runCatching { active.stop() }.isSuccess
         active.release()
         val out = file
@@ -115,6 +144,33 @@ object VoicePlayer {
     private val _playingPath = MutableStateFlow<String?>(null)
     val playingPath: StateFlow<String?> = _playingPath.asStateFlow()
 
+    /** Playback speed for voice notes and music, kept between notes like in Telegram. */
+    private val _speed = MutableStateFlow(1f)
+    val speed: StateFlow<Float> = _speed.asStateFlow()
+    private val speeds = listOf(1f, 1.5f, 2f)
+
+    /** 0–1 position of the playing file; 0 when nothing plays. */
+    val progress: Float get() = player?.let { p -> runCatching { if (p.duration > 0) p.currentPosition.toFloat() / p.duration else 0f }.getOrDefault(0f) } ?: 0f
+
+    /** Milliseconds played of the current file. */
+    val positionMs: Int get() = player?.let { runCatching { it.currentPosition }.getOrDefault(0) } ?: 0
+
+    fun cycleSpeed() {
+        _speed.value = speeds[(speeds.indexOf(_speed.value) + 1) % speeds.size]
+        player?.let { applySpeed(it) }
+    }
+
+    /** Jumps to [fraction] of [path] if it is the file playing now. */
+    fun seek(path: String, fraction: Float) {
+        val p = player ?: return
+        if (_playingPath.value != path) return
+        runCatching { p.seekTo((p.duration * fraction.coerceIn(0f, 1f)).toInt()) }
+    }
+
+    private fun applySpeed(p: MediaPlayer) {
+        runCatching { p.playbackParams = p.playbackParams.setSpeed(_speed.value) }
+    }
+
     private val attributes = AudioAttributes.Builder()
         .setUsage(AudioAttributes.USAGE_MEDIA)
         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
@@ -139,6 +195,7 @@ object VoicePlayer {
                 setOnErrorListener { _, _, _ -> stop(); true }
                 prepare()
                 start()
+                applySpeed(this)
             }
         }.getOrNull()
         if (player == null) stop() else _playingPath.value = path

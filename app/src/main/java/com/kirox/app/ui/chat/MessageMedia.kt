@@ -265,15 +265,41 @@ internal fun DocumentMessage(media: TelegramMedia, onNotice: (String) -> Unit) {
     }
 }
 
-/** Sticker without a bubble look: static WEBP drawn in full, animated ones from their preview for now. */
+/**
+ * Sticker: static WEBP as an image, TGS through Lottie, WEBM as a muted looping video. Animated files
+ * are small and download by themselves; until then the preview is shown.
+ */
 @Composable
-internal fun StickerMessage(media: TelegramMedia, thumbnail: TelegramFileRef?) {
-    val sizePx = with(LocalDensity.current) { 160.dp.roundToPx() }
-    val bitmap = rememberTelegramBitmap(if (media.animatedSticker) thumbnail else media.file, sizePx, priority = 16)
-    Box(Modifier.size(160.dp), contentAlignment = Alignment.Center) {
-        if (bitmap != null) Image(bitmap, contentDescription = "Стикер ${media.title}", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
-        else Text(media.title.ifBlank { "Стикер" }, fontSize = 48.sp)
+internal fun StickerMessage(media: TelegramMedia, thumbnail: TelegramFileRef?, size: androidx.compose.ui.unit.Dp = 160.dp, animate: Boolean = true) {
+    val files = LocalTelegramFiles.current
+    val state = rememberFileState(media.file)
+    val sizePx = with(LocalDensity.current) { size.roundToPx() }
+    LaunchedEffect(media.file.id, files, animate) { if (animate && state.path == null && !state.downloading) files?.download(media.file, priority = 12) }
+    val path = state.path
+    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+        when {
+            animate && path != null && media.lottieSticker -> LottieSticker(path, Modifier.fillMaxSize())
+            animate && path != null && media.animatedSticker -> LoopingVideo(path, Modifier.fillMaxSize())
+            else -> {
+                val bitmap = rememberTelegramBitmap(if (media.animatedSticker) thumbnail else media.file, sizePx, priority = 16)
+                if (bitmap != null) Image(bitmap, contentDescription = "Стикер ${media.title}", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                else Text(media.title.ifBlank { "Стикер" }, fontSize = (size.value / 3).sp)
+            }
+        }
     }
+}
+
+/** TGS sticker: gzip-compressed Lottie JSON, played in a loop. */
+@Composable
+private fun LottieSticker(path: String, modifier: Modifier) {
+    val json by androidx.compose.runtime.produceState<String?>(null, path) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { java.util.zip.GZIPInputStream(File(path).inputStream()).bufferedReader().use { it.readText() } }.getOrNull()
+        }
+    }
+    val source = json ?: return
+    val composition by com.airbnb.lottie.compose.rememberLottieComposition(com.airbnb.lottie.compose.LottieCompositionSpec.JsonString(source), cacheKey = path)
+    com.airbnb.lottie.compose.LottieAnimation(composition, iterations = com.airbnb.lottie.compose.LottieConstants.IterateForever, modifier = modifier)
 }
 
 /** Photo opened full screen: pinch to zoom, drag when zoomed, double tap to reset, tap × to close. */
@@ -329,7 +355,7 @@ internal fun FullscreenVideo(path: String, onClose: () -> Unit) {
 /** Muted endless playback, for GIFs. */
 @OptIn(UnstableApi::class)
 @Composable
-private fun LoopingVideo(path: String, modifier: Modifier) {
+internal fun LoopingVideo(path: String, modifier: Modifier) {
     val player = rememberPlayer(path, loop = true, muted = true, autoPlay = true)
     AndroidView(
         factory = { context -> PlayerView(context).apply { useController = false; resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM; this.player = player } },

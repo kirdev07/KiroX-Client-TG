@@ -88,6 +88,21 @@ class TelegramMessageRepository(
         })
     }
 
+    /** Sends a sticker or saved GIF from the panel by its file id (no upload). */
+    fun sendPanelItem(item: TelegramPanelItem, replyToMessageId: Long?) = act { id ->
+        val file = TdApi.InputFileId(item.fileId)
+        val media = item.media
+        val content: TdApi.InputMessageContent = if (item.isGif) TdApi.InputMessageAnimation(
+            TdApi.InputAnimation(file, null, IntArray(0), media.duration, media.width, media.height), TdApi.FormattedText("", emptyArray()), false, false
+        ) else TdApi.InputMessageSticker(TdApi.InputSticker(file, null, media.width, media.height), media.title)
+        TdApi.SendMessage(id, null, replyToMessageId?.let { TdApi.InputMessageReplyToMessage(it, null, 0, null) }, null, null, content)
+    }
+
+    /** Sends a recorded video note (round video); [length] is the side of the square video. */
+    fun sendVideoNote(path: String, durationSeconds: Int, length: Int) = act { id ->
+        TdApi.SendMessage(id, null, null, null, null, TdApi.InputMessageVideoNote(TdApi.InputVideoNote(TdApi.InputFileLocal(path), null, durationSeconds, length), null))
+    }
+
     /** Edits a text message, or the caption of a media message. */
     fun edit(messageId: Long, text: String) = act { id ->
         if (messages[messageId]?.content is TdApi.MessageText) TdApi.EditMessageText(id, messageId, null, inputText(text))

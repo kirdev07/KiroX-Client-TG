@@ -265,6 +265,7 @@ fun KiroXApp() {
                             DisposableEffect(chatId) { onDispose { telegramViewModel.messages.close(chatId) } }
                             val actions = remember { TelegramMessageActions(telegramViewModel.messages, telegramViewModel.activity) }
                             val activityLines by telegramViewModel.activity.lines.collectAsStateWithLifecycle()
+                            val stickerSource = remember { TelegramStickerSource(telegramViewModel.stickers) }
                             TelegramChatScreen(
                                 history = if (history.chatId == chatId) history else TelegramChatHistory(chatId = chatId),
                                 error = messageError,
@@ -274,6 +275,7 @@ fun KiroXApp() {
                                 onBack = { stack.pop() },
                                 menu = chatMenu,
                                 activityLine = activityLines[chatId],
+                                stickers = stickerSource,
                                 onCall = if (com.kirox.app.ui.call.callsEnabled) { video ->
                                     withCallPermissions(video) { telegramViewModel.voip.start(chatId, video) }
                                 } else null
@@ -306,6 +308,8 @@ private class TelegramMessageActions(
     override fun saveDraft(chatId: Long, text: String) = repository.saveDraft(chatId, text)
     override fun setActivity(chatId: Long, activity: com.kirox.app.telegram.ChatActivity?) = activityRepository.send(chatId, activity)
     override fun sendAlbum(items: List<Pair<String, com.kirox.app.telegram.VideoMeta?>>, caption: String) = repository.sendAlbum(items, caption)
+    override fun sendPanelItem(item: com.kirox.app.telegram.TelegramPanelItem, replyToMessageId: Long?) = repository.sendPanelItem(item, replyToMessageId)
+    override fun sendVideoNote(path: String, durationSeconds: Int, length: Int) = repository.sendVideoNote(path, durationSeconds, length)
 }
 
 private class TelegramStoryActionsImpl(private val repository: TelegramStoryRepository) : TelegramStoryActions {
@@ -321,4 +325,11 @@ private class TelegramChatListActionsImpl(private val repository: TelegramChatRe
     override fun markRead(chatId: Long) = repository.markRead(chatId)
     override fun markUnread(chatId: Long) = repository.markUnread(chatId)
     override suspend fun search(query: String): List<TelegramChatItem> = repository.search(query)
+}
+
+private class TelegramStickerSource(private val repository: com.kirox.app.telegram.TelegramStickerRepository) : com.kirox.app.ui.chat.StickerPanelSource {
+    override suspend fun installedSets() = repository.installedSets()
+    override suspend fun set(id: Long) = repository.set(id)
+    override suspend fun recent() = repository.recent()
+    override suspend fun savedGifs() = repository.savedGifs()
 }
