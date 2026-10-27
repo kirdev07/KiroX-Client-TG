@@ -1,5 +1,7 @@
 package com.kirox.app.notify
 
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -105,6 +107,20 @@ class MessageNotifications(
                 )
             )
             .addAction(
+                NotificationCompat.Action.Builder(0, "Ответить", PendingIntent.getBroadcast(
+                    context, groupId + REPLY_REQUEST_OFFSET,
+                    Intent(context, MessageActionReceiver::class.java).setAction(ACTION_REPLY)
+                        .putExtra(EXTRA_GROUP, groupId).putExtra(EXTRA_CHAT, group.chatId)
+                        .putExtra(EXTRA_MAX, group.items.maxOf { it.id }),
+                    // The system writes the typed text into the intent, so it must be mutable.
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+                ))
+                    .addRemoteInput(androidx.core.app.RemoteInput.Builder(KEY_REPLY).setLabel("Сообщение").build())
+                    .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
+                    .setShowsUserInterface(false)
+                    .build()
+            )
+            .addAction(
                 0, "Прочитано",
                 PendingIntent.getBroadcast(
                     context, groupId,
@@ -123,6 +139,23 @@ class MessageNotifications(
     }
 
     private fun cancel(groupId: Int) = NotificationManagerCompat.from(context).cancel(TAG, groupId)
+
+    /**
+     * Sends [text] to [chatId] from the notification and marks the chat read. Starts TDLib if it was
+     * paused in the background and waits for it; returns false when the message could not be sent.
+     */
+    suspend fun reply(groupId: Int, chatId: Long, maxNotificationId: Int, text: String): Boolean {
+        client.start()
+        if (kotlinx.coroutines.withTimeoutOrNull(REPLY_WAIT_MS) { client.ready.first { it } } == null) return false
+        val sent = runCatching {
+            client.query(TdApi.SendMessage(chatId, null, null, null, null, TdApi.InputMessageText(TdApi.FormattedText(text, emptyArray()), null, true)))
+        }.isSuccess
+        if (sent) markRead(groupId, chatId, maxNotificationId)
+        return sent
+    }
+
+    /** Removes the notification of [groupId] at once (TDLib also removes it after markRead). */
+    fun dismiss(groupId: Int) = cancel(groupId)
 
     /** Marks the chat read: TDLib then removes the group everywhere. */
     fun markRead(groupId: Int, chatId: Long, maxNotificationId: Int) = client.post {
@@ -159,6 +192,11 @@ class MessageNotifications(
         private const val MAX_GROUPS = 10L
         private const val MAX_PER_GROUP = 6L
         internal const val ACTION_READ = "com.kirox.app.notify.READ"
+        internal const val ACTION_REPLY = "com.kirox.app.notify.REPLY"
+        internal const val KEY_REPLY = "reply_text"
+        /** Keeps the reply and read PendingIntents of one group apart. */
+        private const val REPLY_REQUEST_OFFSET = 1 shl 20
+        private const val REPLY_WAIT_MS = 20_000L
         internal const val EXTRA_GROUP = "group"
         internal const val EXTRA_CHAT = "chat"
         internal const val EXTRA_MESSAGES = "messages"
@@ -177,8 +215,24 @@ class MessageNotifications(
 /** "Прочитано" in a message notification. */
 class MessageActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != MessageNotifications.ACTION_READ) return
         val notifications = (context.applicationContext as KiroXApplication).telegram.notifications
+        if (intent.action == MessageNotifications.ACTION_REPLY) {
+            val text = androidx.core.app.RemoteInput.getResultsFromIntent(intent)?.getCharSequence(MessageNotifications.KEY_REPLY)?.toString()?.trim()
+            val groupId = intent.getIntExtra(MessageNotifications.EXTRA_GROUP, 0)
+            if (text.isNullOrEmpty()) { notifications.dismiss(groupId); return }
+            val pending = goAsync()
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                try {
+                    val ok = notifications.reply(groupId, intent.getLongExtra(MessageNotifications.EXTRA_CHAT, 0), intent.getIntExtra(MessageNotifications.EXTRA_MAX, 0), text)
+                    if (ok) notifications.dismiss(groupId)
+                    else android.os.Handler(android.os.Looper.getMainLooper()).post { android.widget.Toast.makeText(context, "Не удалось отправить ответ", android.widget.Toast.LENGTH_SHORT).show() }
+                } finally {
+                    pending.finish()
+                }
+            }
+            return
+        }
+        if (intent.action != MessageNotifications.ACTION_READ) return
         notifications.markRead(
             intent.getIntExtra(MessageNotifications.EXTRA_GROUP, 0),
             intent.getLongExtra(MessageNotifications.EXTRA_CHAT, 0),

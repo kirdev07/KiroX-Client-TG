@@ -31,6 +31,9 @@ class TelegramClient(context: Context) {
     val accounts = TelegramAccounts(appContext)
     private var session = TelegramSessionManager(appContext, accounts.active)
     @Volatile private var authorized = false
+    private val _ready = MutableStateFlow(false)
+    /** True while an account is signed in and TDLib is running (AuthorizationStateReady). */
+    val ready: StateFlow<Boolean> = _ready.asStateFlow()
     private var loggingOut = false
     /**
      * True while TDLib is closed because the app is in the background. Android freezes cached
@@ -156,6 +159,7 @@ class TelegramClient(context: Context) {
 
     private fun handleLifecycle(state: TdApi.AuthorizationState) {
         authorized = state is TdApi.AuthorizationStateReady
+        _ready.value = authorized
         if (state is TdApi.AuthorizationStateLoggingOut) loggingOut = true
         when (state) {
             is TdApi.AuthorizationStateWaitTdlibParameters -> sendParameters()
