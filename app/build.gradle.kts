@@ -130,6 +130,9 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging")
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    // Video, GIF, video note and music playback (Apache-2.0).
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.ui)
     implementation("androidx.annotation:annotation:1.9.1")
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

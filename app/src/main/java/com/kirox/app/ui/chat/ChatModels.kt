@@ -3,7 +3,7 @@ package com.kirox.app.ui.chat
 import androidx.compose.runtime.Immutable
 
 enum class MessageDirection { Incoming, Outgoing, System }
-enum class MessageKind { Text, Photo, Video, Voice, Document }
+enum class MessageKind { Text, Photo, Video, Animation, VideoNote, Voice, Audio, Document, Sticker }
 enum class DeliveryState { None, Sending, Sent, Delivered, Read, Failed }
 enum class ChatLoadState { Loading, Ready, Empty, Error, Offline }
 
@@ -29,7 +29,12 @@ data class MessageUi(
     val canDelete: Boolean = true,
     val photo: com.kirox.app.telegram.TelegramFileRef? = null,
     val photoAspect: Float = 0f,
-    val edited: Boolean = false
+    val edited: Boolean = false,
+    /** File of a video, GIF, video note, music, document or sticker, with its metadata. */
+    val media: com.kirox.app.telegram.TelegramMedia? = null,
+    val thumbnail: com.kirox.app.telegram.TelegramFileRef? = null,
+    /** Formatting of [text]. */
+    val entities: List<com.kirox.app.telegram.TelegramTextEntity> = emptyList()
 )
 
 @Immutable

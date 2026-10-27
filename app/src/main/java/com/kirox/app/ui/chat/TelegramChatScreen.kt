@@ -42,6 +42,7 @@ import com.kirox.app.ui.theme.Fusion
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -74,6 +75,8 @@ interface TelegramChatActions {
     fun saveDraft(chatId: Long, text: String) {}
     /** Our activity in the chat (typing, recording); null cancels it. */
     fun setActivity(chatId: Long, activity: com.kirox.app.telegram.ChatActivity?) {}
+    /** 2–10 photos and videos as one album; a null meta marks a photo. */
+    fun sendAlbum(items: List<Pair<String, com.kirox.app.telegram.VideoMeta?>>, caption: String) {}
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -202,8 +205,49 @@ fun TelegramChatScreen(
             input = TextFieldValue()
         }
     }
-    // Gallery: photos and videos.
-    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { sendPicked(it, asPhoto = true) } }
+    val files = com.kirox.app.ui.components.LocalTelegramFiles.current
+    /** Downloads the message's file if needed, then copies it to Downloads/KiroX. */
+    fun saveMedia(message: MessageUi) {
+        val file = message.media?.file ?: message.photo ?: return
+        val name = message.media?.title?.takeIf { message.kind == MessageKind.Document || message.kind == MessageKind.Audio }.orEmpty()
+        val mime = message.media?.mimeType?.ifBlank { null } ?: if (message.kind == MessageKind.Photo) "image/jpeg" else ""
+        if (files == null) return
+        scope.launch {
+            notice = "Сохраняю…"
+            files.download(file)
+            // GetFile and DownloadFile answers can arrive in either order: wait for the file itself.
+            val path = kotlinx.coroutines.withTimeoutOrNull(5 * 60_000L) { files.state(file).first { it.path != null } }?.path
+            notice = when {
+                path == null -> "Не удалось скачать файл"
+                saveToDownloads(context, path, name, mime) -> "Сохранено в «Загрузки/KiroX»"
+                else -> "Не удалось сохранить файл"
+            }
+        }
+    }
+    fun sendAlbum(uris: List<Uri>) {
+        scope.launch {
+            val items = withContext(Dispatchers.IO) {
+                uris.mapNotNull { uri ->
+                    val path = copyToCache(context, uri) ?: return@mapNotNull null
+                    val isVideo = context.contentResolver.getType(uri)?.startsWith("video/") == true
+                    path to if (isVideo) videoMeta(path).let { (d, w, h) -> com.kirox.app.telegram.VideoMeta(d, w, h) } else null
+                }
+            }
+            when {
+                items.isEmpty() -> { notice = "Не удалось прочитать файлы"; return@launch }
+                items.size < uris.size -> notice = "Часть файлов не удалось прочитать"
+            }
+            actions.sendAlbum(items, input.text.trim())
+            input = TextFieldValue()
+        }
+    }
+    // Gallery: photos and videos; several are sent as one album, like in Telegram.
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(ALBUM_LIMIT)) { uris ->
+        when {
+            uris.size == 1 -> sendPicked(uris[0], asPhoto = true)
+            uris.size > 1 -> sendAlbum(uris)
+        }
+    }
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> uri?.let { sendPicked(it, asPhoto = false) } }
 
     val peer = ChatPeerUi(
@@ -295,7 +339,7 @@ fun TelegramChatScreen(
                     // reverseLayout: the visually previous row is index + 1.
                     val previous = rows.getOrNull(index + 1)?.message
                     val grouped = previous != null && previous.direction == row.message.direction && previous.author == row.message.author && row.message.direction != MessageDirection.System
-                    MessageRow(row.message, grouped, appearance, showAuthor = isGroup, onLongClick = { if (row.message.direction != MessageDirection.System) selected = row.message }, onReply = { replyTo = row.message; editing = null })
+                    MessageRow(row.message, grouped, appearance, showAuthor = isGroup, onLongClick = { if (row.message.direction != MessageDirection.System) selected = row.message }, onReply = { replyTo = row.message; editing = null }, onNotice = { notice = it })
                 }
                 if (history.loadingOlder) item(key = "loading") {
                     Box(Modifier.fillMaxWidth().padding(12.dp), Alignment.Center) { CircularProgressIndicator(Modifier.size(20.dp), color = Fusion.colors.textSecondary, strokeWidth = 2.dp) }
@@ -334,6 +378,7 @@ fun TelegramChatScreen(
                     "Редактировать" -> { editing = message; replyTo = null; input = TextFieldValue(message.text) }
                     "Удалить" -> deleting = message
                     "Переслать" -> forwarding = message
+                    "Сохранить" -> saveMedia(message)
                 }
             },
             reactions = history.peerKind != TelegramPeerKind.Saved,
@@ -504,11 +549,15 @@ internal fun TelegramMessage.toUi(time: String) = MessageUi(
     kind = when (kind) {
         TelegramMessageKind.Photo -> MessageKind.Photo
         TelegramMessageKind.Video -> MessageKind.Video
+        TelegramMessageKind.Animation -> MessageKind.Animation
+        TelegramMessageKind.VideoNote -> MessageKind.VideoNote
         TelegramMessageKind.Voice -> MessageKind.Voice
+        TelegramMessageKind.Audio -> MessageKind.Audio
         TelegramMessageKind.Document -> MessageKind.Document
+        TelegramMessageKind.Sticker -> MessageKind.Sticker
         TelegramMessageKind.Text, TelegramMessageKind.Other -> MessageKind.Text
     },
-    text = if (kind == TelegramMessageKind.Document) listOfNotNull(fileName, text.takeIf { it.isNotBlank() }).joinToString("\n") else text,
+    text = text,
     time = time,
     delivery = when (delivery) {
         TelegramDelivery.Sending -> DeliveryState.Sending
@@ -523,7 +572,10 @@ internal fun TelegramMessage.toUi(time: String) = MessageUi(
     canEdit = canEdit,
     photo = photo,
     photoAspect = photoAspect,
-    edited = edited
+    edited = edited,
+    media = media,
+    thumbnail = thumbnail,
+    entities = entities
 )
 
 /** Copies a picked content URI into the app cache so TDLib can upload it from a plain path. */
@@ -570,6 +622,9 @@ internal fun videoMeta(path: String): Triple<Int, Int, Int> = runCatching {
         Triple((ms / 1000).toInt(), w, h)
     }
 }.getOrDefault(Triple(0, 0, 0))
+
+/** Telegram allows up to 10 photos and videos in one album. */
+private const val ALBUM_LIMIT = 10
 
 /** Unsent text of the chat on screen, as of the last composition; not state, so writes cause no recomposition. */
 private class DraftHolder {

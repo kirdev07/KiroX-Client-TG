@@ -149,6 +149,19 @@ fun KiroXApp() {
     val weakDevice = remember { com.kirox.app.settings.prefersLightEffects(context) }
     val scope = rememberCoroutineScope()
     fun openChat(id: Long) { openChatId = id; telegramViewModel.messages.open(id); stack.push(Screen.Conversation) }
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+    // t.me and tg: links open the chat inside KiroX; anything else (and unknown names) in the browser.
+    val linkOpener: (String) -> Unit = remember(uriHandler) {
+        { url ->
+            val link = com.kirox.app.telegram.telegramLinkOf(url)
+            if (link == null) runCatching { uriHandler.openUri(url) }
+            else scope.launch {
+                val chatId = telegramViewModel.resolveLink(link)
+                if (chatId != null) openChat(chatId)
+                else if (link is com.kirox.app.telegram.TelegramLink.Username) runCatching { uriHandler.openUri(url) }
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         phoneState = withContext(Dispatchers.Default) { PhoneEntryState.create(context) }
@@ -243,7 +256,10 @@ fun KiroXApp() {
                                 onAddContact = telegramViewModel.users::addContact
                             )
                         }
-                        Screen.Conversation -> CompositionLocalProvider(LocalTelegramFiles provides telegramViewModel.files) {
+                        Screen.Conversation -> CompositionLocalProvider(
+                            LocalTelegramFiles provides telegramViewModel.files,
+                            com.kirox.app.ui.chat.LocalLinkOpener provides linkOpener
+                        ) {
                             val chatId = openChatId
                             LaunchedEffect(chatId) { telegramViewModel.messages.open(chatId) }
                             DisposableEffect(chatId) { onDispose { telegramViewModel.messages.close(chatId) } }
@@ -289,6 +305,7 @@ private class TelegramMessageActions(
     override fun forward(toChatId: Long, messageIds: List<Long>) = repository.forward(toChatId, messageIds)
     override fun saveDraft(chatId: Long, text: String) = repository.saveDraft(chatId, text)
     override fun setActivity(chatId: Long, activity: com.kirox.app.telegram.ChatActivity?) = activityRepository.send(chatId, activity)
+    override fun sendAlbum(items: List<Pair<String, com.kirox.app.telegram.VideoMeta?>>, caption: String) = repository.sendAlbum(items, caption)
 }
 
 private class TelegramStoryActionsImpl(private val repository: TelegramStoryRepository) : TelegramStoryActions {

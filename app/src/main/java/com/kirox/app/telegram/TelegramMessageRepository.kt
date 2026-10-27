@@ -88,7 +88,27 @@ class TelegramMessageRepository(
         })
     }
 
-    fun edit(messageId: Long, text: String) = act { id -> TdApi.EditMessageText(id, messageId, null, inputText(text)) }
+    /** Edits a text message, or the caption of a media message. */
+    fun edit(messageId: Long, text: String) = act { id ->
+        if (messages[messageId]?.content is TdApi.MessageText) TdApi.EditMessageText(id, messageId, null, inputText(text))
+        else TdApi.EditMessageCaption(id, messageId, null, TdApi.FormattedText(text, emptyArray()), false)
+    }
+
+    /** Sends 2–10 photos and videos as one album; [items] are local paths with video metadata or null for photos. */
+    fun sendAlbum(items: List<Pair<String, VideoMeta?>>, caption: String) = act { id ->
+        val contents = items.mapIndexed { index, (path, video) ->
+            // Telegram shows the album caption from its first item.
+            val text = TdApi.FormattedText(if (index == 0) caption else "", emptyArray())
+            if (video == null) TdApi.InputMessagePhoto().apply {
+                photo = TdApi.InputPhoto().apply { photo = TdApi.InputFileLocal(path); addedStickerFileIds = IntArray(0) }
+                this.caption = text
+            } else TdApi.InputMessageVideo(
+                TdApi.InputVideo(TdApi.InputFileLocal(path), null, null, 0, IntArray(0), video.durationSeconds, video.width, video.height, true),
+                text, false, null, false
+            )
+        }
+        TdApi.SendMessageAlbum(id, null, null, null, contents.toTypedArray())
+    }
 
     /** Adds the emoji reaction, or removes it when this account already chose it. */
     fun toggleReaction(messageId: Long, emoji: String) = act { id ->
@@ -222,26 +242,24 @@ class TelegramMessageRepository(
         val reply = replyTo as? TdApi.MessageReplyToMessage
         val replied = reply?.takeIf { it.chatId == 0L || it.chatId == chatId }?.let { messages[it.messageId] }
         val photo = (content as? TdApi.MessagePhoto)?.photo?.let(::bestPhoto)
+        val formatted = formattedTextOf(content).takeIf { content !is TdApi.MessageVoiceNote }
+        val mediaInfo = mediaOf(content)
         return TelegramMessage(
             id = id,
             chatId = chatId,
             senderName = senderName(senderId),
             isOutgoing = isOutgoing,
-            kind = when (content) {
-                is TdApi.MessageText -> TelegramMessageKind.Text
-                is TdApi.MessagePhoto -> TelegramMessageKind.Photo
-                is TdApi.MessageVideo, is TdApi.MessageVideoNote, is TdApi.MessageAnimation -> TelegramMessageKind.Video
-                is TdApi.MessageVoiceNote -> TelegramMessageKind.Voice
-                is TdApi.MessageDocument, is TdApi.MessageAudio -> TelegramMessageKind.Document
-                else -> TelegramMessageKind.Other
-            },
+            kind = kindOf(content),
             text = when (content) {
-                is TdApi.MessageText -> content.text.text
-                is TdApi.MessagePhoto -> content.caption.text
-                is TdApi.MessageDocument -> content.caption.text
                 is TdApi.MessageVoiceNote -> "%d:%02d".format(content.voiceNote.duration / 60, content.voiceNote.duration % 60)
-                else -> messagePreview(this)
+                // Media without a caption shows nothing under it; other contents a text preview.
+                is TdApi.MessageVideo, is TdApi.MessageAnimation, is TdApi.MessageAudio, is TdApi.MessageVideoNote, is TdApi.MessageSticker -> formatted?.text.orEmpty()
+                else -> formatted?.text ?: messagePreview(this)
             },
+            entities = entitiesOf(formatted),
+            media = mediaInfo.first,
+            thumbnail = mediaInfo.second,
+            albumId = mediaAlbumId,
             date = date,
             edited = editDate > 0,
             delivery = when {
@@ -261,7 +279,7 @@ class TelegramMessageRepository(
             photoAspect = photo?.let { if (it.height > 0) it.width.toFloat() / it.height else 0f } ?: 0f,
             fileName = (content as? TdApi.MessageDocument)?.document?.fileName ?: (content as? TdApi.MessageAudio)?.audio?.fileName,
             // Rough client-side hint; TDLib enforces the real rules and reports errors.
-            canEdit = isOutgoing && sendingState == null && (content is TdApi.MessageText || content is TdApi.MessagePhoto || content is TdApi.MessageDocument)
+            canEdit = isOutgoing && sendingState == null && (content is TdApi.MessageText || content is TdApi.MessagePhoto || content is TdApi.MessageDocument || content is TdApi.MessageVideo || content is TdApi.MessageAnimation || content is TdApi.MessageAudio)
         )
     }
 
@@ -284,6 +302,9 @@ class TelegramMessageRepository(
         const val PUBLISH_DELAY_MS = 32L
     }
 }
+
+/** Duration and size of a picked video, needed to send it as a video. */
+data class VideoMeta(val durationSeconds: Int, val width: Int, val height: Int)
 
 /** Text of the chat's draft, empty when there is none. */
 internal fun draftText(chat: TdApi.Chat): String =

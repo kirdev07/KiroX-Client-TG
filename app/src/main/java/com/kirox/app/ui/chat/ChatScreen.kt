@@ -88,7 +88,7 @@ internal fun ChatSearchField(value: String, onChange: (String) -> Unit, onClose:
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAppearance, pinned: Boolean = false, showAuthor: Boolean = false, onLongClick: () -> Unit, onReply: () -> Unit) {
+internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAppearance, pinned: Boolean = false, showAuthor: Boolean = false, onLongClick: () -> Unit, onReply: () -> Unit, onNotice: (String) -> Unit = {}) {
     if (message.direction == MessageDirection.System) {
         Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
             Text(message.text, color = ChatSecondary, fontSize = 11.sp, modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Fusion.colors.surface2).padding(horizontal = 12.dp, vertical = 5.dp))
@@ -114,16 +114,25 @@ internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAp
             if (pinned) { Row(verticalAlignment = Alignment.CenterVertically) { IconGlyph(KiroXIcon.Pin, null, Modifier.size(13.dp), ChatSecondary); Spacer(Modifier.width(4.dp)); Text("Закреплено", color = ChatSecondary, fontSize = 10.sp) }; Spacer(Modifier.height(4.dp)) }
             message.forwardedFrom?.let { Text("Переслано от $it", color = Fusion.colors.textPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold); Spacer(Modifier.height(4.dp)) }
             message.quote?.let { QuoteBlock(it); Spacer(Modifier.height(6.dp)) }
+            val textScale = appearance.textScale
+            @Composable fun Caption() { if (message.text.isNotBlank()) { Spacer(Modifier.height(6.dp)); MessageText(message.text, message.entities, textScale) } }
+            val media = message.media
             when (message.kind) {
                 MessageKind.Photo -> {
                     val photo = message.photo
-                    if (photo != null) com.kirox.app.ui.components.TelegramPhoto(photo, message.photoAspect) else MediaPlaceholder(message.kind)
-                    if (message.text.isNotBlank()) { Spacer(Modifier.height(6.dp)); Text(message.text, color = ChatWhite, fontSize = (15f * appearance.textScale).sp, lineHeight = (20f * appearance.textScale).sp) }
+                    var open by remember(message.id) { mutableStateOf(false) }
+                    if (photo != null) Box(Modifier.clickable { open = true }) { com.kirox.app.ui.components.TelegramPhoto(photo, message.photoAspect) } else MediaPlaceholder(message.kind)
+                    if (open && photo != null) FullscreenPhoto(photo) { open = false }
+                    Caption()
                 }
-                MessageKind.Video -> MediaPlaceholder(message.kind)
+                MessageKind.Video -> { if (media != null) VideoMessage(media, message.thumbnail) else MediaPlaceholder(message.kind); Caption() }
+                MessageKind.Animation -> { if (media != null) AnimationMessage(media, message.thumbnail) else MediaPlaceholder(message.kind); Caption() }
+                MessageKind.VideoNote -> if (media != null) VideoNoteMessage(media, message.thumbnail) else MediaPlaceholder(message.kind)
                 MessageKind.Voice -> VoiceMessage(message.text, message.photo)
-                MessageKind.Document -> DocumentMessage(message.text)
-                MessageKind.Text -> Text(message.text, color = ChatWhite, fontSize = (15f * appearance.textScale).sp, lineHeight = (20f * appearance.textScale).sp)
+                MessageKind.Audio -> { if (media != null) AudioMessage(media); Caption() }
+                MessageKind.Document -> { if (media != null) DocumentMessage(media, onNotice) else MessageText(message.text, message.entities, textScale); Caption() }
+                MessageKind.Sticker -> if (media != null) StickerMessage(media, message.thumbnail) else MessageText(message.text, message.entities, textScale)
+                MessageKind.Text -> MessageText(message.text, message.entities, textScale)
             }
             Spacer(Modifier.height(4.dp))
             Row(Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically) {
@@ -162,7 +171,6 @@ internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAp
         Text(duration, color = ChatSecondary, fontSize = 11.sp)
     }
 }
-@Composable private fun DocumentMessage(text: String) { Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(42.dp).clip(CircleShape).background(Fusion.colors.surface3), contentAlignment = Alignment.Center) { IconGlyph(KiroXIcon.File, null, Modifier.size(22.dp), ChatWhite) }; Spacer(Modifier.width(9.dp)); Text(text, color = ChatWhite, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) } }
 private fun deliveryGlyph(state: DeliveryState) = when (state) { DeliveryState.Sending -> "◷"; DeliveryState.Sent -> "✓"; DeliveryState.Delivered, DeliveryState.Read -> "✓✓"; DeliveryState.Failed -> "!"; DeliveryState.None -> "" }
 
 @Composable
@@ -202,7 +210,7 @@ internal fun ChatComposer(value: TextFieldValue, reply: MessageUi?, editing: Mes
 @Composable internal fun MessageActionsSheet(message: MessageUi, onDismiss: () -> Unit, onReply: () -> Unit, onReaction: (String) -> Unit, onAction: (String) -> Unit, reactions: Boolean = true, hidden: Set<String> = emptySet()) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Fusion.colors.surface1, contentColor = ChatWhite) {
         if (reactions) Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceAround) { listOf("❤", "👍", "🔥", "😁", "👏").forEach { emoji -> Text(emoji, fontSize = 23.sp, modifier = Modifier.clip(CircleShape).clickable { onReaction(emoji) }.padding(9.dp)) } }
-        val actions = buildList { add(KiroXIcon.Reply to "Ответить"); if (message.kind == MessageKind.Text) add(KiroXIcon.Copy to "Копировать"); add(KiroXIcon.Forward to "Переслать"); add(KiroXIcon.Pin to "Закрепить"); if (message.canEdit) add(KiroXIcon.Edit to "Редактировать"); if (message.canDelete) add(KiroXIcon.Delete to "Удалить"); add(KiroXIcon.Check to "Выбрать") }.filterNot { it.second in hidden }
+        val actions = buildList { add(KiroXIcon.Reply to "Ответить"); if (message.text.isNotBlank() && message.kind != MessageKind.Voice) add(KiroXIcon.Copy to "Копировать"); if (message.media != null && message.kind != MessageKind.Sticker || message.kind == MessageKind.Photo) add(KiroXIcon.Storage to "Сохранить"); add(KiroXIcon.Forward to "Переслать"); add(KiroXIcon.Pin to "Закрепить"); if (message.canEdit) add(KiroXIcon.Edit to "Редактировать"); if (message.canDelete) add(KiroXIcon.Delete to "Удалить"); add(KiroXIcon.Check to "Выбрать") }.filterNot { it.second in hidden }
         actions.forEach { (icon, title) -> Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable { if (title == "Ответить") onReply() else onAction(title) }.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { IconGlyph(icon, null, Modifier.size(22.dp), ChatWhite); Spacer(Modifier.width(16.dp)); Text(title, color = if (title == "Удалить") Fusion.colors.danger else ChatWhite, fontSize = 15.sp) } }
         Spacer(Modifier.navigationBarsPadding())
     }

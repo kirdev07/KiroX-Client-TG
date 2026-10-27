@@ -85,7 +85,29 @@ data class TelegramContact(
     val phone: String = ""
 )
 
-enum class TelegramMessageKind { Text, Photo, Video, Voice, Document, Other }
+enum class TelegramMessageKind { Text, Photo, Video, Animation, VideoNote, Voice, Audio, Document, Sticker, Other }
+
+/** A message's main file and what is known about it before it is downloaded. */
+data class TelegramMedia(
+    val file: TelegramFileRef,
+    /** Bytes; 0 when unknown. */
+    val size: Long = 0,
+    /** Seconds. */
+    val duration: Int = 0,
+    val width: Int = 0,
+    val height: Int = 0,
+    val mimeType: String = "",
+    /** Music title, or the file name for documents. */
+    val title: String = "",
+    val performer: String = "",
+    /** Sticker formats other than static WEBP are animated and drawn from their thumbnail for now. */
+    val animatedSticker: Boolean = false
+)
+
+/** Formatting of a message text; offsets and lengths are in UTF-16 units, as in Kotlin strings. */
+data class TelegramTextEntity(val offset: Int, val length: Int, val type: TelegramEntityType, val url: String? = null)
+
+enum class TelegramEntityType { Bold, Italic, Underline, Strike, Code, Pre, Spoiler, Url, TextUrl, Mention, MentionName, Hashtag, Email, Phone, BotCommand, Quote }
 enum class TelegramDelivery { None, Sending, Sent, Read, Failed }
 
 data class TelegramMessage(
@@ -106,7 +128,14 @@ data class TelegramMessage(
     val fileName: String? = null,
     val canEdit: Boolean = false,
     /** Emoji reactions: emoji, count, whether this account chose it. */
-    val reactions: List<Triple<String, Int, Boolean>> = emptyList()
+    val reactions: List<Triple<String, Int, Boolean>> = emptyList(),
+    /** File of a video, GIF, video note, music, document or sticker. */
+    val media: TelegramMedia? = null,
+    /** Preview image of [media], when Telegram provides one. */
+    val thumbnail: TelegramFileRef? = null,
+    val entities: List<TelegramTextEntity> = emptyList(),
+    /** Messages of one album share this id; 0 when not in an album. */
+    val albumId: Long = 0
 )
 
 enum class TelegramPeerKind { User, Bot, Group, Channel, Saved, Unknown }
