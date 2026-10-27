@@ -145,9 +145,11 @@ internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAp
     val path by remember(file?.id, files) {
         if (file != null && files != null) files.observe(file, 16) else kotlinx.coroutines.flow.MutableStateFlow(file?.localPath)
     }.collectAsState()
-    var playing by remember(path) { mutableStateOf(path != null && VoicePlayer.playingPath == path) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val playingPath by VoicePlayer.playingPath.collectAsState()
+    val playing = path != null && playingPath == path
     Row(
-        Modifier.clip(RoundedCornerShape(12.dp)).clickable(enabled = path != null) { path?.let { VoicePlayer.toggle(it) { playing = false }; playing = VoicePlayer.playingPath == it } },
+        Modifier.clip(RoundedCornerShape(12.dp)).clickable(enabled = path != null) { path?.let { VoicePlayer.toggle(context, it) } },
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(Modifier.size(36.dp).clip(CircleShape).background(Fusion.colors.surface3), contentAlignment = Alignment.Center) {

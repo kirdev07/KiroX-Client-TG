@@ -1,8 +1,14 @@
 package com.kirox.app.ui.chat
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.MediaRecorder
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 
 /**
@@ -96,29 +102,55 @@ class VoiceRecorder(private val context: Context) {
     private companion object { const val MIN_DURATION_MS = 700L }
 }
 
-/** Plays one voice note at a time. */
+/**
+ * Plays one voice note at a time, on the main thread. Holds transient audio focus while playing, so
+ * music pauses and resumes, and stops when another app takes focus (a call, a video).
+ * Every row observes [playingPath]: starting one note shows the previous one as stopped.
+ */
 object VoicePlayer {
     private var player: MediaPlayer? = null
-    var playingPath: String? = null
-        private set
+    private var audio: AudioManager? = null
+    private var focus: AudioFocusRequest? = null
 
-    fun toggle(path: String, onDone: () -> Unit) {
-        if (playingPath == path) { stop(); onDone(); return }
+    private val _playingPath = MutableStateFlow<String?>(null)
+    val playingPath: StateFlow<String?> = _playingPath.asStateFlow()
+
+    private val attributes = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_MEDIA)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+        .build()
+
+    fun toggle(context: Context, path: String) {
+        if (_playingPath.value == path) { stop(); return }
         stop()
+        val manager = context.applicationContext.getSystemService(AudioManager::class.java)
+        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+            .setAudioAttributes(attributes)
+            .setOnAudioFocusChangeListener { change -> if (change < 0) stop() }
+            .build()
+        if (manager?.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_FAILED) return
+        audio = manager
+        focus = request
         player = runCatching {
             MediaPlayer().apply {
+                setAudioAttributes(attributes)
                 setDataSource(path)
-                setOnCompletionListener { stop(); onDone() }
+                setOnCompletionListener { stop() }
+                setOnErrorListener { _, _, _ -> stop(); true }
                 prepare()
                 start()
             }
         }.getOrNull()
-        playingPath = if (player != null) path else null
+        if (player == null) stop() else _playingPath.value = path
     }
 
     fun stop() {
-        player?.runCatching { stop(); release() }
+        player?.runCatching { stop() }
+        player?.release()
         player = null
-        playingPath = null
+        focus?.let { request -> audio?.abandonAudioFocusRequest(request) }
+        focus = null
+        audio = null
+        _playingPath.value = null
     }
 }

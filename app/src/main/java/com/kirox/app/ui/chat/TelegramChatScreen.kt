@@ -122,6 +122,12 @@ fun TelegramChatScreen(
         }
     }
     DisposableEffect(Unit) { onDispose { recorder.stop(discard = true); VoicePlayer.stop() } }
+    // Another chat or the background: a voice note does not keep playing, an unsent recording is dropped.
+    DisposableEffect(history.chatId) { onDispose { VoicePlayer.stop() } }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) {
+        VoicePlayer.stop()
+        if (recording) { recorder.stop(discard = true); recording = false }
+    }
     var menuOpen by remember { mutableStateOf(false) }
     var searching by remember(history.chatId) { mutableStateOf(false) }
     var searchQuery by remember(history.chatId) { mutableStateOf("") }
