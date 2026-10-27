@@ -165,7 +165,7 @@ class TelegramSettingsRepository(private val client: TelegramClient) {
 
     suspend fun notificationExceptions(): List<NotificationException> {
         val ids = client.query(TdApi.GetChatNotificationSettingsExceptions(null, false)).chatIds
-        return ids.mapNotNull { id ->
+        return ids.toList().mapNotNull { id ->
             runCatching { client.query(TdApi.GetChat(id)) }.getOrNull()?.let { chat ->
                 NotificationException(chat.id, chat.title, chat.notificationSettings.muteFor > 0)
             }
