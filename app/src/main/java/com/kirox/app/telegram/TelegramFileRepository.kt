@@ -54,7 +54,9 @@ class TelegramFileRepository(private val client: TelegramClient) {
     }
 
     /** Progress of [file] without downloading it; refreshed from TDLib on first use. */
-    fun state(file: TelegramFileRef): StateFlow<TelegramFileState> {
+    fun state(file: TelegramFileRef): StateFlow<TelegramFileState> = mutableState(file)
+
+    private fun mutableState(file: TelegramFileRef): MutableStateFlow<TelegramFileState> {
         var created = false
         val flow = states.getOrPut(file.id) { created = true; MutableStateFlow(TelegramFileState(path = file.localPath)) }
         if (created) client.send(TdApi.GetFile(file.id)) { result -> if (result is TdApi.File) flow.value = result.toState() }
@@ -63,7 +65,7 @@ class TelegramFileRepository(private val client: TelegramClient) {
 
     /** Starts or resumes downloading [file]; progress arrives in [state]. */
     fun download(file: TelegramFileRef, priority: Int = MEDIA_PRIORITY) {
-        val flow = state(file)
+        val flow = mutableState(file)
         if (flow.value.path != null) return
         flow.value = flow.value.copy(downloading = true)
         client.send(TdApi.DownloadFile(file.id, priority, 0, 0, false)) { result ->

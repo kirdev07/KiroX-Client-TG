@@ -82,9 +82,8 @@ private fun formatMessage(text: String, entities: List<TelegramTextEntity>, reve
                 addLink(LinkAnnotation.Clickable("spoiler", TextLinkStyles(hiddenStyle)) { onReveal() }, start, end)
             }
             else -> entityLink(text, entity)?.let { url ->
-                val link = if (opener != null) LinkAnnotation.Clickable(url, TextLinkStyles(linkStyle)) { opener(url) }
-                else LinkAnnotation.Url(url, TextLinkStyles(linkStyle))
-                addLink(link, start, end)
+                if (opener != null) addLink(LinkAnnotation.Clickable(url, TextLinkStyles(linkStyle)) { opener(url) }, start, end)
+                else addLink(LinkAnnotation.Url(url, TextLinkStyles(linkStyle)), start, end)
             }
         }
     }
