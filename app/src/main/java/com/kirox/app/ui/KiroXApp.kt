@@ -71,6 +71,7 @@ fun KiroXApp() {
     /** Comment thread or forum topic shown on Screen.Thread; lost with the process, then Thread pops. */
     var openThread by remember { mutableStateOf<ThreadSpec?>(null) }
     val history by telegramViewModel.messages.history.collectAsStateWithLifecycle()
+    val autoDownloadRule by telegramViewModel.autoDownload.rule.collectAsStateWithLifecycle()
     val messageError by telegramViewModel.messages.error.collectAsStateWithLifecycle()
     val callsState by telegramViewModel.calls.state.collectAsStateWithLifecycle()
     val activeCall by telegramViewModel.voip.call.collectAsStateWithLifecycle()
@@ -260,7 +261,8 @@ fun KiroXApp() {
                         }
                         Screen.Conversation -> CompositionLocalProvider(
                             LocalTelegramFiles provides telegramViewModel.files,
-                            com.kirox.app.ui.chat.LocalLinkOpener provides linkOpener
+                            com.kirox.app.ui.chat.LocalLinkOpener provides linkOpener,
+                            com.kirox.app.ui.chat.LocalAutoDownload provides autoDownloadRule
                         ) {
                             val chatId = openChatId
                             LaunchedEffect(chatId) { telegramViewModel.messages.open(chatId) }
@@ -287,7 +289,8 @@ fun KiroXApp() {
                         }
                         Screen.Thread -> CompositionLocalProvider(
                             LocalTelegramFiles provides telegramViewModel.files,
-                            com.kirox.app.ui.chat.LocalLinkOpener provides linkOpener
+                            com.kirox.app.ui.chat.LocalLinkOpener provides linkOpener,
+                            com.kirox.app.ui.chat.LocalAutoDownload provides autoDownloadRule
                         ) {
                             val spec = openThread
                             if (spec == null) {

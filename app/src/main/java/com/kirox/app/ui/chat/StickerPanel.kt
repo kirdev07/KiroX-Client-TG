@@ -114,7 +114,8 @@ internal fun StickerPanel(source: StickerPanelSource?, onEmoji: (String) -> Unit
                     items(current, key = { it.fileId }) { item ->
                         Box(Modifier.padding(3.dp).aspectRatio(1f).clip(RoundedCornerShape(12.dp)).clickable { onSend(item) }, contentAlignment = Alignment.Center) {
                             if (item.isGif) AnimationMessage(item.media, item.thumbnail)
-                            else StickerMessage(item.media, item.thumbnail, size = 70.dp, animate = false)
+                            // TGS animate in the panel too; WEBM would need one video player per tile, so they stay still here.
+                            else StickerMessage(item.media, item.thumbnail, size = 70.dp, animate = item.media.lottieSticker)
                         }
                     }
                 }

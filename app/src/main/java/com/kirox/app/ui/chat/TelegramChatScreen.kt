@@ -228,7 +228,7 @@ fun TelegramChatScreen(
     LaunchedEffect(history.jumpTo, rows) {
         val target = history.jumpTo
         if (target == 0L) return@LaunchedEffect
-        val index = rows.indexOfFirst { it.key == "m$target" }
+        val index = rows.indexOfFirst { it.key == "m$target" || it.album.any { m -> m.id == target } }
         if (index >= 0) {
             listState.animateScrollToItem(index)
             highlighted = target
@@ -441,6 +441,7 @@ fun TelegramChatScreen(
                     val grouped = previous != null && previous.direction == row.message.direction && previous.author == row.message.author && row.message.direction != MessageDirection.System
                     MessageRow(
                         row.message, grouped, appearance,
+                        album = row.album,
                         pinned = row.message.id in history.pinnedIds,
                         showAuthor = isGroup,
                         onLongClick = {
@@ -747,7 +748,8 @@ fun TelegramChatScreen(
     )
 }
 
-private data class ChatRow(val key: String, val message: MessageUi)
+/** One list row: a message, a date separator, or an album ([album] oldest first, [message] carries its caption). */
+private data class ChatRow(val key: String, val message: MessageUi, val album: List<MessageUi> = emptyList())
 
 /** [newestFirst] messages → rows with a date separator after the last message of each day. */
 private fun toRows(newestFirst: List<TelegramMessage>): List<ChatRow> {
@@ -755,7 +757,17 @@ private fun toRows(newestFirst: List<TelegramMessage>): List<ChatRow> {
     val dayFormat = SimpleDateFormat("d MMMM yyyy", Locale.forLanguageTag("ru"))
     val rows = ArrayList<ChatRow>(newestFirst.size + 8)
     newestFirst.forEachIndexed { index, message ->
-        rows += ChatRow("m${message.id}", message.toUi(timeFormat.format(Date(message.date * 1000L))))
+        val ui = message.toUi(timeFormat.format(Date(message.date * 1000L)))
+        val last = rows.lastOrNull()
+        val lastAlbum = last?.key?.takeIf { it.startsWith("a") }?.removePrefix("a")?.toLongOrNull()
+        val newer = newestFirst.getOrNull(index - 1)
+        // The newer part of the same album is the row just added (not a date separator).
+        val newerSameAlbum = newer != null && newer.albumId == message.albumId && last?.key == "m${newer.id}"
+        if (message.albumId != 0L && last != null && (lastAlbum == message.albumId || newerSameAlbum)) {
+            // Album: newestFirst runs newest → oldest, so each older part goes to the front.
+            val album = listOf(ui) + last.album.ifEmpty { listOf(last.message) }
+            rows[rows.lastIndex] = ChatRow("a${message.albumId}", album.firstOrNull { it.text.isNotBlank() } ?: album.last(), album)
+        } else rows += ChatRow("m${message.id}", ui)
         val older = newestFirst.getOrNull(index + 1)
         val day = dayFormat.format(Date(message.date * 1000L))
         if (older == null || dayFormat.format(Date(older.date * 1000L)) != day) {

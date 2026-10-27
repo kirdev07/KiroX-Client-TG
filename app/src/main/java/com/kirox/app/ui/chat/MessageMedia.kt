@@ -76,6 +76,9 @@ import java.io.File
 // Media inside message bubbles. Files download on tap (videos, music, documents) or by themselves
 // when small (GIFs, stickers, previews); playback uses one Media3 player per visible item.
 
+/** Auto-download limits for the screen; none when not provided (previews, tests). */
+val LocalAutoDownload = androidx.compose.runtime.staticCompositionLocalOf { com.kirox.app.telegram.AutoDownloadRule() }
+
 /** GIFs up to this size download and loop by themselves, like in Telegram. */
 private const val AUTO_ANIMATION_BYTES = 8L * 1024 * 1024
 
@@ -127,6 +130,8 @@ internal fun VideoMessage(media: TelegramMedia, thumbnail: TelegramFileRef?) {
     val state = rememberFileState(media.file)
     var wantPlay by remember(media.file.id) { mutableStateOf(false) }
     var playing by remember(media.file.id) { mutableStateOf<String?>(null) }
+    val rule = LocalAutoDownload.current
+    LaunchedEffect(media.file.id, rule) { if (state.path == null && !state.downloading && media.size in 1..rule.maxVideoBytes) files?.download(media.file) }
     // A tap on a video that is still downloading opens it as soon as it is complete.
     LaunchedEffect(state.path, wantPlay) { if (wantPlay && state.path != null) { playing = state.path; wantPlay = false } }
     Box(Modifier.clickable {
@@ -235,6 +240,8 @@ internal fun DocumentMessage(media: TelegramMedia, onNotice: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     val files = LocalTelegramFiles.current
     val state = rememberFileState(media.file)
+    val rule = LocalAutoDownload.current
+    LaunchedEffect(media.file.id, rule) { if (state.path == null && !state.downloading && media.size in 1..rule.maxOtherBytes) files?.download(media.file) }
     Row(
         Modifier.clip(RoundedCornerShape(12.dp)).clickable {
             val path = state.path

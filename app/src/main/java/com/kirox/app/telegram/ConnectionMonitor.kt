@@ -35,6 +35,10 @@ class ConnectionMonitor(context: Context, private val client: TelegramClient) {
     private val connectivity = context.applicationContext.getSystemService(ConnectivityManager::class.java)
     // Read and written only on the TDLib dispatcher.
     private var current = DeviceNetwork.Other
+        set(value) { field = value; _network.value = value }
+    private val _network = kotlinx.coroutines.flow.MutableStateFlow(DeviceNetwork.Other)
+    /** Current default network, for auto-download rules. */
+    val network: kotlinx.coroutines.flow.StateFlow<DeviceNetwork> = _network
     private var reportedToClient = false
 
     init {

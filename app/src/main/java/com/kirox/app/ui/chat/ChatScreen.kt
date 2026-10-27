@@ -89,7 +89,7 @@ internal fun ChatSearchField(value: String, onChange: (String) -> Unit, onClose:
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAppearance, pinned: Boolean = false, showAuthor: Boolean = false, onLongClick: () -> Unit, onReply: () -> Unit, onNotice: (String) -> Unit = {}, selected: Boolean = false, onClick: (() -> Unit)? = null, onQuote: (Long) -> Unit = {}, highlighted: Boolean = false, onComments: (() -> Unit)? = null, onVote: (List<Int>) -> Unit = {}, onButton: (com.kirox.app.telegram.TelegramButton) -> Unit = {}) {
+internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAppearance, album: List<MessageUi> = emptyList(), pinned: Boolean = false, showAuthor: Boolean = false, onLongClick: () -> Unit, onReply: () -> Unit, onNotice: (String) -> Unit = {}, selected: Boolean = false, onClick: (() -> Unit)? = null, onQuote: (Long) -> Unit = {}, highlighted: Boolean = false, onComments: (() -> Unit)? = null, onVote: (List<Int>) -> Unit = {}, onButton: (com.kirox.app.telegram.TelegramButton) -> Unit = {}) {
     if (message.direction == MessageDirection.System) {
         Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
             Text(message.text, color = ChatSecondary, fontSize = 11.sp, modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Fusion.colors.surface2).padding(horizontal = 12.dp, vertical = 5.dp))
@@ -121,7 +121,10 @@ internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAp
             val textScale = appearance.textScale
             @Composable fun Caption() { if (message.text.isNotBlank()) { Spacer(Modifier.height(6.dp)); MessageText(message.text, message.entities, textScale) } }
             val media = message.media
-            when (message.kind) {
+            if (album.size > 1) {
+                AlbumGrid(album)
+                Caption()
+            } else when (message.kind) {
                 MessageKind.Photo -> {
                     val photo = message.photo
                     var open by remember(message.id) { mutableStateOf(false) }
@@ -384,6 +387,36 @@ internal fun pollVotersLabel(count: Int): String {
         mod10 == 1 -> "голос"
         mod10 in 2..4 -> "голоса"
         else -> "голосов"
+    }
+}
+
+/** Photos and videos of one album in a grid (2 per row, 3 when there are many), each opens full screen. */
+@Composable
+private fun AlbumGrid(items: List<MessageUi>) {
+    val columns = if (items.size >= 5) 3 else 2
+    Column(Modifier.widthIn(max = 280.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        items.chunked(columns).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                row.forEach { item ->
+                    Box(Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(8.dp)).background(Fusion.colors.surface3)) {
+                        val photo = item.photo
+                        val media = item.media
+                        when {
+                            item.kind == MessageKind.Photo && photo != null -> {
+                                var open by remember(item.id) { mutableStateOf(false) }
+                                Box(Modifier.fillMaxSize().clickable { open = true }) { com.kirox.app.ui.components.TelegramPhoto(photo, 1f, Modifier.fillMaxSize()) }
+                                if (open) FullscreenPhoto(photo) { open = false }
+                            }
+                            item.kind == MessageKind.Video && media != null -> VideoMessage(media, item.thumbnail)
+                            media != null -> DocumentMessage(media) {}
+                            else -> MediaPlaceholder(item.kind)
+                        }
+                    }
+                }
+                // Keep tiles square in a short last row.
+                repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
     }
 }
 
