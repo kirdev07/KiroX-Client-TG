@@ -140,6 +140,8 @@ data class TelegramMessage(
     val entities: List<TelegramTextEntity> = emptyList(),
     /** Messages of one album share this id; 0 when not in an album. */
     val albumId: Long = 0,
+    /** Comments under a channel post; null when the post has no comments. */
+    val commentCount: Int? = null,
     /** Message this one answers, in the same chat; 0 when none. */
     val replyToMessageId: Long = 0
 )
@@ -168,7 +170,23 @@ data class TelegramChatHistory(
     val pinned: TelegramMessage? = null,
     val pinnedIds: Set<Long> = emptySet(),
     /** Loaded message the screen should scroll to; 0 when none (see TelegramMessageRepository.jumpTo). */
-    val jumpTo: Long = 0
+    val jumpTo: Long = 0,
+    /** Set for a comment thread or forum topic: shown as the header title instead of the chat. */
+    val threadTitle: String? = null,
+    /** Forum supergroup opened as a whole: the screen shows its topics. */
+    val isForum: Boolean = false
+)
+
+/** A topic of a forum supergroup. */
+data class TelegramForumTopic(
+    val id: Int,
+    val title: String,
+    val isClosed: Boolean,
+    val isPinned: Boolean,
+    val unreadCount: Int,
+    val preview: String,
+    val date: Int,
+    val isGeneral: Boolean
 )
 
 enum class TelegramCallKind { Incoming, Outgoing, Missed, Unanswered }

@@ -22,6 +22,12 @@ class TelegramMessageRepository(
     private var publishScheduled = false
     private val viewed = HashSet<Long>()
     private var savedChat = false
+    /** Comment thread or forum topic shown instead of the whole chat; null for the chat itself. */
+    private var topic: TdApi.MessageTopic? = null
+    private var threadTitle: String? = null
+    /** Root of a comment thread in the discussion group, for GetMessageThreadHistory. */
+    private var threadRoot = 0L
+
     /** Pinned message ids of the open chat, newest last. */
     private val pinnedIds = sortedSetOf<Long>()
     /** Pinned messages not in the loaded history. */
@@ -42,7 +48,50 @@ class TelegramMessageRepository(
     private var resumeChatId = 0L
 
     fun open(id: Long) = client.post {
-        if (chatId == id) return@post
+        if (chatId == id && topic == null) return@post
+        topic = null; threadTitle = null; threadRoot = 0
+        openLoaded(id)
+    }
+
+    /**
+     * Opens the comments of channel post [postId]: they live in the channel's discussion group as a
+     * thread, which TDLib resolves with GetMessageThread. Errors (comments off) go to [error].
+     */
+    fun openComments(channelChatId: Long, postId: Long) = client.post {
+        _history.value = TelegramChatHistory(chatId = channelChatId, threadTitle = "Комментарии")
+        client.send(TdApi.GetMessageThread(channelChatId, postId)) { result ->
+            when (result) {
+                is TdApi.MessageThreadInfo -> {
+                    topic = TdApi.MessageTopicThread(result.messageThreadId)
+                    threadTitle = "Комментарии"
+                    threadRoot = result.messageThreadId
+                    openLoaded(result.chatId)
+                }
+                is TdApi.Error -> _error.value = humanError(result)
+            }
+        }
+    }
+
+    /** Opens one topic of a forum supergroup as its own conversation. */
+    fun openTopic(chatId: Long, topicId: Int, title: String) = client.post {
+        topic = TdApi.MessageTopicForum(topicId)
+        threadTitle = title
+        threadRoot = 0
+        openLoaded(chatId)
+    }
+
+    /** Topics of a forum supergroup, pinned first as Telegram orders them. */
+    suspend fun forumTopics(chatId: Long): List<TelegramForumTopic> = runCatching {
+        client.query(TdApi.GetForumTopics(chatId, "", 0, 0, 0, FORUM_TOPICS_LIMIT)).topics.map { t ->
+            TelegramForumTopic(
+                id = t.info.forumTopicId, title = t.info.name, isClosed = t.info.isClosed, isPinned = t.isPinned,
+                unreadCount = t.unreadCount, preview = messagePreview(t.lastMessage), date = t.lastMessage?.date ?: t.info.creationDate,
+                isGeneral = t.info.isGeneral
+            )
+        }
+    }.getOrDefault(emptyList())
+
+    private fun openLoaded(id: Long) {
         if (chatId != 0L) client.send(TdApi.CloseChat(chatId))
         chatId = id
         messages.clear(); viewed.clear()
@@ -58,7 +107,7 @@ class TelegramMessageRepository(
 
     /** All pinned messages of the chat (Telegram allows many); the newest one is shown in the bar. */
     private fun loadPinned(id: Long) {
-        client.send(TdApi.SearchChatMessages(id, null, "", null, 0, 0, PINNED_LIMIT, TdApi.SearchMessagesFilterPinned())) { result ->
+        client.send(TdApi.SearchChatMessages(id, topic, "", null, 0, 0, PINNED_LIMIT, TdApi.SearchMessagesFilterPinned())) { result ->
             if (id != chatId || result !is TdApi.FoundChatMessages) return@send
             result.messages.filterNotNull().forEach { message ->
                 pinnedIds += message.id
@@ -110,7 +159,7 @@ class TelegramMessageRepository(
     /** Server-side search in the open chat, newest first; [fromMessageId] 0 for the first page. */
     suspend fun search(query: String, fromMessageId: Long = 0): Pair<List<TelegramMessage>, Long> {
         val id = chatId.takeIf { it != 0L } ?: return emptyList<TelegramMessage>() to 0L
-        val found = client.query(TdApi.SearchChatMessages(id, null, query, null, fromMessageId, 0, SEARCH_PAGE, null))
+        val found = client.query(TdApi.SearchChatMessages(id, topic, query, null, fromMessageId, 0, SEARCH_PAGE, null))
         val list = kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
             // Mapping reads repository state, so it runs on the TDLib dispatcher.
             client.post { continuation.resumeWith(Result.success(found.messages.filterNotNull().map { it.toModel() })) }
@@ -126,34 +175,43 @@ class TelegramMessageRepository(
         _history.value = TelegramChatHistory()
     }
 
+    /** Leaves a comment thread or forum topic (its screen closed); a plain open chat is left alone. */
+    fun closeThread() = client.post {
+        if (topic == null || chatId == 0L) return@post
+        client.send(TdApi.CloseChat(chatId))
+        chatId = 0; topic = null; threadTitle = null; threadRoot = 0
+        messages.clear(); viewed.clear(); pinnedIds.clear(); pinnedCache.clear()
+        _history.value = TelegramChatHistory()
+    }
+
     fun loadOlder() = client.post { requestOlder() }
 
     fun sendText(text: String, replyToMessageId: Long?) = act { id ->
-        TdApi.SendMessage(id, null, replyToMessageId?.let { TdApi.InputMessageReplyToMessage(it, null, 0, null) }, null, null, inputText(text))
+        TdApi.SendMessage(id, topic, replyToMessageId?.let { TdApi.InputMessageReplyToMessage(it, null, 0, null) }, null, null, inputText(text))
     }
 
     fun sendPhoto(path: String, caption: String) = act { id ->
-        TdApi.SendMessage(id, null, null, null, null, TdApi.InputMessagePhoto().apply {
+        TdApi.SendMessage(id, topic, null, null, null, TdApi.InputMessagePhoto().apply {
             photo = TdApi.InputPhoto().apply { photo = TdApi.InputFileLocal(path); addedStickerFileIds = IntArray(0) }
             this.caption = TdApi.FormattedText(caption, emptyArray())
         })
     }
 
     fun sendVoice(path: String, durationSeconds: Int, waveform: ByteArray) = act { id ->
-        TdApi.SendMessage(id, null, null, null, null, TdApi.InputMessageVoiceNote(
+        TdApi.SendMessage(id, topic, null, null, null, TdApi.InputMessageVoiceNote(
             TdApi.InputVoiceNote(TdApi.InputFileLocal(path), durationSeconds, waveform), TdApi.FormattedText("", emptyArray()), null
         ))
     }
 
     fun sendVideo(path: String, caption: String, durationSeconds: Int, width: Int, height: Int) = act { id ->
-        TdApi.SendMessage(id, null, null, null, null, TdApi.InputMessageVideo(
+        TdApi.SendMessage(id, topic, null, null, null, TdApi.InputMessageVideo(
             TdApi.InputVideo(TdApi.InputFileLocal(path), null, null, 0, IntArray(0), durationSeconds, width, height, true),
             TdApi.FormattedText(caption, emptyArray()), false, null, false
         ))
     }
 
     fun sendDocument(path: String, caption: String) = act { id ->
-        TdApi.SendMessage(id, null, null, null, null, TdApi.InputMessageDocument().apply {
+        TdApi.SendMessage(id, topic, null, null, null, TdApi.InputMessageDocument().apply {
             document = TdApi.InputDocument().apply { document = TdApi.InputFileLocal(path) }
             this.caption = TdApi.FormattedText(caption, emptyArray())
         })
@@ -166,12 +224,12 @@ class TelegramMessageRepository(
         val content: TdApi.InputMessageContent = if (item.isGif) TdApi.InputMessageAnimation(
             TdApi.InputAnimation(file, null, IntArray(0), media.duration, media.width, media.height), TdApi.FormattedText("", emptyArray()), false, false
         ) else TdApi.InputMessageSticker(TdApi.InputSticker(file, null, media.width, media.height), media.title)
-        TdApi.SendMessage(id, null, replyToMessageId?.let { TdApi.InputMessageReplyToMessage(it, null, 0, null) }, null, null, content)
+        TdApi.SendMessage(id, topic, replyToMessageId?.let { TdApi.InputMessageReplyToMessage(it, null, 0, null) }, null, null, content)
     }
 
     /** Sends a recorded video note (round video); [length] is the side of the square video. */
     fun sendVideoNote(path: String, durationSeconds: Int, length: Int) = act { id ->
-        TdApi.SendMessage(id, null, null, null, null, TdApi.InputMessageVideoNote(TdApi.InputVideoNote(TdApi.InputFileLocal(path), null, durationSeconds, length), null))
+        TdApi.SendMessage(id, topic, null, null, null, TdApi.InputMessageVideoNote(TdApi.InputVideoNote(TdApi.InputFileLocal(path), null, durationSeconds, length), null))
     }
 
     /** Edits a text message, or the caption of a media message. */
@@ -193,7 +251,7 @@ class TelegramMessageRepository(
                 text, false, null, false
             )
         }
-        TdApi.SendMessageAlbum(id, null, null, null, contents.toTypedArray())
+        TdApi.SendMessageAlbum(id, topic, null, null, contents.toTypedArray())
     }
 
     /** Adds the emoji reaction, or removes it when this account already chose it. */
@@ -236,7 +294,13 @@ class TelegramMessageRepository(
         if (id == 0L || loadingOlder || reachedStart) return
         loadingOlder = true
         schedulePublish()
-        client.send(TdApi.GetChatHistory(id, messages.keys.firstOrNull() ?: 0L, 0, PAGE_SIZE, false)) { result ->
+        val from = messages.keys.firstOrNull() ?: 0L
+        val request: TdApi.Function<TdApi.Messages> = when (val current = topic) {
+            is TdApi.MessageTopicThread -> TdApi.GetMessageThreadHistory(id, threadRoot, from, 0, PAGE_SIZE)
+            is TdApi.MessageTopicForum -> TdApi.GetForumTopicHistory(id, current.forumTopicId, from, 0, PAGE_SIZE)
+            else -> TdApi.GetChatHistory(id, from, 0, PAGE_SIZE, false)
+        }
+        client.send(request) { result ->
             if (id != chatId) return@send
             loadingOlder = false
             when (result) {
@@ -254,7 +318,7 @@ class TelegramMessageRepository(
 
     private fun handle(update: TdApi.Object) {
         when (update) {
-            is TdApi.UpdateNewMessage -> if (update.message.chatId == chatId) { messages[update.message.id] = update.message; schedulePublish() }
+            is TdApi.UpdateNewMessage -> if (update.message.chatId == chatId && inTopic(update.message)) { messages[update.message.id] = update.message; schedulePublish() }
             is TdApi.UpdateMessageSendSucceeded -> if (update.message.chatId == chatId) {
                 messages.remove(update.oldMessageId); messages[update.message.id] = update.message; schedulePublish()
             }
@@ -292,6 +356,14 @@ class TelegramMessageRepository(
         }
     }
 
+    /** Whether [message] belongs to the open thread or topic (always true for a whole chat). */
+    private fun inTopic(message: TdApi.Message): Boolean = when (val current = topic) {
+        null -> true
+        is TdApi.MessageTopicThread -> (message.topicId as? TdApi.MessageTopicThread)?.messageThreadId == current.messageThreadId
+        is TdApi.MessageTopicForum -> (message.topicId as? TdApi.MessageTopicForum)?.forumTopicId == current.forumTopicId
+        else -> true
+    }
+
     private fun schedulePublish() {
         if (publishScheduled) return
         publishScheduled = true
@@ -325,7 +397,9 @@ class TelegramMessageRepository(
             draft = chat?.let(::draftText).orEmpty(),
             pinned = pinnedIds.lastOrNull()?.let { messages[it] ?: pinnedCache[it] }?.toModel(),
             pinnedIds = pinnedIds.toSet(),
-            jumpTo = jumpTarget.takeIf { it in messages } ?: 0L
+            jumpTo = jumpTarget.takeIf { it in messages } ?: 0L,
+            threadTitle = threadTitle,
+            isForum = topic == null && chats.isForum(id)
         )
         markViewed(id)
     }
@@ -333,7 +407,11 @@ class TelegramMessageRepository(
     /** Opening a chat reads it: report newly shown incoming messages once. */
     private fun markViewed(id: Long) {
         val fresh = messages.values.filter { !it.isOutgoing && viewed.add(it.id) }.map { it.id }
-        if (fresh.isNotEmpty()) client.send(TdApi.ViewMessages(id, fresh.toLongArray(), TdApi.MessageSourceChatHistory(), true))
+        if (fresh.isNotEmpty()) client.send(TdApi.ViewMessages(id, fresh.toLongArray(), when (topic) {
+            is TdApi.MessageTopicThread -> TdApi.MessageSourceMessageThreadHistory()
+            is TdApi.MessageTopicForum -> TdApi.MessageSourceForumTopicHistory()
+            else -> TdApi.MessageSourceChatHistory()
+        }, true))
     }
 
     private fun TdApi.Message.toModel(): TelegramMessage {
@@ -359,6 +437,7 @@ class TelegramMessageRepository(
             media = mediaInfo.first,
             thumbnail = mediaInfo.second,
             albumId = mediaAlbumId,
+            commentCount = interactionInfo?.replyInfo?.replyCount?.takeIf { isChannelPost },
             replyToMessageId = reply?.takeIf { it.chatId == 0L || it.chatId == chatId }?.messageId ?: 0L,
             date = date,
             edited = editDate > 0,
@@ -404,6 +483,7 @@ class TelegramMessageRepository(
         /** Up to 1000 messages back; further is rare and better reached by search. */
         const val JUMP_PAGES = 20
         const val SEARCH_PAGE = 50
+        const val FORUM_TOPICS_LIMIT = 100
     }
 }
 

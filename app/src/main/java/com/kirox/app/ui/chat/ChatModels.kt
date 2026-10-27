@@ -34,7 +34,9 @@ data class MessageUi(
     val media: com.kirox.app.telegram.TelegramMedia? = null,
     val thumbnail: com.kirox.app.telegram.TelegramFileRef? = null,
     /** Formatting of [text]. */
-    val entities: List<com.kirox.app.telegram.TelegramTextEntity> = emptyList()
+    val entities: List<com.kirox.app.telegram.TelegramTextEntity> = emptyList(),
+    /** Comments under a channel post; null when comments are off. */
+    val commentCount: Int? = null
 )
 
 @Immutable

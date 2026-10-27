@@ -68,6 +68,8 @@ fun KiroXApp() {
     var splashVisible by rememberSaveable { mutableStateOf(true) }
     val stack = rememberSaveable(saver = BackStack.Saver) { BackStack(listOf(Screen.Phone)) }
     var openChatId by rememberSaveable { mutableLongStateOf(0L) }
+    /** Comment thread or forum topic shown on Screen.Thread; lost with the process, then Thread pops. */
+    var openThread by remember { mutableStateOf<ThreadSpec?>(null) }
     val history by telegramViewModel.messages.history.collectAsStateWithLifecycle()
     val messageError by telegramViewModel.messages.error.collectAsStateWithLifecycle()
     val callsState by telegramViewModel.calls.state.collectAsStateWithLifecycle()
@@ -276,10 +278,41 @@ fun KiroXApp() {
                                 menu = chatMenu,
                                 activityLine = activityLines[chatId],
                                 stickers = stickerSource,
+                                onOpenComments = { postId -> openThread = ThreadSpec.Comments(chatId, postId); stack.push(Screen.Thread) },
+                                onOpenTopic = { topic -> openThread = ThreadSpec.Topic(chatId, topic.id, topic.title); stack.push(Screen.Thread) },
                                 onCall = if (com.kirox.app.ui.call.callsEnabled) { video ->
                                     withCallPermissions(video) { telegramViewModel.voip.start(chatId, video) }
                                 } else null
                             )
+                        }
+                        Screen.Thread -> CompositionLocalProvider(
+                            LocalTelegramFiles provides telegramViewModel.files,
+                            com.kirox.app.ui.chat.LocalLinkOpener provides linkOpener
+                        ) {
+                            val spec = openThread
+                            if (spec == null) {
+                                LaunchedEffect(Unit) { stack.pop() }
+                            } else {
+                                LaunchedEffect(spec) {
+                                    when (spec) {
+                                        is ThreadSpec.Comments -> telegramViewModel.messages.openComments(spec.chatId, spec.postId)
+                                        is ThreadSpec.Topic -> telegramViewModel.messages.openTopic(spec.chatId, spec.topicId, spec.title)
+                                    }
+                                }
+                                DisposableEffect(spec) { onDispose { telegramViewModel.messages.closeThread() } }
+                                val actions = remember { TelegramMessageActions(telegramViewModel.messages, telegramViewModel.activity) }
+                                val stickerSource = remember { TelegramStickerSource(telegramViewModel.stickers) }
+                                val title = when (spec) { is ThreadSpec.Comments -> "Комментарии"; is ThreadSpec.Topic -> spec.title }
+                                TelegramChatScreen(
+                                    history = if (history.threadTitle != null) history else TelegramChatHistory(threadTitle = title),
+                                    error = messageError,
+                                    onErrorShown = telegramViewModel.messages::clearError,
+                                    forwardTargets = chatLists.main.chats,
+                                    actions = actions,
+                                    onBack = { stack.pop() },
+                                    stickers = stickerSource
+                                )
+                            }
                         }
                     }
                 }
@@ -316,6 +349,7 @@ private class TelegramMessageActions(
     override fun jumpDone() = repository.jumpDone()
     override suspend fun search(query: String, fromMessageId: Long) = repository.search(query, fromMessageId)
     override suspend fun availableReactions(messageId: Long) = repository.availableReactions(messageId)
+    override suspend fun forumTopics(chatId: Long) = repository.forumTopics(chatId)
 }
 
 private class TelegramStoryActionsImpl(private val repository: TelegramStoryRepository) : TelegramStoryActions {
@@ -340,4 +374,10 @@ private class TelegramStickerSource(private val repository: com.kirox.app.telegr
     override suspend fun set(id: Long) = repository.set(id)
     override suspend fun recent() = repository.recent()
     override suspend fun savedGifs() = repository.savedGifs()
+}
+
+/** What Screen.Thread shows. */
+private sealed interface ThreadSpec {
+    data class Comments(val chatId: Long, val postId: Long) : ThreadSpec
+    data class Topic(val chatId: Long, val topicId: Int, val title: String) : ThreadSpec
 }

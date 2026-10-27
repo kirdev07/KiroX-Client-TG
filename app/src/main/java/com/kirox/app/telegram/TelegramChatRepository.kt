@@ -94,6 +94,12 @@ class TelegramChatRepository(private val client: TelegramClient) {
 
     fun clearError() { _error.value = null }
 
+    /** Supergroup ids that are forums (topics). Dispatcher-confined. */
+    private val forumSupergroups = HashSet<Long>()
+
+    /** Whether [chatId] is a forum supergroup; call on the TDLib dispatcher. */
+    internal fun isForum(chatId: Long): Boolean = (chatsById[chatId]?.type as? TdApi.ChatTypeSupergroup)?.supergroupId?.let { it in forumSupergroups } == true
+
     /**
      * Chats matching [query]: the user's own chats first (title and username), then chats found on
      * the server and public channels, groups and bots by username. Each appears once.
@@ -152,6 +158,7 @@ class TelegramChatRepository(private val client: TelegramClient) {
                 }
             }
             is TdApi.UpdateNewChat -> { chatsById[update.chat.id] = update.chat; schedulePublish() }
+            is TdApi.UpdateSupergroup -> if (update.supergroup.isForum) forumSupergroups += update.supergroup.id else forumSupergroups -= update.supergroup.id
             is TdApi.UpdateOption -> if (update.name == "my_id") { myId = (update.value as? TdApi.OptionValueInteger)?.value ?: 0L; schedulePublish() }
             is TdApi.UpdateChatFolders -> {
                 folders = update.chatFolders.map { TelegramFolder(it.id, it.name?.text?.text.orEmpty()) }

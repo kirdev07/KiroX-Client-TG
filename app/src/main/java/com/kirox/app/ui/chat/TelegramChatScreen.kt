@@ -87,6 +87,7 @@ interface TelegramChatActions {
     /** Server search in the chat: results newest first and the id to continue from (0 at the end). */
     suspend fun search(query: String, fromMessageId: Long): Pair<List<TelegramMessage>, Long> = emptyList<TelegramMessage>() to 0L
     suspend fun availableReactions(messageId: Long): List<String>? = null
+    suspend fun forumTopics(chatId: Long): List<com.kirox.app.telegram.TelegramForumTopic> = emptyList()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -104,7 +105,11 @@ fun TelegramChatScreen(
     /** What someone in this chat is doing now ("печатает…"); replaces the status line while set. */
     activityLine: String? = null,
     /** Stickers and GIFs for the panel; emoji only when null. */
-    stickers: StickerPanelSource? = null
+    stickers: StickerPanelSource? = null,
+    /** Opens the comments of a channel post (by its message id). */
+    onOpenComments: ((Long) -> Unit)? = null,
+    /** Opens a topic of the forum shown in this screen. */
+    onOpenTopic: ((com.kirox.app.telegram.TelegramForumTopic) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -301,8 +306,8 @@ fun TelegramChatScreen(
 
     val peer = ChatPeerUi(
         id = history.chatId,
-        name = if (history.peerKind == TelegramPeerKind.Saved) "Избранное" else history.title,
-        status = activityLine ?: when (history.peerKind) {
+        name = history.threadTitle ?: if (history.peerKind == TelegramPeerKind.Saved) "Избранное" else history.title,
+        status = activityLine ?: if (history.threadTitle != null) history.title else if (history.isForum) "темы" else when (history.peerKind) {
             TelegramPeerKind.User -> (if (history.isSecret) "🔒 секретный чат · " else "") + history.peerStatus?.let { TelegramFormat.status(it) }.orEmpty()
             TelegramPeerKind.Bot -> "бот"
             TelegramPeerKind.Group -> "группа"
@@ -354,7 +359,7 @@ fun TelegramChatScreen(
                     recordPaused = false
                     if (note != null) actions.sendVoice(note.file.absolutePath, note.durationSeconds, note.waveform) else notice = "Слишком короткое голосовое"
                 }
-            ) else if (history.peerKind != TelegramPeerKind.Channel) ChatComposer(
+            ) else if ((history.peerKind != TelegramPeerKind.Channel || history.threadTitle != null) && !history.isForum) ChatComposer(
                 value = input,
                 reply = replyTo,
                 editing = editing,
@@ -387,7 +392,8 @@ fun TelegramChatScreen(
         Box(Modifier.fillMaxSize().padding(padding)) {
             com.kirox.app.ui.components.ChatWallpaperLayer(style.wallpaper, Modifier.matchParentSize())
             val results = searchResults
-            if (searching && results != null) SearchResults(
+            if (history.isForum) ForumTopicsList(history.chatId, actions, onOpen = { topic -> onOpenTopic?.invoke(topic) })
+            else if (searching && results != null) SearchResults(
                 results, canLoadMore = searchNext != 0L,
                 onLoadMore = {
                     val q = searchQuery.trim()
@@ -427,7 +433,8 @@ fun TelegramChatScreen(
                         selected = row.message.id in selectedIds,
                         onClick = if (selectedIds.isNotEmpty() && row.message.direction != MessageDirection.System) ({ selectedIds = selectedIds.toggle(row.message.id) }) else null,
                         onQuote = { id -> actions.jumpTo(id) },
-                        highlighted = row.message.id == highlighted
+                        highlighted = row.message.id == highlighted,
+                        onComments = if (history.peerKind == TelegramPeerKind.Channel && history.threadTitle == null && onOpenComments != null) ({ onOpenComments(row.message.id) }) else null
                     )
                 }
                 if (history.loadingOlder) item(key = "loading") {
@@ -727,7 +734,8 @@ internal fun TelegramMessage.toUi(time: String) = MessageUi(
     edited = edited,
     media = media,
     thumbnail = thumbnail,
-    entities = entities
+    entities = entities,
+    commentCount = commentCount
 )
 
 /** Copies a picked content URI into the app cache so TDLib can upload it from a plain path. */
@@ -862,6 +870,46 @@ private fun SearchResults(results: List<TelegramMessage>, canLoadMore: Boolean, 
         if (canLoadMore) item(key = "more") {
             LaunchedEffect(results.size) { onLoadMore() }
             Box(Modifier.fillMaxWidth().padding(12.dp), Alignment.Center) { CircularProgressIndicator(Modifier.size(20.dp), color = Fusion.colors.textSecondary, strokeWidth = 2.dp) }
+        }
+    }
+}
+
+
+/** Topics of a forum supergroup; tapping one opens it as a conversation. */
+@Composable
+private fun ForumTopicsList(chatId: Long, actions: TelegramChatActions, onOpen: (com.kirox.app.telegram.TelegramForumTopic) -> Unit) {
+    var topics by remember(chatId) { mutableStateOf<List<com.kirox.app.telegram.TelegramForumTopic>?>(null) }
+    LaunchedEffect(chatId) { topics = actions.forumTopics(chatId) }
+    val current = topics
+    when {
+        current == null -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(Modifier.size(26.dp), color = Fusion.colors.textSecondary, strokeWidth = 2.dp) }
+        current.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Темы не загрузились", color = Fusion.colors.textSecondary) }
+        else -> LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background)) {
+            items(current, key = { it.id }) { topic ->
+                Row(Modifier.fillMaxWidth().clickable { onOpen(topic) }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(42.dp).clip(RoundedCornerShape(21.dp)).background(Fusion.colors.surface3), contentAlignment = Alignment.Center) {
+                        Text(if (topic.isGeneral) "#" else topic.title.take(1).uppercase(), color = Fusion.colors.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                listOfNotNull(if (topic.isClosed) "🔒" else null, topic.title).joinToString(" "),
+                                color = Fusion.colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+                            )
+                            if (topic.isPinned) com.kirox.app.ui.icons.KiroXIcon(KiroXIcon.Pin, "Закреплена", Modifier.padding(start = 4.dp).size(13.dp), Fusion.colors.textSecondary)
+                            if (topic.date > 0) Text(TelegramFormat.chatTime(topic.date), color = Fusion.colors.textSecondary, fontSize = 12.sp, modifier = Modifier.padding(start = 6.dp))
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(topic.preview, color = Fusion.colors.textSecondary, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            if (topic.unreadCount > 0) Text(
+                                "${topic.unreadCount}", color = Fusion.colors.background, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(10.dp)).background(Fusion.colors.textPrimary).padding(horizontal = 7.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }

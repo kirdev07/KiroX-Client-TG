@@ -89,7 +89,7 @@ internal fun ChatSearchField(value: String, onChange: (String) -> Unit, onClose:
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAppearance, pinned: Boolean = false, showAuthor: Boolean = false, onLongClick: () -> Unit, onReply: () -> Unit, onNotice: (String) -> Unit = {}, selected: Boolean = false, onClick: (() -> Unit)? = null, onQuote: (Long) -> Unit = {}, highlighted: Boolean = false) {
+internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAppearance, pinned: Boolean = false, showAuthor: Boolean = false, onLongClick: () -> Unit, onReply: () -> Unit, onNotice: (String) -> Unit = {}, selected: Boolean = false, onClick: (() -> Unit)? = null, onQuote: (Long) -> Unit = {}, highlighted: Boolean = false, onComments: (() -> Unit)? = null) {
     if (message.direction == MessageDirection.System) {
         Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
             Text(message.text, color = ChatSecondary, fontSize = 11.sp, modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Fusion.colors.surface2).padding(horizontal = 12.dp, vertical = 5.dp))
@@ -145,6 +145,17 @@ internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAp
             }
             if (message.reactions.isNotEmpty()) {
                 Row(Modifier.padding(top = 5.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) { message.reactions.forEach { reaction -> Text("${reaction.emoji} ${reaction.count}", color = ChatWhite, fontSize = 11.sp, modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(if (reaction.selected) Fusion.colors.textTertiary else Fusion.colors.surface3).padding(horizontal = 8.dp, vertical = 4.dp)) } }
+            }
+            val comments = message.commentCount
+            if (comments != null && onComments != null) {
+                Spacer(Modifier.height(6.dp))
+                HorizontalDivider(color = Fusion.colors.outline)
+                Row(Modifier.fillMaxWidth().clickable(onClick = onComments).padding(top = 7.dp, bottom = 1.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconGlyph(KiroXIcon.Chat, null, Modifier.size(16.dp), ChatWhite)
+                    Spacer(Modifier.width(8.dp))
+                    Text(commentsLabel(comments), color = ChatWhite, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Text("›", color = ChatSecondary, fontSize = 16.sp)
+                }
             }
         }
     }
@@ -278,6 +289,20 @@ internal fun ChatComposer(value: TextFieldValue, reply: MessageUi?, editing: Mes
         actions.forEach { (icon, title) -> Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable { if (title == "Ответить") onReply() else onAction(title) }.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) { IconGlyph(icon, null, Modifier.size(22.dp), ChatWhite); Spacer(Modifier.width(16.dp)); Text(title, color = if (title == "Удалить") Fusion.colors.danger else ChatWhite, fontSize = 15.sp) } }
         Spacer(Modifier.navigationBarsPadding())
     }
+}
+
+/** "Оставить комментарий", "1 комментарий", "5 комментариев". */
+internal fun commentsLabel(count: Int): String {
+    if (count <= 0) return "Оставить комментарий"
+    val mod100 = count % 100
+    val mod10 = count % 10
+    val word = when {
+        mod100 in 11..14 -> "комментариев"
+        mod10 == 1 -> "комментарий"
+        mod10 in 2..4 -> "комментария"
+        else -> "комментариев"
+    }
+    return "$count $word"
 }
 
 /** Reactions offered before the chat's own list loads. */
