@@ -79,6 +79,14 @@ interface TelegramChatActions {
     fun sendAlbum(items: List<Pair<String, com.kirox.app.telegram.VideoMeta?>>, caption: String) {}
     fun sendPanelItem(item: com.kirox.app.telegram.TelegramPanelItem, replyToMessageId: Long?) {}
     fun sendVideoNote(path: String, durationSeconds: Int, length: Int) {}
+    fun pin(messageId: Long) {}
+    fun unpin(messageId: Long) {}
+    /** Loads history up to [messageId] and scrolls there (TelegramChatHistory.jumpTo). */
+    fun jumpTo(messageId: Long) {}
+    fun jumpDone() {}
+    /** Server search in the chat: results newest first and the id to continue from (0 at the end). */
+    suspend fun search(query: String, fromMessageId: Long): Pair<List<TelegramMessage>, Long> = emptyList<TelegramMessage>() to 0L
+    suspend fun availableReactions(messageId: Long): List<String>? = null
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -110,7 +118,12 @@ fun TelegramChatScreen(
     var editing by remember(history.chatId) { mutableStateOf<MessageUi?>(null) }
     var selected by remember { mutableStateOf<MessageUi?>(null) }
     var deleting by remember { mutableStateOf<MessageUi?>(null) }
-    var forwarding by remember { mutableStateOf<MessageUi?>(null) }
+    var forwarding by remember { mutableStateOf<List<Long>?>(null) }
+    /** Multi-select: ids of selected messages; empty when not selecting. */
+    var selectedIds by remember(history.chatId) { mutableStateOf(setOf<Long>()) }
+    var deletingMany by remember { mutableStateOf<List<Long>?>(null) }
+    var highlighted by remember(history.chatId) { mutableStateOf(0L) }
+    var reactionChoices by remember { mutableStateOf(DEFAULT_REACTIONS) }
     var attachments by rememberSaveable { mutableStateOf(false) }
     var stickerPanel by rememberSaveable { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
@@ -181,10 +194,35 @@ fun TelegramChatScreen(
         val q = searchQuery.trim()
         if (q.isEmpty()) history.messages else history.messages.filter { it.text.contains(q, ignoreCase = true) }
     }
+    // Server search: finds messages that are not loaded yet; tapping one scrolls the chat to it.
+    var searchResults by remember(history.chatId) { mutableStateOf<List<TelegramMessage>?>(null) }
+    var searchNext by remember(history.chatId) { mutableStateOf(0L) }
+    LaunchedEffect(searchQuery, searching) {
+        val q = searchQuery.trim()
+        searchResults = null
+        searchNext = 0
+        if (!searching || q.length < 2) return@LaunchedEffect
+        kotlinx.coroutines.delay(400)
+        runCatching { actions.search(q, 0) }
+            .onSuccess { (found, next) -> searchResults = found; searchNext = next }
+            .onFailure { searchResults = emptyList() }
+    }
     val rows = remember(shownMessages) { toRows(shownMessages.asReversed()) }
     val byId = remember(history.messages) { history.messages.associateBy { it.id } }
 
     LaunchedEffect(error) { if (error != null) { notice = error; onErrorShown() } }
+    LaunchedEffect(history.jumpTo, rows) {
+        val target = history.jumpTo
+        if (target == 0L) return@LaunchedEffect
+        val index = rows.indexOfFirst { it.key == "m$target" }
+        if (index >= 0) {
+            listState.animateScrollToItem(index)
+            highlighted = target
+            actions.jumpDone()
+            kotlinx.coroutines.delay(1600)
+            if (highlighted == target) highlighted = 0
+        }
+    }
     LaunchedEffect(listState, history.chatId) {
         snapshotFlow { listState.layoutInfo.let { (it.visibleItemsInfo.lastOrNull()?.index ?: 0) >= it.totalItemsCount - 15 } }
             .distinctUntilChanged().filter { it }.collect { actions.loadOlder() }
@@ -196,6 +234,7 @@ fun TelegramChatScreen(
     }
 
     BackHandler(enabled = editing != null || replyTo != null) { editing = null; replyTo = null; input = TextFieldValue() }
+    BackHandler(enabled = selectedIds.isNotEmpty()) { selectedIds = emptySet() }
 
     fun sendPicked(uri: Uri, asPhoto: Boolean) {
         scope.launch {
@@ -280,14 +319,27 @@ fun TelegramChatScreen(
         containerColor = Fusion.colors.background,
         contentWindowInsets = WindowInsets.statusBars,
         topBar = {
-            if (searching) Column(Modifier.statusBarsPadding()) {
+            if (selectedIds.isNotEmpty()) SelectionBar(
+                count = selectedIds.size,
+                onClose = { selectedIds = emptySet() },
+                onCopy = {
+                    val text = history.messages.filter { it.id in selectedIds && it.text.isNotBlank() }.joinToString("\n\n") { it.text }
+                    if (text.isNotEmpty()) { clipboard.setText(AnnotatedString(text)); notice = "Скопировано" }
+                    selectedIds = emptySet()
+                },
+                onForward = { forwarding = selectedIds.sorted(); },
+                onDelete = { deletingMany = selectedIds.sorted() }
+            ) else if (searching) Column(Modifier.statusBarsPadding()) {
                 ChatSearchField(searchQuery, { searchQuery = it }, onClose = { searching = false; searchQuery = "" })
-            } else ChatHeader(peer, onBack, onProfile = {}, onOverflow = {
+            } else Column {
+                ChatHeader(peer, onBack, onProfile = {}, onOverflow = {
                 if (menu == null) notice = "Меню чата недоступно" else {
                     menuOpen = true
                     scope.launch { muted = runCatching { menu.isMuted(history.chatId) }.getOrNull() }
                 }
             }, onCall = { video -> onCall?.invoke(video) })
+                history.pinned?.let { pinned -> PinnedBar(pinned, count = history.pinnedIds.size) { actions.jumpTo(pinned.id) } }
+            }
         },
         bottomBar = {
             if (recording) VoiceRecordingBar(
@@ -334,7 +386,16 @@ fun TelegramChatScreen(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             com.kirox.app.ui.components.ChatWallpaperLayer(style.wallpaper, Modifier.matchParentSize())
-            if (history.messages.isEmpty()) {
+            val results = searchResults
+            if (searching && results != null) SearchResults(
+                results, canLoadMore = searchNext != 0L,
+                onLoadMore = {
+                    val q = searchQuery.trim()
+                    val from = searchNext
+                    scope.launch { runCatching { actions.search(q, from) }.onSuccess { (more, next) -> searchResults = results + more; searchNext = next } }
+                },
+                onOpen = { message -> searching = false; searchQuery = ""; actions.jumpTo(message.id) }
+            ) else if (history.messages.isEmpty()) {
                 Box(Modifier.fillMaxSize(), Alignment.Center) {
                     if (history.reachedStart) Text("Сообщений пока нет", color = Fusion.colors.textSecondary)
                     else CircularProgressIndicator(Modifier.size(26.dp), color = Fusion.colors.textSecondary, strokeWidth = 2.dp)
@@ -352,7 +413,22 @@ fun TelegramChatScreen(
                     // reverseLayout: the visually previous row is index + 1.
                     val previous = rows.getOrNull(index + 1)?.message
                     val grouped = previous != null && previous.direction == row.message.direction && previous.author == row.message.author && row.message.direction != MessageDirection.System
-                    MessageRow(row.message, grouped, appearance, showAuthor = isGroup, onLongClick = { if (row.message.direction != MessageDirection.System) selected = row.message }, onReply = { replyTo = row.message; editing = null }, onNotice = { notice = it })
+                    MessageRow(
+                        row.message, grouped, appearance,
+                        pinned = row.message.id in history.pinnedIds,
+                        showAuthor = isGroup,
+                        onLongClick = {
+                            if (row.message.direction == MessageDirection.System) Unit
+                            else if (selectedIds.isNotEmpty()) selectedIds = selectedIds.toggle(row.message.id)
+                            else selected = row.message
+                        },
+                        onReply = { replyTo = row.message; editing = null },
+                        onNotice = { notice = it },
+                        selected = row.message.id in selectedIds,
+                        onClick = if (selectedIds.isNotEmpty() && row.message.direction != MessageDirection.System) ({ selectedIds = selectedIds.toggle(row.message.id) }) else null,
+                        onQuote = { id -> actions.jumpTo(id) },
+                        highlighted = row.message.id == highlighted
+                    )
                 }
                 if (history.loadingOlder) item(key = "loading") {
                     Box(Modifier.fillMaxWidth().padding(12.dp), Alignment.Center) { CircularProgressIndicator(Modifier.size(20.dp), color = Fusion.colors.textSecondary, strokeWidth = 2.dp) }
@@ -391,6 +467,10 @@ fun TelegramChatScreen(
     )
     selected?.let { message ->
         val source = byId[message.id]
+        LaunchedEffect(message.id) {
+            reactionChoices = DEFAULT_REACTIONS
+            actions.availableReactions(message.id)?.takeIf { it.isNotEmpty() }?.let { reactionChoices = it }
+        }
         MessageActionsSheet(
             message,
             onDismiss = { selected = null },
@@ -402,13 +482,18 @@ fun TelegramChatScreen(
                     "Копировать" -> { clipboard.setText(AnnotatedString(message.text)); notice = "Сообщение скопировано" }
                     "Редактировать" -> { editing = message; replyTo = null; input = TextFieldValue(message.text) }
                     "Удалить" -> deleting = message
-                    "Переслать" -> forwarding = message
+                    "Переслать" -> forwarding = listOf(message.id)
                     "Сохранить" -> saveMedia(message)
+                    "Закрепить" -> { actions.pin(message.id); notice = "Сообщение закреплено" }
+                    "Открепить" -> actions.unpin(message.id)
+                    "Выбрать" -> selectedIds = setOf(message.id)
                 }
             },
             reactions = history.peerKind != TelegramPeerKind.Saved,
+            isPinned = message.id in history.pinnedIds,
+            reactionChoices = reactionChoices,
             hidden = buildSet {
-                add("Закрепить"); add("Выбрать")
+                if (history.isSecret) add("Закрепить")
                 if (source?.canEdit != true) add("Редактировать")
                 if (source?.delivery == TelegramDelivery.Sending) { add("Переслать"); add("Ответить") }
             }
@@ -465,14 +550,31 @@ fun TelegramChatScreen(
             dismissButton = { TextButton(onClick = { deleting = null }) { Text("Отмена", color = Fusion.colors.textPrimary) } }
         )
     }
-    forwarding?.let { message ->
+    deletingMany?.let { ids ->
+        val messages = history.messages.filter { it.id in ids }
+        val allOwn = messages.isNotEmpty() && messages.all { it.isOutgoing } && history.peerKind != TelegramPeerKind.Saved
+        AlertDialog(
+            onDismissRequest = { deletingMany = null },
+            containerColor = Fusion.colors.surface2,
+            title = { Text("Удалить ${ids.size} ${messageWord(ids.size)}?", color = Fusion.colors.textPrimary) },
+            text = { Text(if (allOwn) "Можно удалить только у себя или у всех участников." else "Сообщения будут удалены у вас.", color = Fusion.colors.textSecondary) },
+            confirmButton = {
+                Row {
+                    if (allOwn) TextButton(onClick = { actions.delete(ids, forEveryone = true); deletingMany = null; selectedIds = emptySet() }) { Text("У всех", color = Fusion.colors.danger) }
+                    TextButton(onClick = { actions.delete(ids, forEveryone = false); deletingMany = null; selectedIds = emptySet() }) { Text("У меня", color = Fusion.colors.danger) }
+                }
+            },
+            dismissButton = { TextButton(onClick = { deletingMany = null }) { Text("Отмена", color = Fusion.colors.textPrimary) } }
+        )
+    }
+    forwarding?.let { forwardIds ->
         ModalBottomSheet(onDismissRequest = { forwarding = null }, containerColor = Fusion.colors.surface1) {
             Text("Переслать в…", color = Fusion.colors.textPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 480.dp)) {
                 items(forwardTargets, key = { it.id }) { target ->
                     Row(
                         Modifier.fillMaxWidth().clickable {
-                            actions.forward(target.id, listOf(message.id)); forwarding = null; notice = "Переслано в «${target.title}»"
+                            actions.forward(target.id, forwardIds); forwarding = null; selectedIds = emptySet(); notice = "Переслано в «${target.title}»"
                         }.heightIn(min = 60.dp).padding(horizontal = 20.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -616,7 +718,7 @@ internal fun TelegramMessage.toUi(time: String) = MessageUi(
         TelegramDelivery.Sent -> DeliveryState.Sent
         TelegramDelivery.None -> DeliveryState.None
     },
-    quote = replyText?.let { QuoteUi(replyAuthor.orEmpty(), it) },
+    quote = replyText?.let { QuoteUi(replyAuthor.orEmpty(), it, replyToMessageId) },
     forwardedFrom = forwardedFrom,
     reactions = reactions.map { (emoji, count, chosen) -> ReactionUi(emoji, count, chosen) },
     canEdit = canEdit,
@@ -688,5 +790,78 @@ private class DraftHolder {
     fun save(actions: TelegramChatActions) {
         val value = text ?: return
         if (chatId != 0L) actions.saveDraft(chatId, value)
+    }
+}
+
+
+private fun Set<Long>.toggle(id: Long): Set<Long> = if (id in this) this - id else this + id
+
+/** "сообщение", "сообщения", "сообщений" for Russian plural rules. */
+internal fun messageWord(count: Int): String {
+    val mod100 = count % 100
+    val mod10 = count % 10
+    return when {
+        mod100 in 11..14 -> "сообщений"
+        mod10 == 1 -> "сообщение"
+        mod10 in 2..4 -> "сообщения"
+        else -> "сообщений"
+    }
+}
+
+/** Replaces the header while messages are selected: count and the actions for all of them. */
+@Composable
+private fun SelectionBar(count: Int, onClose: () -> Unit, onCopy: () -> Unit, onForward: () -> Unit, onDelete: () -> Unit) {
+    Surface(color = Fusion.colors.background, modifier = Modifier.statusBarsPadding()) {
+        Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            ChatIconButton(KiroXIcon.Back, "Отменить выбор", onClose)
+            Text("$count", color = Fusion.colors.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).padding(start = 6.dp))
+            ChatIconButton(KiroXIcon.Copy, "Копировать", onCopy)
+            ChatIconButton(KiroXIcon.Forward, "Переслать", onForward)
+            ChatIconButton(KiroXIcon.Delete, "Удалить", onDelete)
+        }
+    }
+}
+
+/** Newest pinned message under the header; tap scrolls to it. */
+@Composable
+private fun PinnedBar(message: TelegramMessage, count: Int, onClick: () -> Unit) {
+    Surface(color = Fusion.colors.background) {
+        Row(
+            Modifier.fillMaxWidth().clickable(onClickLabel = "Перейти к закреплённому", onClick = onClick).padding(horizontal = 14.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(Modifier.width(2.dp).height(32.dp).background(Fusion.colors.textPrimary))
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(if (count > 1) "Закреплённое сообщение · $count" else "Закреплённое сообщение", color = Fusion.colors.textPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text(message.text.ifBlank { "Медиа" }.replace('\n', ' '), color = Fusion.colors.textSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            com.kirox.app.ui.icons.KiroXIcon(KiroXIcon.Pin, null, Modifier.size(16.dp), Fusion.colors.textSecondary)
+        }
+    }
+}
+
+/** Server search results of the chat, newest first. */
+@Composable
+private fun SearchResults(results: List<TelegramMessage>, canLoadMore: Boolean, onLoadMore: () -> Unit, onOpen: (TelegramMessage) -> Unit) {
+    if (results.isEmpty()) {
+        Box(Modifier.fillMaxSize().background(Fusion.colors.background), Alignment.Center) { Text("Ничего не найдено", color = Fusion.colors.textSecondary) }
+        return
+    }
+    val format = remember { SimpleDateFormat("d MMM yyyy, HH:mm", Locale("ru")) }
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background)) {
+        items(results, key = { it.id }) { message ->
+            Column(Modifier.fillMaxWidth().clickable { onOpen(message) }.padding(horizontal = 18.dp, vertical = 10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(message.senderName, color = Fusion.colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(format.format(Date(message.date * 1000L)), color = Fusion.colors.textSecondary, fontSize = 12.sp)
+                }
+                Text(message.text.ifBlank { "Медиа" }, color = Fusion.colors.textSecondary, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        if (canLoadMore) item(key = "more") {
+            LaunchedEffect(results.size) { onLoadMore() }
+            Box(Modifier.fillMaxWidth().padding(12.dp), Alignment.Center) { CircularProgressIndicator(Modifier.size(20.dp), color = Fusion.colors.textSecondary, strokeWidth = 2.dp) }
+        }
     }
 }

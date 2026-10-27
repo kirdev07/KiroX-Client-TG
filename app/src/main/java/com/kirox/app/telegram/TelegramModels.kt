@@ -139,8 +139,13 @@ data class TelegramMessage(
     val thumbnail: TelegramFileRef? = null,
     val entities: List<TelegramTextEntity> = emptyList(),
     /** Messages of one album share this id; 0 when not in an album. */
-    val albumId: Long = 0
+    val albumId: Long = 0,
+    /** Message this one answers, in the same chat; 0 when none. */
+    val replyToMessageId: Long = 0
 )
+
+/** A message found by the global search, with its chat for the result row. */
+data class TelegramFoundMessage(val chatId: Long, val messageId: Long, val chatTitle: String, val text: String, val date: Int, val photo: TelegramFileRef?)
 
 enum class TelegramPeerKind { User, Bot, Group, Channel, Saved, Unknown }
 
@@ -158,7 +163,12 @@ data class TelegramChatHistory(
     /** End-to-end encrypted secret chat; its chat id is not the peer's user id. */
     val isSecret: Boolean = false,
     /** Unsent text saved in Telegram for this chat (synced with other devices), empty if none. */
-    val draft: String = ""
+    val draft: String = "",
+    /** Newest pinned message, for the bar above the history. */
+    val pinned: TelegramMessage? = null,
+    val pinnedIds: Set<Long> = emptySet(),
+    /** Loaded message the screen should scroll to; 0 when none (see TelegramMessageRepository.jumpTo). */
+    val jumpTo: Long = 0
 )
 
 enum class TelegramCallKind { Incoming, Outgoing, Missed, Unanswered }

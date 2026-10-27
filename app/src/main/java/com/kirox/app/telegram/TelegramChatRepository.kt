@@ -94,19 +94,42 @@ class TelegramChatRepository(private val client: TelegramClient) {
 
     fun clearError() { _error.value = null }
 
-    /** Chats matching [query] among all chats TDLib knows (title and username), main-list style items. */
-    suspend fun search(query: String): List<TelegramChatItem> = kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
-        val sent = client.send(TdApi.SearchChats(query, null, SEARCH_LIMIT)) { result ->
-            // Runs on the TDLib dispatcher, where chatsById may be read.
-            val items = (result as? TdApi.Chats)?.chatIds?.toList()?.mapNotNull { id ->
-                chatsById[id]?.let { chat ->
-                    val position = chat.positions.firstOrNull { it.list is TdApi.ChatListMain } ?: chat.positions.firstOrNull() ?: TdApi.ChatPosition(TdApi.ChatListMain(), 0, false, null)
-                    toChatItem(chat, position, archived = position.list is TdApi.ChatListArchive)
-                }
-            }.orEmpty()
-            continuation.resumeWith(Result.success(items))
+    /**
+     * Chats matching [query]: the user's own chats first (title and username), then chats found on
+     * the server and public channels, groups and bots by username. Each appears once.
+     */
+    suspend fun search(query: String): List<TelegramChatItem> {
+        val local = runCatching { client.query(TdApi.SearchChats(query, null, SEARCH_LIMIT)).chatIds.toList() }.getOrDefault(emptyList())
+        val server = runCatching { client.query(TdApi.SearchChatsOnServer(query, null, SEARCH_LIMIT)).chatIds.toList() }.getOrDefault(emptyList())
+        // Public search needs a few letters; Telegram rejects very short queries.
+        val public = if (query.trim().length >= 4) runCatching { client.query(TdApi.SearchPublicChats(query, null)).chatIds.toList() }.getOrDefault(emptyList()) else emptyList()
+        return items((local + server + public).distinct())
+    }
+
+    /** Messages matching [query] in all chats of the main list, newest first. */
+    suspend fun searchMessages(query: String): List<TelegramFoundMessage> {
+        val found = runCatching { client.query(TdApi.SearchMessages(TdApi.ChatListMain(), query, "", SEARCH_LIMIT, null, null, 0, 0)) }.getOrNull() ?: return emptyList()
+        return onDispatcher {
+            found.messages.filterNotNull().mapNotNull { message ->
+                val chat = chatsById[message.chatId] ?: return@mapNotNull null
+                TelegramFoundMessage(message.chatId, message.id, chat.title, messagePreview(message), message.date, chat.photo?.small?.toRef())
+            }
         }
-        if (!sent) continuation.resumeWith(Result.success(emptyList()))
+    }
+
+    /** Chat list items for [ids], in that order; TDLib reports every chat before returning its id. */
+    private suspend fun items(ids: List<Long>): List<TelegramChatItem> = onDispatcher {
+        ids.mapNotNull { id ->
+            chatsById[id]?.let { chat ->
+                val position = chat.positions.firstOrNull { it.list is TdApi.ChatListMain } ?: chat.positions.firstOrNull() ?: TdApi.ChatPosition(TdApi.ChatListMain(), 0, false, null)
+                toChatItem(chat, position, archived = position.list is TdApi.ChatListArchive)
+            }
+        }
+    }
+
+    /** Runs [block] on the TDLib dispatcher, where chatsById may be read. */
+    private suspend fun <T> onDispatcher(block: () -> T): T = kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+        client.post { continuation.resumeWith(runCatching(block)) }
     }
 
     private fun act(function: TdApi.Function<*>) {

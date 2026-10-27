@@ -8,7 +8,7 @@ enum class DeliveryState { None, Sending, Sent, Delivered, Read, Failed }
 enum class ChatLoadState { Loading, Ready, Empty, Error, Offline }
 
 @Immutable
-data class QuoteUi(val author: String, val text: String)
+data class QuoteUi(val author: String, val text: String, val messageId: Long = 0)
 
 @Immutable
 data class ReactionUi(val emoji: String, val count: Int, val selected: Boolean = false)

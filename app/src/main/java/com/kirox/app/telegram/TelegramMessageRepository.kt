@@ -22,6 +22,13 @@ class TelegramMessageRepository(
     private var publishScheduled = false
     private val viewed = HashSet<Long>()
     private var savedChat = false
+    /** Pinned message ids of the open chat, newest last. */
+    private val pinnedIds = sortedSetOf<Long>()
+    /** Pinned messages not in the loaded history. */
+    private val pinnedCache = HashMap<Long, TdApi.Message>()
+    /** Message to scroll to once it is loaded, see [jumpTo]. */
+    private var jumpTarget = 0L
+    private var jumpPagesLeft = 0
 
     private val _history = MutableStateFlow(TelegramChatHistory())
     val history: StateFlow<TelegramChatHistory> = _history.asStateFlow()
@@ -40,11 +47,75 @@ class TelegramMessageRepository(
         chatId = id
         messages.clear(); viewed.clear()
         loadingOlder = false; reachedStart = false
+        pinnedIds.clear(); pinnedCache.clear(); jumpTarget = 0; jumpPagesLeft = 0
         lastReadOutbox = chats.chat(id)?.lastReadOutboxMessageId ?: 0
         _history.value = TelegramChatHistory(chatId = id)
         client.send(TdApi.OpenChat(id))
         requestOlder()
+        loadPinned(id)
         publish()
+    }
+
+    /** All pinned messages of the chat (Telegram allows many); the newest one is shown in the bar. */
+    private fun loadPinned(id: Long) {
+        client.send(TdApi.SearchChatMessages(id, null, "", null, 0, 0, PINNED_LIMIT, TdApi.SearchMessagesFilterPinned())) { result ->
+            if (id != chatId || result !is TdApi.FoundChatMessages) return@send
+            result.messages.filterNotNull().forEach { message ->
+                pinnedIds += message.id
+                // Keep the pinned message itself for the bar even when it is far up in the history.
+                if (message.id !in messages) pinnedCache[message.id] = message
+            }
+            schedulePublish()
+        }
+    }
+    /** Emoji reactions this chat allows on [messageId], without Premium-only ones; null on failure. */
+    suspend fun availableReactions(messageId: Long): List<String>? {
+        val id = chatId.takeIf { it != 0L } ?: return null
+        return runCatching {
+            val available = client.query(TdApi.GetMessageAvailableReactions(id, messageId, 8))
+            (available.topReactions + available.recentReactions + available.popularReactions)
+                .filter { !it.needsPremium }
+                .mapNotNull { (it.type as? TdApi.ReactionTypeEmoji)?.emoji }
+                .distinct()
+                .take(8)
+        }.getOrNull()
+    }
+
+    fun pin(messageId: Long) = act { id -> TdApi.PinChatMessage(id, messageId, false, false) }
+    fun unpin(messageId: Long) = act { id -> TdApi.UnpinChatMessage(id, messageId) }
+
+    /**
+     * Scrolls the open chat to [messageId]: loads older pages until it is in the list (up to
+     * [JUMP_PAGES] pages), then reports it in [TelegramChatHistory.jumpTo] for the screen to scroll.
+     */
+    fun jumpTo(messageId: Long) = client.post {
+        if (chatId == 0L) return@post
+        jumpTarget = messageId
+        jumpPagesLeft = JUMP_PAGES
+        continueJump()
+    }
+
+    /** The screen has scrolled to the target. */
+    fun jumpDone() = client.post { jumpTarget = 0; schedulePublish() }
+
+    private fun continueJump() {
+        if (jumpTarget == 0L) return
+        when {
+            jumpTarget in messages -> schedulePublish()
+            reachedStart || jumpPagesLeft <= 0 -> { jumpTarget = 0; _error.value = "Сообщение слишком далеко в истории"; schedulePublish() }
+            else -> { jumpPagesLeft--; requestOlder() }
+        }
+    }
+
+    /** Server-side search in the open chat, newest first; [fromMessageId] 0 for the first page. */
+    suspend fun search(query: String, fromMessageId: Long = 0): Pair<List<TelegramMessage>, Long> {
+        val id = chatId.takeIf { it != 0L } ?: return emptyList<TelegramMessage>() to 0L
+        val found = client.query(TdApi.SearchChatMessages(id, null, query, null, fromMessageId, 0, SEARCH_PAGE, null))
+        val list = kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+            // Mapping reads repository state, so it runs on the TDLib dispatcher.
+            client.post { continuation.resumeWith(Result.success(found.messages.filterNotNull().map { it.toModel() })) }
+        }
+        return list to found.nextFromMessageId
     }
 
     fun close(id: Long) = client.post {
@@ -172,11 +243,12 @@ class TelegramMessageRepository(
                 is TdApi.Messages -> {
                     val page = result.messages.filterNotNull()
                     if (page.isEmpty()) reachedStart = true
-                    page.forEach { messages[it.id] = it }
+                    page.forEach { messages[it.id] = it; pinnedCache.remove(it.id) }
                 }
                 is TdApi.Error -> _error.value = humanError(result)
             }
             schedulePublish()
+            continueJump()
         }
     }
 
@@ -198,6 +270,15 @@ class TelegramMessageRepository(
                 update.messageIds.forEach { messages.remove(it) }; schedulePublish()
             }
             is TdApi.UpdateChatReadOutbox -> if (update.chatId == chatId) { lastReadOutbox = update.lastReadOutboxMessageId; schedulePublish() }
+            is TdApi.UpdateMessageIsPinned -> if (update.chatId == chatId) {
+                if (update.isPinned) {
+                    pinnedIds += update.messageId
+                    if (update.messageId !in messages) client.send(TdApi.GetMessage(update.chatId, update.messageId)) { result ->
+                        if (result is TdApi.Message && result.chatId == chatId) { pinnedCache[result.id] = result; schedulePublish() }
+                    }
+                } else { pinnedIds -= update.messageId; pinnedCache.remove(update.messageId) }
+                schedulePublish()
+            }
             is TdApi.UpdateUser, is TdApi.UpdateUserStatus -> if (chatId != 0L) schedulePublish()
             is TdApi.UpdateAuthorizationState -> when (update.authorizationState) {
                 // After a background pause the open chat loads again; logout and account switch drop it.
@@ -241,7 +322,10 @@ class TelegramMessageRepository(
             loadingOlder = loadingOlder,
             reachedStart = reachedStart,
             isSecret = type is TdApi.ChatTypeSecret,
-            draft = chat?.let(::draftText).orEmpty()
+            draft = chat?.let(::draftText).orEmpty(),
+            pinned = pinnedIds.lastOrNull()?.let { messages[it] ?: pinnedCache[it] }?.toModel(),
+            pinnedIds = pinnedIds.toSet(),
+            jumpTo = jumpTarget.takeIf { it in messages } ?: 0L
         )
         markViewed(id)
     }
@@ -275,6 +359,7 @@ class TelegramMessageRepository(
             media = mediaInfo.first,
             thumbnail = mediaInfo.second,
             albumId = mediaAlbumId,
+            replyToMessageId = reply?.takeIf { it.chatId == 0L || it.chatId == chatId }?.messageId ?: 0L,
             date = date,
             edited = editDate > 0,
             delivery = when {
@@ -315,6 +400,10 @@ class TelegramMessageRepository(
     private companion object {
         const val PAGE_SIZE = 50
         const val PUBLISH_DELAY_MS = 32L
+        const val PINNED_LIMIT = 100
+        /** Up to 1000 messages back; further is rare and better reached by search. */
+        const val JUMP_PAGES = 20
+        const val SEARCH_PAGE = 50
     }
 }
 

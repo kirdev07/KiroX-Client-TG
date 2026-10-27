@@ -242,7 +242,10 @@ private fun ChatsTab(
                 HeaderAction(KiroXIcon.Back, "Закрыть поиск") { searching = false; query = "" }
                 Box(Modifier.weight(1f)) { SearchField(query, "Поиск чатов", autoFocus = true) { query = it } }
             }
-            ChatSearchResults(query, actions::search) { chat -> ChatRow(chat) { searching = false; query = ""; onOpenChat(chat.id) } }
+            ChatSearchResults(
+                query, actions::search, actions::searchMessages,
+                onOpenMessage = { found -> searching = false; query = ""; onOpenChat(found.chatId); actions.jumpToMessage(found.messageId) }
+            ) { chat -> ChatRow(chat) { searching = false; query = ""; onOpenChat(chat.id) } }
         }
         return
     }

@@ -125,7 +125,7 @@ fun KiroXApp() {
     }
     val storyChats by telegramViewModel.stories.storyChats.collectAsStateWithLifecycle()
     val storyActions = remember { TelegramStoryActionsImpl(telegramViewModel.stories) }
-    val chatActions = remember { TelegramChatListActionsImpl(telegramViewModel.chats) }
+    val chatActions = remember { TelegramChatListActionsImpl(telegramViewModel.chats, telegramViewModel.messages) }
     val chatMenu = remember {
         object : com.kirox.app.ui.chat.TelegramChatMenuActions {
             override suspend fun isMuted(chatId: Long) = telegramViewModel.chats.isMuted(chatId)
@@ -310,6 +310,12 @@ private class TelegramMessageActions(
     override fun sendAlbum(items: List<Pair<String, com.kirox.app.telegram.VideoMeta?>>, caption: String) = repository.sendAlbum(items, caption)
     override fun sendPanelItem(item: com.kirox.app.telegram.TelegramPanelItem, replyToMessageId: Long?) = repository.sendPanelItem(item, replyToMessageId)
     override fun sendVideoNote(path: String, durationSeconds: Int, length: Int) = repository.sendVideoNote(path, durationSeconds, length)
+    override fun pin(messageId: Long) = repository.pin(messageId)
+    override fun unpin(messageId: Long) = repository.unpin(messageId)
+    override fun jumpTo(messageId: Long) = repository.jumpTo(messageId)
+    override fun jumpDone() = repository.jumpDone()
+    override suspend fun search(query: String, fromMessageId: Long) = repository.search(query, fromMessageId)
+    override suspend fun availableReactions(messageId: Long) = repository.availableReactions(messageId)
 }
 
 private class TelegramStoryActionsImpl(private val repository: TelegramStoryRepository) : TelegramStoryActions {
@@ -318,7 +324,9 @@ private class TelegramStoryActionsImpl(private val repository: TelegramStoryRepo
     override fun close(chatId: Long, storyId: Int) = repository.close(chatId, storyId)
 }
 
-private class TelegramChatListActionsImpl(private val repository: TelegramChatRepository) : TelegramChatListActions {
+private class TelegramChatListActionsImpl(private val repository: TelegramChatRepository, private val messages: TelegramMessageRepository) : TelegramChatListActions {
+    override suspend fun searchMessages(query: String) = repository.searchMessages(query)
+    override fun jumpToMessage(messageId: Long) = messages.jumpTo(messageId)
     override fun loadMore(key: TelegramChatListKey) = repository.loadMore(key)
     override fun setArchived(chatId: Long, archived: Boolean) = repository.setArchived(chatId, archived)
     override fun setPinned(key: TelegramChatListKey, chatId: Long, pinned: Boolean) = repository.setPinned(key, chatId, pinned)
