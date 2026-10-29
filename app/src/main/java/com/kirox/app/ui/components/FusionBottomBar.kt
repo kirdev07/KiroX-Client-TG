@@ -51,16 +51,16 @@ fun FusionBottomBar(items: List<FusionNavItem>, selected: Int, onSelect: (Int) -
         Row(container.selectableGroup().padding(horizontal = 8.dp, vertical = 6.dp)) {
             items.forEachIndexed { index, item ->
                 val active = index == selected
-                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                Box(Modifier.weight(1f).padding(horizontal = 3.dp), contentAlignment = Alignment.Center) {
                     Column(
-                        Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+                        Modifier.fillMaxWidth().clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
                             .background(if (active) colors.selectedPill else androidx.compose.ui.graphics.Color.Transparent)
                             .selectable(selected = active, onClick = { onSelect(index) }, role = androidx.compose.ui.semantics.Role.Tab)
-                            .padding(horizontal = 16.dp, vertical = 7.dp),
+                            .padding(horizontal = 2.dp, vertical = 7.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         KiroXIcon(item.icon, null, Modifier.size(24.dp), if (active) colors.onSelectedPill else colors.textSecondary)
-                        Text(item.title, maxLines = 1, style = MaterialTheme.typography.labelMedium, color = if (active) colors.onSelectedPill else colors.textSecondary)
+                        Text(item.title, maxLines = 1, softWrap = false, style = MaterialTheme.typography.labelMedium, color = if (active) colors.onSelectedPill else colors.textSecondary)
                     }
                 }
             }

@@ -63,7 +63,7 @@ private fun DrawScope.drawFlowers(base: List<Color>) {
         drawCircle(Brush.radialGradient(listOf(Color(0x66E0B8FF), Color.Transparent), center = centre, radius = r * 0.22f), r * 0.22f, centre)
     }
     // Dark veil: the art stays a background, bubbles stay readable.
-    drawRect(Color(0x66070512))
+    drawRect(Color(0x40070512))
 }
 
 private fun DrawScope.drawMountains(scrim: Boolean = true) {
@@ -71,7 +71,7 @@ private fun DrawScope.drawMountains(scrim: Boolean = true) {
     val h = size.height
     val horizon = h * 0.46f
     // Evening sky: deep blue down to a warm glow at the horizon.
-    drawRect(Brush.verticalGradient(0f to Color(0xFF101C38), 0.55f * horizon / h to Color(0xFF34406E), horizon / h to Color(0xFFC98A7A), 1f to Color(0xFF0A1428)))
+    drawRect(Brush.verticalGradient(0f to Color(0xFF1A2A55), 0.5f * horizon / h to Color(0xFF4F5C9A), 0.85f * horizon / h to Color(0xFFB07A93), horizon / h to Color(0xFFE6A07C), 1f to Color(0xFF0A1428)))
     fun ridge(points: List<Pair<Float, Float>>, base: Float): Path = Path().apply {
         moveTo(0f, base)
         points.forEach { (x, y) -> lineTo(x * w, y * h) }
@@ -79,8 +79,16 @@ private fun DrawScope.drawMountains(scrim: Boolean = true) {
     }
     val far = listOf(0f to 0.36f, 0.12f to 0.30f, 0.24f to 0.34f, 0.38f to 0.24f, 0.5f to 0.31f, 0.63f to 0.20f, 0.76f to 0.29f, 0.9f to 0.25f, 1f to 0.31f)
     val near = listOf(0f to 0.42f, 0.1f to 0.37f, 0.22f to 0.43f, 0.35f to 0.33f, 0.47f to 0.41f, 0.6f to 0.30f, 0.72f to 0.40f, 0.86f to 0.35f, 1f to 0.42f)
-    drawPath(ridge(far, horizon), Brush.verticalGradient(listOf(Color(0xFF4A5684), Color(0xFF2A3460)), startY = 0.2f * h, endY = horizon))
-    drawPath(ridge(near, horizon), Brush.verticalGradient(listOf(Color(0xFF243052), Color(0xFF141D36)), startY = 0.3f * h, endY = horizon))
+    drawPath(ridge(far, horizon), Brush.verticalGradient(listOf(Color(0xFF7C86B8), Color(0xFF3A4576)), startY = 0.2f * h, endY = horizon))
+    // Snow on the far peaks: small light caps under each summit.
+    far.zipWithNext().zipWithNext().forEach { (a, b) ->
+        val peak = a.second
+        if (peak.second < a.first.second && peak.second < b.second.second) {
+            val px = peak.first * w; val py = peak.second * h; val cap = h * 0.035f
+            drawPath(Path().apply { moveTo(px, py); lineTo(px - cap * 0.9f, py + cap); lineTo(px + cap * 0.9f, py + cap); close() }, Color(0xCCE4E8F7))
+        }
+    }
+    drawPath(ridge(near, horizon), Brush.verticalGradient(listOf(Color(0xFF2E3B66), Color(0xFF151E3A)), startY = 0.3f * h, endY = horizon))
     // Lake: a dimmed mirror of the ridges.
     drawRect(Brush.verticalGradient(listOf(Color(0xFF26355E), Color(0xFF0A1326)), startY = horizon, endY = h), topLeft = Offset(0f, horizon), size = Size(w, h - horizon))
     fun mirror(points: List<Pair<Float, Float>>) = points.map { (x, y) -> x to (2 * horizon / h - y) }
@@ -93,5 +101,5 @@ private fun DrawScope.drawMountains(scrim: Boolean = true) {
         drawPath(Path().apply { moveTo(x, base - height); lineTo(x - height * 0.22f, base); lineTo(x + height * 0.22f, base); close() }, Color(0xFF0A1122))
     }
     listOf(0.02f, 0.06f, 0.1f, 0.15f, 0.84f, 0.89f, 0.93f, 0.97f).forEachIndexed { i, x -> fir(x * w, h * (0.05f + (i % 3) * 0.015f)) }
-    if (scrim) drawRect(Brush.verticalGradient(listOf(Color(0x33071424), Color(0x80071424))))
+    if (scrim) drawRect(Brush.verticalGradient(listOf(Color(0x10071424), Color(0x66071424))))
 }

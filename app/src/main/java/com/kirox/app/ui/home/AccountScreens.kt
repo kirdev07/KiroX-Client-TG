@@ -161,7 +161,9 @@ internal fun TileRow(icon: KiroXIcon, title: String, trailing: String? = null, p
     androidx.compose.material3.ListItem(
         headlineContent = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         leadingContent = {
-            if (plainIcon) IconGlyph(icon, null, Modifier.size(22.dp), Fusion.colors.textPrimary)
+            if (plainIcon) Box(Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(Fusion.colors.surface3.copy(alpha = 0.7f)), contentAlignment = Alignment.Center) {
+                IconGlyph(icon, null, Modifier.size(18.dp), Fusion.colors.textPrimary)
+            }
             else Box(Modifier.size(40.dp).clip(MaterialTheme.shapes.small).background(Fusion.colors.iconContainer), contentAlignment = Alignment.Center) {
                 IconGlyph(icon, null, Modifier.size(21.dp), Fusion.colors.textPrimary)
             }
@@ -173,7 +175,7 @@ internal fun TileRow(icon: KiroXIcon, title: String, trailing: String? = null, p
             }
         },
         colors = fusionListColors(),
-        modifier = Modifier.clickable(onClick = onClick)
+        modifier = Modifier.clickable(onClick = onClick).then(if (plainIcon) Modifier.heightIn(max = 54.dp) else Modifier)
     )
 }
 
