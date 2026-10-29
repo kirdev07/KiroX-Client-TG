@@ -104,8 +104,8 @@ internal fun CallsList(state: TelegramCallsState, onLoadMore: () -> Unit, onOpen
                     value.title, color = if (active) Fusion.colors.onAccent else Fusion.colors.textSecondary,
                     fontSize = 13.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1,
                     textAlign = TextAlign.Center,
-                    // v2: four equal segments that always fit, no sideways scrolling.
-                    modifier = (if (segmented) Modifier.weight(1f) else Modifier).clip(RoundedCornerShape(20.dp)).background(when {
+                    // v2: segments sized by their label, so all four always fit without scrolling.
+                    modifier = (if (segmented) Modifier.weight(value.title.length + 3f) else Modifier).clip(RoundedCornerShape(20.dp)).background(when {
                         active && v2 -> Fusion.colors.accent
                         active -> Fusion.colors.accent
                         v2 -> androidx.compose.ui.graphics.Color.Transparent
