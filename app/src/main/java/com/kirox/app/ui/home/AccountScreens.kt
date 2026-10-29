@@ -794,7 +794,13 @@ internal fun ScreenTitle(title: String, seasonal: Boolean = true, actions: @Comp
     Box(Modifier.fillMaxWidth()) {
         if (seasonal) SeasonalLayer(Modifier.matchParentSize(), freeZone = if (actionsStart > titleEnd) (titleEnd + gap)..(actionsStart - gap) else null)
         // Material 3 top app bar on a transparent container, so the seasonal layer shows through.
-        androidx.compose.material3.TopAppBar(
+        // Fusion UI v2: the title is centred and bold, like «KiroX» on the chats screen.
+        if (Fusion.colors.backdrop != null) androidx.compose.material3.CenterAlignedTopAppBar(
+            title = { Text(title, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            actions = { Row(content = actions) },
+            windowInsets = androidx.compose.foundation.layout.WindowInsets(0),
+            colors = fusionTopBarColors()
+        ) else androidx.compose.material3.TopAppBar(
             title = {
                 Text(
                     title, style = MaterialTheme.typography.headlineMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,

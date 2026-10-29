@@ -91,9 +91,17 @@ internal fun CallsList(state: TelegramCallsState, onLoadMore: () -> Unit, onOpen
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CallFilter.entries.forEach { value ->
+                val v2 = Fusion.colors.backdrop != null
+                val active = filter == value
                 Text(
-                    value.title, color = if (filter == value) Fusion.colors.onAccent else Fusion.colors.textSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium,
-                    modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(if (filter == value) Fusion.colors.accent else Fusion.colors.surface2)
+                    value.title, color = if (active) (if (v2) Fusion.colors.onSelectedPill else Fusion.colors.onAccent) else Fusion.colors.textSecondary,
+                    fontSize = if (v2) 14.sp else 13.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+                    modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(when {
+                        active && v2 -> Fusion.colors.selectedPill
+                        active -> Fusion.colors.accent
+                        v2 -> androidx.compose.ui.graphics.Color.Transparent
+                        else -> Fusion.colors.surface2
+                    })
                         .clickable { filter = value }.padding(horizontal = 14.dp, vertical = 8.dp)
                 )
             }

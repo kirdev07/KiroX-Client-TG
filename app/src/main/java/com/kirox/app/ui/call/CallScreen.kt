@@ -228,6 +228,8 @@ private fun TopLabel(call: TelegramActiveCall) {
 
 @Composable
 private fun PulsingAvatar(call: TelegramActiveCall, pulsing: Boolean) {
+    // Fusion UI v2: the avatar glows in the style accent (violet / blue); classic palettes stay white.
+    val glow = if (com.kirox.app.ui.theme.Fusion.colors.backdrop != null) com.kirox.app.ui.theme.Fusion.colors.accent.copy(alpha = 0.38f) else Color(0x33FFFFFF)
     val transition = rememberInfiniteTransition(label = "call_pulse")
     val wave by transition.animateFloat(0f, 1f, infiniteRepeatable(tween(1800, easing = LinearEasing), RepeatMode.Restart), label = "wave")
     Box(Modifier.size(220.dp), contentAlignment = Alignment.Center) {
@@ -237,7 +239,7 @@ private fun PulsingAvatar(call: TelegramActiveCall, pulsing: Boolean) {
                 drawCircle(Color.White.copy(alpha = 0.16f * (1f - p)), radius = size.minDimension * (0.3f + 0.2f * p))
             }
         } else Canvas(Modifier.fillMaxSize()) {
-            drawCircle(Brush.radialGradient(listOf(Color(0x33FFFFFF), Color.Transparent)), radius = size.minDimension * 0.5f)
+            drawCircle(Brush.radialGradient(listOf(glow, Color.Transparent)), radius = size.minDimension * 0.5f)
         }
         TelegramAvatar(call.name, call.photo, 128.dp)
     }

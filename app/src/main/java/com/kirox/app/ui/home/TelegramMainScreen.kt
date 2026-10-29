@@ -537,7 +537,7 @@ private fun ContactsTab(
             TitleAction(KiroXIcon.Search, "Поиск контактов") { focusSearch++ }
             TitleAction(KiroXIcon.Add, "Добавить контакт") { adding = true }
         }
-        ContactsList(contacts, loading, focusSearch, onOpen = { card = it }, onCall = call)
+        ContactsList(contacts, loading, focusSearch, onOpen = { card = it }, onCall = call, onAdd = { adding = true })
     }
     contacts.firstOrNull { it.id == card }?.let { contact ->
         ContactCard(
@@ -572,31 +572,44 @@ private fun CallsTab(
     }
 }
 
-/** Истории tab: own stories and the active stories of chats, as TDLib reports them. */
+/**
+ * Истории tab (approved stories layout): title, the ribbon of round stories with «Моя история +»,
+ * filters Все / Контакты / Каналы and compact cards. Data is TDLib's active stories only.
+ */
 @Composable
 private fun StoriesTab(storyChats: List<TelegramStoryChat>, profile: TelegramUserProfile?, onOpen: (TelegramStoryChat) -> Unit, onNotice: (UiNotice) -> Unit) {
     val postStory = rememberStoryPoster { onNotice(UiNotice(it)) }
     val own = storyChats.firstOrNull { it.isSelf }
-    val others = storyChats.filterNot { it.isSelf }
+    var filter by rememberSaveable { mutableIntStateOf(0) }
+    // Users have positive chat ids, channels and groups negative ones (TDLib).
+    val others = storyChats.filterNot { it.isSelf }.filter { when (filter) { 1 -> it.chatId > 0; 2 -> it.chatId < 0; else -> true } }
     val (unread, seen) = others.partition { it.hasUnread }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { ScreenTitle("Истории") { TitleAction(KiroXIcon.Camera, "Новая история") { postStory() } } }
+        item { StoriesRow(storyChats, profile?.name.orEmpty(), profile?.photo, onOpen) { postStory() } }
         item {
-            StoryEntry(
-                profile?.name.orEmpty(), profile?.photo, own?.hasUnread == true,
-                title = "Моя история",
-                subtitle = if (own != null) storiesCount(own.storyIds.size) else "Нажмите, чтобы опубликовать"
-            ) { if (own != null) onOpen(own) else postStory() }
+            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(listOf("Все", "Контакты", "Каналы").size) { i -> FolderChip(listOf("Все", "Контакты", "Каналы")[i], filter == i) { filter = i } }
+            }
         }
-        if (others.isEmpty()) item { EmptyState("Активных историй пока нет") }
+        if (own != null && filter == 0) item { StoryCard(profile?.name.orEmpty(), profile?.photo, own.hasUnread, "Моя история", storiesCount(own.storyIds.size)) { onOpen(own) } }
+        if (others.isEmpty()) item { EmptyState(if (filter == 0) "Активных историй пока нет" else "В этом разделе историй нет") }
         if (unread.isNotEmpty()) {
             item { StorySection("Новые") }
-            items(unread, key = { it.chatId }) { chat -> StoryEntry(chat.title, chat.photo, true, chat.title, storiesCount(chat.storyIds.size)) { onOpen(chat) } }
+            items(unread, key = { it.chatId }) { chat -> StoryCard(chat.title, chat.photo, true, chat.title, storiesCount(chat.storyIds.size)) { onOpen(chat) } }
         }
         if (seen.isNotEmpty()) {
             item { StorySection("Просмотренные") }
-            items(seen, key = { it.chatId }) { chat -> StoryEntry(chat.title, chat.photo, false, chat.title, storiesCount(chat.storyIds.size)) { onOpen(chat) } }
+            items(seen, key = { it.chatId }) { chat -> StoryCard(chat.title, chat.photo, false, chat.title, storiesCount(chat.storyIds.size)) { onOpen(chat) } }
         }
+    }
+}
+
+/** One story author as a compact rounded card. */
+@Composable
+private fun StoryCard(name: String, photo: com.kirox.app.telegram.TelegramFileRef?, unread: Boolean, title: String, subtitle: String, onClick: () -> Unit) {
+    Box(Modifier.padding(horizontal = 14.dp, vertical = 4.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp)).fusionPanel(Fusion.colors, RoundedCornerShape(20.dp))) {
+        StoryEntry(name, photo, unread, title, subtitle, onClick)
     }
 }
 
@@ -640,11 +653,18 @@ internal fun filterContacts(contacts: List<TelegramContact>, query: String): Lis
 }
 
 @Composable
-private fun ContactsList(contacts: List<TelegramContact>, loading: Boolean, focusSearch: Int, onOpen: (Long) -> Unit, onCall: (Long, Boolean) -> Unit) {
+private fun ContactsList(contacts: List<TelegramContact>, loading: Boolean, focusSearch: Int, onOpen: (Long) -> Unit, onCall: (Long, Boolean) -> Unit, onAdd: () -> Unit = {}) {
     var query by rememberSaveable { mutableStateOf("") }
     val shown = remember(contacts, query) { filterContacts(contacts, query) }
+    val context = androidx.compose.ui.platform.LocalContext.current
     Column(Modifier.fillMaxSize()) {
         SearchField(query, "Имя, @ник или номер", focusTrigger = focusSearch) { query = it }
+        // Approved contacts layout: «Новый контакт» and «Пригласить в Telegram» above the list.
+        if (query.isBlank()) Column(Modifier.padding(horizontal = 14.dp, vertical = 6.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp)).fusionPanel(Fusion.colors, RoundedCornerShape(20.dp))) {
+            TileRow(KiroXIcon.Add, "Новый контакт", plainIcon = true, onClick = onAdd)
+            HorizontalDivider(Modifier.padding(start = 56.dp), color = Fusion.colors.outline)
+            TileRow(KiroXIcon.Link, "Пригласить в Telegram", plainIcon = true) { inviteFriends(context) }
+        }
         Box(Modifier.weight(1f)) {
             when {
                 contacts.isEmpty() && loading -> CenteredProgress()
