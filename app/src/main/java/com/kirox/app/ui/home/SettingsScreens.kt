@@ -14,7 +14,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -50,27 +49,24 @@ private fun settingsRepo() = (LocalContext.current.applicationContext as KiroXAp
 
 @Composable
 private fun ToggleRow(title: String, subtitle: String? = null, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clickable(enabled = enabled) { onChange(!checked) }.heightIn(min = 56.dp).padding(horizontal = 20.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, color = Fusion.colors.textPrimary, fontSize = 16.sp)
-            if (subtitle != null) Text(subtitle, color = Fusion.colors.textSecondary, fontSize = 12.sp)
-        }
-        Switch(
-            checked, onChange, enabled = enabled,
-            colors = SwitchDefaults.colors(checkedThumbColor = Fusion.colors.onAccent, checkedTrackColor = Fusion.colors.accent, uncheckedThumbColor = Fusion.colors.textTertiary, uncheckedTrackColor = Fusion.colors.surface2, uncheckedBorderColor = Fusion.colors.outlineStrong)
-        )
-    }
+    // Material 3 list item with a switch; the whole row toggles.
+    androidx.compose.material3.ListItem(
+        headlineContent = { Text(title) },
+        supportingContent = subtitle?.let { { Text(it) } },
+        trailingContent = { Switch(checked, onChange, enabled = enabled) },
+        colors = fusionListColors(),
+        modifier = Modifier.clickable(enabled = enabled) { onChange(!checked) }
+    )
 }
 
 @Composable
 private fun LinkRow(title: String, subtitle: String? = null, color: Color = Fusion.colors.textPrimary, onClick: () -> Unit) {
-    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 56.dp).padding(horizontal = 20.dp, vertical = 10.dp), verticalArrangement = Arrangement.Center) {
-        Text(title, color = color, fontSize = 16.sp)
-        if (subtitle != null) Text(subtitle, color = Fusion.colors.textSecondary, fontSize = 12.sp)
-    }
+    androidx.compose.material3.ListItem(
+        headlineContent = { Text(title, color = color) },
+        supportingContent = subtitle?.let { { Text(it) } },
+        colors = fusionListColors(),
+        modifier = Modifier.clickable(onClick = onClick)
+    )
 }
 
 @Composable

@@ -190,18 +190,24 @@ fun TelegramMainScreen(
                     else -> ProfileTab(profile, onOpenSettings = { tab = MainTab.Settings }, onOpenSaved = onOpenSavedMessages, onLogOut = onLogOut, onEditProfile = { sub = SubScreen.ProfileEdit }, onNotice = showNotice)
                 }
             }
-            notice?.let { current ->
-                Row(
-                    Modifier.align(Alignment.BottomCenter).padding(16.dp).clip(RoundedCornerShape(12.dp)).background(Fusion.colors.surface3).padding(start = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(current.text, color = Fusion.colors.textPrimary, fontSize = 13.sp, modifier = Modifier.padding(vertical = 12.dp).weight(1f, fill = false))
-                    if (current.actionLabel != null) Text(
-                        current.actionLabel, color = Fusion.colors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable { current.action?.invoke(); notice = null }.heightIn(min = 44.dp).padding(horizontal = 16.dp).wrapContentHeight()
-                    ) else Spacer(Modifier.width(16.dp))
-                }
-                LaunchedEffect(current) { kotlinx.coroutines.delay(if (current.actionLabel != null) 4000 else 1900); notice = null }
+            // Material 3 snackbar; an undo action keeps it a little longer.
+            val snackbars = remember { androidx.compose.material3.SnackbarHostState() }
+            LaunchedEffect(notice) {
+                val current = notice ?: return@LaunchedEffect
+                val result = snackbars.showSnackbar(
+                    current.text, current.actionLabel,
+                    duration = if (current.actionLabel != null) androidx.compose.material3.SnackbarDuration.Long else androidx.compose.material3.SnackbarDuration.Short
+                )
+                if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) current.action?.invoke()
+                notice = null
+            }
+            androidx.compose.material3.SnackbarHost(snackbars, Modifier.align(Alignment.BottomCenter).padding(8.dp)) { data ->
+                androidx.compose.material3.Snackbar(
+                    data,
+                    containerColor = Fusion.colors.surface3,
+                    contentColor = Fusion.colors.textPrimary,
+                    actionColor = Fusion.colors.textPrimary
+                )
             }
         }
     }

@@ -1,5 +1,8 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.kirox.app.ui.home
 
+import androidx.compose.material3.MaterialTheme
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
@@ -18,7 +21,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -152,19 +154,36 @@ private fun ProfileHeader(profile: TelegramUserProfile?, onEdit: () -> Unit, onA
     }
 }
 
-/** Old Fusion settings row: icon in a rounded tile, large title, chevron. */
+/** Settings row as a Material 3 list item: icon in a Fusion tile, title, value and chevron. */
 @Composable
 internal fun TileRow(icon: KiroXIcon, title: String, trailing: String? = null, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 58.dp).padding(horizontal = 16.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Fusion.colors.iconContainer), contentAlignment = Alignment.Center) {
-            IconGlyph(icon, null, Modifier.size(21.dp), Fusion.colors.textPrimary)
-        }
-        Spacer(Modifier.width(14.dp))
-        Text(title, color = Fusion.colors.textPrimary, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        if (trailing != null) Text(trailing, color = Fusion.colors.textTertiary, fontSize = 13.sp, modifier = Modifier.padding(end = 6.dp))
-        IconGlyph(KiroXIcon.Chevron, null, Modifier.size(17.dp), Fusion.colors.textTertiary)
-    }
+    androidx.compose.material3.ListItem(
+        headlineContent = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        leadingContent = {
+            Box(Modifier.size(40.dp).clip(MaterialTheme.shapes.small).background(Fusion.colors.iconContainer), contentAlignment = Alignment.Center) {
+                IconGlyph(icon, null, Modifier.size(21.dp), Fusion.colors.textPrimary)
+            }
+        },
+        trailingContent = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (trailing != null) Text(trailing, style = MaterialTheme.typography.bodyMedium, color = Fusion.colors.textTertiary, modifier = Modifier.padding(end = 6.dp))
+                IconGlyph(KiroXIcon.Chevron, null, Modifier.size(17.dp), Fusion.colors.textTertiary)
+            }
+        },
+        colors = fusionListColors(),
+        modifier = Modifier.clickable(onClick = onClick)
+    )
 }
+
+/** List item colours on the screen background, as Fusion lists have no cards behind rows. */
+@Composable
+internal fun fusionListColors() = androidx.compose.material3.ListItemDefaults.colors(
+    containerColor = androidx.compose.ui.graphics.Color.Transparent,
+    headlineColor = Fusion.colors.textPrimary,
+    supportingColor = Fusion.colors.textSecondary,
+    leadingIconColor = Fusion.colors.textPrimary,
+    trailingIconColor = Fusion.colors.textTertiary
+)
 
 /** Customization hub: three clear sections, each with its current value. */
 @Composable
@@ -408,8 +427,7 @@ internal fun AnimationsScreen(
             Row(Modifier.fillMaxWidth().clickable { onEnabled(!enabled) }.heightIn(min = 52.dp).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Анимации", color = Fusion.colors.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                 Switch(
-                    enabled, onEnabled,
-                    colors = SwitchDefaults.colors(checkedThumbColor = Fusion.colors.onAccent, checkedTrackColor = Fusion.colors.accent, uncheckedThumbColor = Fusion.colors.textTertiary, uncheckedTrackColor = Fusion.colors.surface2, uncheckedBorderColor = Fusion.colors.outlineStrong)
+                    enabled, onEnabled
                 )
             }
         }
@@ -456,8 +474,9 @@ private fun SceneRow(scene: com.kirox.app.settings.EffectScene, selected: Boolea
 
 @Composable
 internal fun SmallCaption(text: String) {
-    Text(text.uppercase(), color = Fusion.colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium, letterSpacing = 1.sp,
-        modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 4.dp))
+    // Material 3 list subheader.
+    Text(text, style = MaterialTheme.typography.titleSmall, color = Fusion.colors.textSecondary,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp))
 }
 
 /** Label with a slim segmented control under it. */
@@ -793,32 +812,47 @@ internal fun ScreenTitle(title: String, seasonal: Boolean = true, actions: @Comp
     val startPad = with(density) { 16.dp.toPx() }
     Box(Modifier.fillMaxWidth()) {
         if (seasonal) SeasonalLayer(Modifier.matchParentSize(), freeZone = if (actionsStart > titleEnd) (titleEnd + gap)..(actionsStart - gap) else null)
-        Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) {
+        // Material 3 top app bar on a transparent container, so the seasonal layer shows through.
+        androidx.compose.material3.TopAppBar(
+            title = {
                 Text(
-                    title, color = Fusion.colors.textPrimary, fontSize = 26.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    title, style = MaterialTheme.typography.headlineMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.onGloballyPositioned { titleEnd = it.positionInParent().x + it.size.width + startPad }
                 )
-            }
-            Row(Modifier.onGloballyPositioned { actionsStart = it.positionInParent().x }, content = actions)
-        }
+            },
+            actions = { Row(Modifier.onGloballyPositioned { actionsStart = it.positionInParent().x }, content = actions) },
+            windowInsets = androidx.compose.foundation.layout.WindowInsets(0),
+            colors = fusionTopBarColors()
+        )
     }
 }
 
 @Composable
 internal fun TitleAction(icon: KiroXIcon, description: String, size: Dp = 24.dp, onClick: () -> Unit) {
-    Box(Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+    androidx.compose.material3.IconButton(onClick = onClick, modifier = Modifier.size(48.dp)) {
         IconGlyph(icon, description, Modifier.size(size), Fusion.colors.textPrimary)
     }
 }
 
+/** Material 3 top app bar with a back button. */
 @Composable
 internal fun BackTitle(title: String, onBack: () -> Unit) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-        TitleAction(KiroXIcon.Back, "Назад", onClick = onBack)
-        Text(title, color = Fusion.colors.textPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
+    androidx.compose.material3.TopAppBar(
+        title = { Text(title, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        navigationIcon = { TitleAction(KiroXIcon.Back, "Назад", onClick = onBack) },
+        windowInsets = androidx.compose.foundation.layout.WindowInsets(0),
+        colors = fusionTopBarColors()
+    )
 }
+
+@Composable
+internal fun fusionTopBarColors() = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+    containerColor = androidx.compose.ui.graphics.Color.Transparent,
+    scrolledContainerColor = Fusion.colors.surface1,
+    titleContentColor = Fusion.colors.textPrimary,
+    navigationIconContentColor = Fusion.colors.textPrimary,
+    actionIconContentColor = Fusion.colors.textPrimary
+)
 
 /** Updates: current version, beta channel, check / download / install from GitHub releases. */
 @Composable
@@ -869,7 +903,7 @@ internal fun UpdatesScreen(updates: com.kirox.app.update.UpdateCenter, onBack: (
                     Text("Бета-версии", color = Fusion.colors.textPrimary, fontSize = 16.sp)
                     Text("Новые функции раньше, но возможны ошибки", color = Fusion.colors.textSecondary, fontSize = 12.sp)
                 }
-                Switch(beta, { beta = it; updates.betaChannel = it }, colors = SwitchDefaults.colors(checkedThumbColor = Fusion.colors.onAccent, checkedTrackColor = Fusion.colors.accent, uncheckedThumbColor = Fusion.colors.textTertiary, uncheckedTrackColor = Fusion.colors.surface2, uncheckedBorderColor = Fusion.colors.outlineStrong))
+                Switch(beta, { beta = it; updates.betaChannel = it })
             }
         }
         val release = when (val s = state) {

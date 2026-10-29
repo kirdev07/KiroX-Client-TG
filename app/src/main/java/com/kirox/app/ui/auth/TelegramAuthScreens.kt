@@ -280,27 +280,35 @@ private fun TextAction(text: String, enabled: Boolean, onClick: () -> Unit) {
 
 @Composable
 private fun AuthField(value: String, onValueChange: (String) -> Unit, hint: String, numeric: Boolean = false, password: Boolean = false) {
-    BasicTextField(
+    // Material 3 outlined field; the hint becomes a floating label.
+    androidx.compose.material3.OutlinedTextField(
         value, onValueChange,
-        Modifier.fillMaxWidth().heightIn(min = 58.dp).clip(RoundedCornerShape(17.dp)).background(Fusion.colors.surface1)
-            .border(1.dp, Fusion.colors.outline, RoundedCornerShape(17.dp)).padding(horizontal = 16.dp, vertical = 18.dp),
-        textStyle = TextStyle(Fusion.colors.textPrimary, 17.sp), cursorBrush = SolidColor(Fusion.colors.textPrimary), singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text(hint) },
+        singleLine = true,
+        shape = androidx.compose.material3.MaterialTheme.shapes.medium,
+        textStyle = TextStyle(fontSize = 17.sp),
         keyboardOptions = KeyboardOptions(keyboardType = if (numeric) KeyboardType.NumberPassword else if (password) KeyboardType.Password else KeyboardType.Text),
         visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-        decorationBox = { inner -> Box { if (value.isEmpty()) Text(hint, color = Fusion.colors.textTertiary, fontSize = 16.sp); inner() } }
+        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = Fusion.colors.textPrimary, unfocusedBorderColor = Fusion.colors.outlineStrong,
+            focusedLabelColor = Fusion.colors.textPrimary, unfocusedLabelColor = Fusion.colors.textTertiary,
+            cursorColor = Fusion.colors.textPrimary, focusedContainerColor = Fusion.colors.surface1, unfocusedContainerColor = Fusion.colors.surface1
+        )
     )
 }
 
 @Composable
 private fun AuthButton(text: String, disabled: Boolean, busy: Boolean, onClick: () -> Unit) {
-    Box(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(28.dp))
-            .background(if (disabled && !busy) Fusion.colors.surface2 else Fusion.colors.accent)
-            .clickable(enabled = !disabled && !busy, onClick = onClick),
-        contentAlignment = Alignment.Center
+    // Material 3 filled button; while busy it keeps its colour and shows progress.
+    androidx.compose.material3.Button(
+        onClick = { if (!busy) onClick() },
+        enabled = !disabled || busy,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+        colors = androidx.compose.material3.ButtonDefaults.buttonColors(disabledContainerColor = Fusion.colors.surface2, disabledContentColor = Fusion.colors.textTertiary)
     ) {
         if (busy) CircularProgressIndicator(Modifier.size(22.dp), color = Fusion.colors.onAccent, strokeWidth = 2.dp)
-        else Text(text, color = if (disabled) Fusion.colors.textTertiary else Fusion.colors.onAccent, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        else Text(text, style = androidx.compose.material3.MaterialTheme.typography.labelLarge.copy(fontSize = 16.sp))
     }
 }
 
