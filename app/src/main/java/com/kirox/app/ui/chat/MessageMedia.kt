@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
@@ -336,7 +337,11 @@ internal fun FullscreenPhoto(file: TelegramFileRef, onClose: () -> Unit) {
                     .pointerInput(Unit) { detectTapGestures(onDoubleTap = { scale = if (scale > 1f) 1f else 2.5f; offset = Offset.Zero }) }
                     .graphicsLayer { scaleX = scale; scaleY = scale; translationX = offset.x; translationY = offset.y }
             ) else CircularProgressIndicator(Modifier.align(Alignment.Center).size(28.dp), color = Color.White, strokeWidth = 2.dp)
-            CloseButton(onClose, Modifier.align(Alignment.TopEnd))
+            // Approved media board: back arrow at the top left over a soft shade.
+            Box(Modifier.fillMaxWidth().height(120.dp).background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0x99000000), Color.Transparent))))
+            Box(Modifier.align(Alignment.TopStart).statusBarsPadding().padding(4.dp).size(48.dp).clip(CircleShape).clickable(onClick = onClose), contentAlignment = Alignment.Center) {
+                com.kirox.app.ui.icons.KiroXIcon(com.kirox.app.ui.icons.KiroXIcon.Back, "Закрыть", Modifier.size(24.dp), Color.White)
+            }
             // Approved media board: round actions at the bottom — save to Downloads and open in another app.
             val files = com.kirox.app.ui.components.LocalTelegramFiles.current
             val path by remember(file.id, files) {
@@ -350,7 +355,10 @@ internal fun FullscreenPhoto(file: TelegramFileRef, onClose: () -> Unit) {
                     ViewerAction(com.kirox.app.ui.icons.KiroXIcon.Storage, "Сохранить") {
                         scope.launch { status = if (saveToDownloads(context, local, "photo.jpg", "image/jpeg")) "Сохранено в Загрузки/KiroX" else "Не удалось сохранить" }
                     }
-                    ViewerAction(com.kirox.app.ui.icons.KiroXIcon.Forward, "Открыть в…") {
+                    ViewerAction(com.kirox.app.ui.icons.KiroXIcon.Forward, "Поделиться") {
+                        scope.launch { if (!shareFile(context, local, "photo.jpg", "image/jpeg")) status = "Нет приложения, чтобы поделиться" }
+                    }
+                    ViewerAction(com.kirox.app.ui.icons.KiroXIcon.Link, "Открыть в…") {
                         scope.launch { if (!openFile(context, local, "photo.jpg", "image/jpeg")) status = "Нет приложения для открытия" }
                     }
                 }
@@ -373,10 +381,10 @@ private fun ViewerAction(icon: com.kirox.app.ui.icons.KiroXIcon, label: String, 
 
 @Composable
 private fun CloseButton(onClose: () -> Unit, modifier: Modifier) {
-    Text(
-        "×", color = Color.White, fontSize = 30.sp,
-        modifier = modifier.statusBarsPadding().padding(8.dp).clip(CircleShape).background(Color(0x66000000)).clickable(onClick = onClose).padding(horizontal = 16.dp, vertical = 4.dp)
-    )
+    // Back arrow at the top left, as in the approved media board.
+    Box(modifier.statusBarsPadding().padding(6.dp).size(44.dp).clip(CircleShape).background(Color(0x66000000)).clickable(onClick = onClose), contentAlignment = Alignment.Center) {
+        com.kirox.app.ui.icons.KiroXIcon(com.kirox.app.ui.icons.KiroXIcon.Back, "Закрыть", Modifier.size(22.dp), Color.White)
+    }
 }
 
 /** Video opened full screen with the Media3 controls (seek, pause); sound takes audio focus. */
@@ -390,7 +398,7 @@ internal fun FullscreenVideo(path: String, onClose: () -> Unit) {
                 factory = { context -> PlayerView(context).apply { useController = true; this.player = player; setShowNextButton(false); setShowPreviousButton(false) } },
                 modifier = Modifier.fillMaxSize()
             )
-            CloseButton(onClose, Modifier.align(Alignment.TopEnd))
+            CloseButton(onClose, Modifier.align(Alignment.TopStart))
         }
     }
 }

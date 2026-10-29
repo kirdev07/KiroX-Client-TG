@@ -37,7 +37,10 @@ internal fun formatFileSize(bytes: Long): String = when {
  * Opens a downloaded file in another app. TDLib's own folder is never shared: the file is copied to
  * cache/shared (exposed by the FileProvider) and handed over read-only. Returns false when no app opens it.
  */
-internal suspend fun openFile(context: Context, path: String, name: String, mimeType: String): Boolean {
+/** Share sheet with a copy of the file (send to another app or chat outside KiroX). */
+internal suspend fun shareFile(context: Context, path: String, name: String, mimeType: String): Boolean = openFile(context, path, name, mimeType, Intent.ACTION_SEND)
+
+internal suspend fun openFile(context: Context, path: String, name: String, mimeType: String, action: String = Intent.ACTION_VIEW): Boolean {
     val fileName = displayFileName(path, name, mimeType)
     val copy = withContext(Dispatchers.IO) {
         runCatching {
@@ -50,8 +53,8 @@ internal suspend fun openFile(context: Context, path: String, name: String, mime
         }.getOrNull()
     } ?: return false
     val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", copy)
-    val intent = Intent(Intent.ACTION_VIEW)
-        .setDataAndType(uri, mimeTypeOf(fileName, mimeType))
+    val intent = if (action == Intent.ACTION_SEND) Intent(action).setType(mimeTypeOf(fileName, mimeType)).putExtra(Intent.EXTRA_STREAM, uri)
+        else Intent(action).setDataAndType(uri, mimeTypeOf(fileName, mimeType))
         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
     return runCatching { context.startActivity(Intent.createChooser(intent, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
 }
