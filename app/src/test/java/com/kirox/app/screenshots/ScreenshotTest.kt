@@ -111,7 +111,7 @@ class ScreenshotTest(private val palette: FusionPalette) {
     private fun Main(tab: Int = 0) = TelegramMainScreen(
         lists = TelegramChatLists(
             main = TelegramChatListState(chats, complete = true),
-            archive = TelegramChatListState(complete = true),
+            archive = TelegramChatListState(listOf(chat(20, "Старый проект", "Архивное сообщение", 3), chat(21, "Рассылка", "Скидки недели", 0)), complete = true),
             folders = listOf(TelegramFolder(1, "Работа"), TelegramFolder(2, "Семья"))
         ),
         chatActions = chatActions, chatError = null, onChatErrorShown = {},
@@ -181,9 +181,9 @@ class ScreenshotTest(private val palette: FusionPalette) {
             MessageUi(5, "Вы", MessageDirection.Outgoing, text = "Да, и видео тоже. Вечером созвонимся", time = "18:44")
         )
         androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
-        com.kirox.app.ui.components.ChatWallpaperLayer(ChatWallpaper.None, Modifier.fillMaxSize())
+        com.kirox.app.ui.components.ChatWallpaperLayer(ChatWallpaper.Theme, Modifier.fillMaxSize())
         Column(Modifier.fillMaxSize()) {
-            com.kirox.app.ui.home.BackTitle("Анна", onBack = {})
+            com.kirox.app.ui.chat.ChatHeader(com.kirox.app.ui.chat.ChatPeerUi(2, "Анна", "в сети", "А", canVoiceCall = true), onBack = {}, onProfile = {}, onOverflow = {})
             LazyColumn(Modifier.weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 10.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(appearance.messageSpacingDp.dp)) {
                 item { MessageRow(MessageUi(0, "", MessageDirection.System, text = "Сегодня", time = ""), grouped = false, appearance = appearance, onLongClick = {}, onReply = {}) }
                 items(messages.size) { i ->

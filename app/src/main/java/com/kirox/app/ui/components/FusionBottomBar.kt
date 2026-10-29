@@ -9,6 +9,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.ui.Alignment
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -38,27 +43,26 @@ fun FusionBottomBar(items: List<FusionNavItem>, selected: Int, onSelect: (Int) -
     val colors = Fusion.colors
     if (colors.backdrop != null) {
         // Fusion UI v2: a floating dock over the backdrop with labels, the active tab on a coloured pill.
-        // Expressive: a full-width dark bar; Glass: a floating translucent dock (approved PNG).
+        // Expressive: a full-width dark bar; Glass: a floating translucent dock. The active tab sits on
+        // a wide rounded plate holding icon and label, as in the approved PNG.
         val shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp)
-        NavigationBar(
-            containerColor = if (colors.glass) androidx.compose.ui.graphics.Color.Transparent else colors.background, tonalElevation = 0.dp,
-            windowInsets = if (colors.glass) androidx.compose.foundation.layout.WindowInsets(0) else androidx.compose.material3.NavigationBarDefaults.windowInsets,
-            modifier = if (colors.glass) modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp).clip(shape).fusionPanel(colors, shape)
-                else modifier.fillMaxWidth()
-        ) {
+        val container = if (colors.glass) modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp).clip(shape).fusionPanel(colors, shape)
+            else modifier.fillMaxWidth().background(colors.background).navigationBarsPadding()
+        Row(container.selectableGroup().padding(horizontal = 8.dp, vertical = 6.dp)) {
             items.forEachIndexed { index, item ->
-                NavigationBarItem(
-                    selected = index == selected,
-                    onClick = { onSelect(index) },
-                    icon = { KiroXIcon(item.icon, item.title, Modifier.size(23.dp), LocalContentColor.current) },
-                    label = { Text(item.title, maxLines = 1, style = MaterialTheme.typography.labelMedium) },
-                    alwaysShowLabel = true,
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = colors.onSelectedPill, selectedTextColor = colors.textPrimary,
-                        unselectedIconColor = colors.textSecondary, unselectedTextColor = colors.textSecondary,
-                        indicatorColor = colors.selectedPill
-                    )
-                )
+                val active = index == selected
+                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    Column(
+                        Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+                            .background(if (active) colors.selectedPill else androidx.compose.ui.graphics.Color.Transparent)
+                            .selectable(selected = active, onClick = { onSelect(index) }, role = androidx.compose.ui.semantics.Role.Tab)
+                            .padding(horizontal = 16.dp, vertical = 7.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        KiroXIcon(item.icon, null, Modifier.size(24.dp), if (active) colors.onSelectedPill else colors.textSecondary)
+                        Text(item.title, maxLines = 1, style = MaterialTheme.typography.labelMedium, color = if (active) colors.onSelectedPill else colors.textSecondary)
+                    }
+                }
             }
         }
         return

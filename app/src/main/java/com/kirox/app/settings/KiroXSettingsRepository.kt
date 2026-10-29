@@ -25,7 +25,8 @@ enum class BubbleShape(val title: String, val radiusDp: Float) { Soft("Мягк�
 
 enum class ChatTextSize(val title: String, val scale: Float) { Small("Мелкий", 0.9f), Normal("Обычный", 1f), Large("Крупный", 1.12f), Huge("Огромный", 1.25f) }
 
-enum class ChatWallpaper(val title: String) { None("Нет"), Pattern("Узор"), Gradient("Градиент"), Dots("Точки") }
+/** [Theme] is the style's own artwork (Fusion UI v2) or the plain background in classic palettes. */
+enum class ChatWallpaper(val title: String) { Theme("Тема"), None("Нет"), Pattern("Узор"), Gradient("Градиент"), Dots("Точки") }
 
 /** [spacingDp] between messages, [paddingDp] vertical padding inside a bubble. */
 enum class ChatDensity(val title: String, val spacingDp: Float, val paddingDp: Float) { Compact("Компактно", 2f, 6f), Normal("Обычно", 4f, 9f), Roomy("Свободно", 8f, 12f) }
@@ -34,7 +35,7 @@ enum class ChatDensity(val title: String, val spacingDp: Float, val paddingDp: F
 data class ChatStyle(
     val bubbleRadiusDp: Float = BubbleShape.Medium.radiusDp,
     val textScale: Float = 1f,
-    val wallpaper: ChatWallpaper = ChatWallpaper.None,
+    val wallpaper: ChatWallpaper = ChatWallpaper.Theme,
     val density: ChatDensity = ChatDensity.Normal
 )
 
@@ -120,7 +121,7 @@ class KiroXSettingsRepository(context: Context) {
         .stateIn(scope, SharingStarted.Eagerly, EffectScene.Auto)
 
     val chatTextSize: StateFlow<ChatTextSize> = enumFlow(textSizeKey, ChatTextSize.Normal)
-    val chatWallpaper: StateFlow<ChatWallpaper> = enumFlow(wallpaperKey, ChatWallpaper.None)
+    val chatWallpaper: StateFlow<ChatWallpaper> = enumFlow(wallpaperKey, ChatWallpaper.Theme)
     val chatDensity: StateFlow<ChatDensity> = enumFlow(densityKey, ChatDensity.Normal)
 
     /** Back to defaults for every KiroX look-and-feel setting; Telegram data is not touched. */

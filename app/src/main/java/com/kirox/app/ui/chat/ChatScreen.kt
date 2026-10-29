@@ -147,7 +147,8 @@ internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAp
         Column(
             Modifier.widthIn(max = windowWidthDp().coerceAtLeast(320).dp * .84f)
                 .clip(shape)
-                .background(Color(if (outgoing) appearance.outgoingColor else appearance.incomingColor))
+                .background(bubbleBrush(outgoing, appearance))
+                .then(if (Fusion.colors.glass) Modifier.border(1.dp, Color(0x29FFFFFF), shape) else Modifier)
                 .combinedClickable(onClick = { onClick?.invoke() }, onLongClick = onLongClick)
                 .padding(horizontal = 12.dp, vertical = appearance.bubblePaddingDp.dp)
         ) {
@@ -244,15 +245,18 @@ internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAp
         progress = 0f
     }
     val bars = remember(waveform) { voiceBars(waveform) }
+    val v2 = Fusion.colors.backdrop != null
     val played = ChatWhite
     val rest = ChatSecondary.copy(alpha = 0.5f)
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
-            Modifier.size(38.dp).clip(CircleShape).background(Fusion.colors.surface3).clickable(enabled = path != null) { path?.let { VoicePlayer.toggle(context, it) } },
+            Modifier.size(38.dp).clip(CircleShape).background(if (v2) Color.White.copy(alpha = 0.94f) else Fusion.colors.surface3).clickable(enabled = path != null) { path?.let { VoicePlayer.toggle(context, it) } },
             contentAlignment = Alignment.Center
         ) {
-            if (path == null) androidx.compose.material3.CircularProgressIndicator(Modifier.size(16.dp), color = ChatWhite, strokeWidth = 2.dp)
-            else Text(if (playing) "❚❚" else "▶", color = ChatWhite, fontSize = 13.sp)
+            // v2: white play disc as in the approved PNG.
+            val glyph = if (v2) Fusion.colors.outgoingBubble else ChatWhite
+            if (path == null) androidx.compose.material3.CircularProgressIndicator(Modifier.size(16.dp), color = glyph, strokeWidth = 2.dp)
+            else Text(if (playing) "❚❚" else "▶", color = glyph, fontSize = 13.sp)
         }
         Spacer(Modifier.width(9.dp))
         Column {
@@ -312,20 +316,34 @@ private fun deliveryGlyph(state: DeliveryState) = when (state) { DeliveryState.S
 @Composable
 internal fun ChatComposer(value: TextFieldValue, reply: MessageUi?, editing: MessageUi?, onValueChange: (TextFieldValue) -> Unit, onCancelContext: () -> Unit, onAttach: () -> Unit, onEmoji: () -> Unit, onSend: () -> Unit, onMic: () -> Unit, appearance: ChatAppearance) {
     val animate = com.kirox.app.ui.theme.LocalMotionFactor.current > 0f
-    Surface(color = Fusion.colors.background) {
+    // Over the v2 artwork the composer floats; classic palettes keep a solid strip.
+    Surface(color = if (Fusion.colors.backdrop != null) Color.Transparent else Fusion.colors.background) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
             AnimatedVisibility(reply != null || editing != null, enter = if (animate) fadeIn() + expandVertically() else EnterTransition.None, exit = if (animate) fadeOut() + shrinkVertically() else ExitTransition.None) { (editing ?: reply)?.let { context -> Row(Modifier.fillMaxWidth().background(Fusion.colors.surface1).padding(horizontal = 14.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.width(2.dp).height(34.dp).background(ChatWhite)); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(if (editing != null) "Редактирование сообщения" else "Ответ: ${context.author}", color = ChatWhite, fontSize = 11.sp); Text(context.text, color = ChatSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }; androidx.compose.material3.IconButton(onClick = onCancelContext) { Text("×", color = ChatSecondary, fontSize = 22.sp) } } } }
+            // Fusion UI v2 (approved PNG): a rounded field with emoji and attach, the mic / send button
+            // as a separate accent circle beside it; classic palettes keep everything in one pill.
+            val v2 = Fusion.colors.backdrop != null
+            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.Bottom) {
             Surface(
                 color = Color(appearance.inputColor), shape = RoundedCornerShape(26.dp),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp).border(1.dp, Fusion.colors.outline, RoundedCornerShape(26.dp))
+                modifier = Modifier.weight(1f).border(1.dp, if (Fusion.colors.glass) Color(0x2EFFFFFF) else Fusion.colors.outline, RoundedCornerShape(26.dp))
             ) {
                 // Emoji and stickers on the left, attachments and send/voice on the right, as in Telegram.
                 Row(verticalAlignment = Alignment.Bottom) {
                     ChatIconButton(KiroXIcon.Emoji, "Эмодзи и стикеры", onEmoji)
                     TextField(value, onValueChange, modifier = Modifier.weight(1f).heightIn(min = 48.dp, max = 140.dp), placeholder = { Text("Сообщение", color = ChatSecondary, fontSize = 16.sp) }, colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent, focusedTextColor = ChatWhite, unfocusedTextColor = ChatWhite, cursorColor = ChatWhite), maxLines = 5)
                     AnimatedVisibility(value.text.isBlank(), enter = if (animate) fadeIn() + expandHorizontally() else EnterTransition.None, exit = if (animate) fadeOut() + shrinkHorizontally() else ExitTransition.None) { ChatIconButton(KiroXIcon.Attach, "Вложения", onAttach) }
-                    AnimatedContent(value.text.isNotBlank(), transitionSpec = { if (animate) (fadeIn() + scaleIn()).togetherWith(fadeOut() + scaleOut()) else EnterTransition.None.togetherWith(ExitTransition.None) }, label = "send_mic") { hasText -> if (hasText) SendButton(onSend) else ChatIconButton(KiroXIcon.Voice, "Голосовое сообщение", onMic) }
+                    if (!v2) AnimatedContent(value.text.isNotBlank(), transitionSpec = { if (animate) (fadeIn() + scaleIn()).togetherWith(fadeOut() + scaleOut()) else EnterTransition.None.togetherWith(ExitTransition.None) }, label = "send_mic") { hasText -> if (hasText) SendButton(onSend) else ChatIconButton(KiroXIcon.Voice, "Голосовое сообщение", onMic) }
                 }
+            }
+            if (v2) {
+                Spacer(Modifier.width(8.dp))
+                val hasText = value.text.isNotBlank()
+                androidx.compose.material3.FilledIconButton(
+                    onClick = if (hasText) onSend else onMic, modifier = Modifier.size(50.dp),
+                    colors = androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(containerColor = Fusion.colors.accent, contentColor = Fusion.colors.onAccent)
+                ) { IconGlyph(if (hasText) KiroXIcon.Send else KiroXIcon.Voice, if (hasText) "Отправить" else "Голосовое сообщение", Modifier.size(22.dp), Fusion.colors.onAccent) }
+            }
             }
         }
     }
@@ -495,4 +513,16 @@ internal val DEFAULT_REACTIONS = listOf("❤", "👍", "🔥", "😁", "👏")
 internal fun windowWidthDp(): Int {
     val px = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize.width
     return with(androidx.compose.ui.platform.LocalDensity.current) { px.toDp().value.toInt() }
+}
+
+/**
+ * Bubble fill: in Fusion UI v2 outgoing bubbles get a soft diagonal gradient and incoming ones are
+ * slightly translucent over the artwork (approved PNG); classic palettes stay flat.
+ */
+@Composable
+private fun bubbleBrush(outgoing: Boolean, appearance: ChatAppearance): androidx.compose.ui.graphics.Brush {
+    val base = Color(if (outgoing) appearance.outgoingColor else appearance.incomingColor)
+    if (Fusion.colors.backdrop == null) return androidx.compose.ui.graphics.SolidColor(base)
+    return if (outgoing) androidx.compose.ui.graphics.Brush.linearGradient(listOf(androidx.compose.ui.graphics.lerp(base, Color.White, 0.16f), base))
+    else androidx.compose.ui.graphics.SolidColor(base.copy(alpha = minOf(base.alpha, 0.86f)))
 }

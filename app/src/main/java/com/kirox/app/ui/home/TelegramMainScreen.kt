@@ -308,16 +308,19 @@ private fun ChatsTab(
     }
     Box(Modifier.fillMaxSize().nestedScroll(fabScroll)) {
     Column(Modifier.fillMaxSize()) {
-        ChatsHeader(
-            status = connectionTitle(connection),
-            onSearch = { searching = true }, onNewMessage = onNewMessage,
-            onOpenContacts = onOpenContacts, onReadAll = { confirmReadAll = true }
-        )
-        SearchPill("Поиск") { searching = true }
-        val postStory = rememberStoryPoster { onNotice(UiNotice(it)) }
-        StoriesRow(storyChats, profile?.name.orEmpty(), profile?.photo, onOpenStories) { postStory() }
-        val archiveUnread = lists.archive.chats.count { it.unreadCount > 0 || it.isMarkedUnread }
-        SectionTabs(listOf((if (archiveUnread > 0) "Архив · $archiveUnread" else "Архив") to RealChatSection.Archive, "Сообщения" to RealChatSection.Messages), section) { section = it }
+        // Approved PNG: the archive is a row at the end of the chat list and opens as its own page.
+        androidx.activity.compose.BackHandler(enabled = section == RealChatSection.Archive) { section = RealChatSection.Messages }
+        if (section == RealChatSection.Archive) BackTitle("Архив", onBack = { section = RealChatSection.Messages })
+        else {
+            ChatsHeader(
+                status = connectionTitle(connection),
+                onSearch = { searching = true }, onNewMessage = onNewMessage,
+                onOpenContacts = onOpenContacts, onReadAll = { confirmReadAll = true }
+            )
+            SearchPill("Поиск") { searching = true }
+            val postStory = rememberStoryPoster { onNotice(UiNotice(it)) }
+            StoriesRow(storyChats, profile?.name.orEmpty(), profile?.photo, onOpenStories) { postStory() }
+        }
         var creatingFolder by remember { mutableStateOf(false) }
         var deletingFolder by remember { mutableStateOf<com.kirox.app.telegram.TelegramFolder?>(null) }
         if (creatingFolder) CreateFolderDialog(lists.main.chats, onDismiss = { creatingFolder = false }) { onNotice(UiNotice(it)) }
@@ -343,9 +346,10 @@ private fun ChatsTab(
             // A type filter may hide most of a page: keep loading until the list is complete.
             LoadMoreEffect(listState, state.chats.size, state.complete) { actions.loadMore(listKey) }
             if (activeKind != null && state.chats.size < 20 && !state.complete && !state.loading) LaunchedEffect(loaded.chats.size) { actions.loadMore(listKey) }
+            val archiveRow = listKey == TelegramChatListKey.Main && activeKind == null && lists.archive.chats.isNotEmpty()
             when {
                 state.chats.isEmpty() && !state.complete -> CenteredProgress()
-                state.chats.isEmpty() -> EmptyState(
+                state.chats.isEmpty() && !archiveRow -> EmptyState(
                     when (listKey) {
                         TelegramChatListKey.Archive -> "Архив пуст"
                         is TelegramChatListKey.Folder -> "В этой папке нет чатов"
@@ -359,6 +363,7 @@ private fun ChatsTab(
                         }
                     }
                     if (state.loading) item { Box(Modifier.fillMaxWidth().padding(16.dp), Alignment.Center) { CircularProgressIndicator(Modifier.size(22.dp), color = Fusion.colors.textSecondary, strokeWidth = 2.dp) } }
+                    if (archiveRow) item(key = "archive_row") { ArchiveRow(lists.archive) { section = RealChatSection.Archive } }
                     // Room under the last chat so the button never covers it.
                     item { Spacer(Modifier.height(88.dp)) }
                 }
@@ -456,6 +461,34 @@ private fun FolderChip(title: String, selected: Boolean, onLongClick: (() -> Uni
         fontSize = 14.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1,
         modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(background)
             .combinedClickable(onLongClick = onLongClick, onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp)
+    )
+}
+
+/** «Архив · N чатов» row with the number of unread archived chats. */
+@Composable
+private fun ArchiveRow(archive: com.kirox.app.telegram.TelegramChatListState, onClick: () -> Unit) {
+    val unread = archive.chats.count { it.unreadCount > 0 || it.isMarkedUnread }
+    val n = archive.chats.size
+    val count = when {
+        !archive.complete -> "Архивные чаты"
+        n % 10 == 1 && n % 100 != 11 -> "$n чат"
+        n % 10 in 2..4 && n % 100 !in 12..14 -> "$n чата"
+        else -> "$n чатов"
+    }
+    androidx.compose.material3.ListItem(
+        headlineContent = { Text("Архив", fontWeight = FontWeight.SemiBold, maxLines = 1) },
+        supportingContent = { Text(count, maxLines = 1) },
+        leadingContent = {
+            Box(Modifier.size(54.dp).clip(CircleShape).background(Fusion.colors.surface2), contentAlignment = Alignment.Center) {
+                IconGlyph(KiroXIcon.Folder, null, Modifier.size(24.dp), Fusion.colors.textPrimary)
+            }
+        },
+        trailingContent = if (unread > 0) ({
+            Text(compactCount(unread), color = Fusion.colors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clip(CircleShape).background(Fusion.colors.surface3).padding(horizontal = 9.dp, vertical = 3.dp))
+        }) else null,
+        colors = fusionListColors(),
+        modifier = Modifier.clickable(onClickLabel = "Открыть архив", onClick = onClick)
     )
 }
 
@@ -807,27 +840,6 @@ private fun HeaderAction(icon: KiroXIcon, description: String, onClick: () -> Un
     }
 }
 
-@Composable
-private fun <T> SectionTabs(tabs: List<Pair<String, T>>, selected: T, onSelect: (T) -> Unit) {
-    // Material 3 tabs, left-aligned like before, with the rounded primary indicator.
-    androidx.compose.material3.PrimaryScrollableTabRow(
-        selectedTabIndex = tabs.indexOfFirst { it.second == selected }.coerceAtLeast(0),
-        edgePadding = 6.dp,
-        containerColor = androidx.compose.ui.graphics.Color.Transparent,
-        contentColor = Fusion.colors.textPrimary,
-        divider = {}
-    ) {
-        tabs.forEach { (label, value) ->
-            androidx.compose.material3.Tab(
-                selected = value == selected,
-                onClick = { onSelect(value) },
-                text = { Text(label, style = androidx.compose.material3.MaterialTheme.typography.titleMedium, maxLines = 1) },
-                selectedContentColor = Fusion.colors.textPrimary,
-                unselectedContentColor = Fusion.colors.textTertiary
-            )
-        }
-    }
-}
 
 @Composable
 private fun SearchField(value: String, hint: String, autoFocus: Boolean = false, focusTrigger: Int = 0, onChange: (String) -> Unit) {

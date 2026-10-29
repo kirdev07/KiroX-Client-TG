@@ -56,62 +56,77 @@ private const val IN_PROGRESS = "В разработке"
 @Composable
 internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Unit, onOpenCustomization: () -> Unit, onOpenUpdates: () -> Unit, onOpenDevices: () -> Unit, onEditProfile: () -> Unit, onOpenSection: (String) -> Unit, onNotice: (String) -> Unit, onOpenContacts: () -> Unit = {}) {
     val pickPhoto = rememberProfilePhotoPicker(onNotice)
+    val context = androidx.compose.ui.platform.LocalContext.current
     var showAccounts by remember { mutableStateOf(false) }
+    var menu by remember { mutableStateOf(false) }
     if (showAccounts) AccountsSheet { showAccounts = false }
-    // Rows in grouped cards, Fusion UI v2 style.
+    // Three compact groups in the order of the approved Fusion PNG.
     val groups = listOf(
-        "Аккаунт" to listOf(KiroXIcon.ProfileCircle to "Мой профиль", KiroXIcon.Contacts to "Контакты", KiroXIcon.Devices to "Устройства"),
-        "Оформление" to listOf(KiroXIcon.Palette to "Кастомизация", KiroXIcon.Chats to "Чаты и папки", KiroXIcon.Sliders to "Возможности KiroX"),
-        "Telegram" to listOf(KiroXIcon.Bell to "Уведомления", KiroXIcon.Shield to "Конфиденциальность", KiroXIcon.Storage to "Данные и память", KiroXIcon.Star to "Telegram Premium"),
-        "Приложение" to listOf(KiroXIcon.Settings to "Дополнительно", KiroXIcon.Refresh to "Обновления", KiroXIcon.Info to "О KiroX")
+        listOf(KiroXIcon.Profile to "Изменить профиль", KiroXIcon.Star to "Telegram Premium"),
+        listOf(KiroXIcon.Bell to "Уведомления и звуки", KiroXIcon.Shield to "Конфиденциальность", KiroXIcon.Storage to "Данные и память", KiroXIcon.Palette to "Оформление", KiroXIcon.Link to "Язык"),
+        listOf(KiroXIcon.Sliders to "KiroX Настройки", KiroXIcon.Info to "Помощь", KiroXIcon.Refresh to "О приложении")
     )
     // Search filters the rows by name and by what each section contains.
     var searching by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     val keywords = mapOf(
-        "Мой профиль" to "имя фото qr username выйти",
-        "Контакты" to "друзья добавить пригласить",
-        "Кастомизация" to "тема цвет пузыри анимации обои шрифт стекло expressive glass",
-        "Чаты и папки" to "чат обои размер текста плотность",
-        "Уведомления" to "звук вибрация превью",
+        "Изменить профиль" to "имя фото username био",
+        "Оформление" to "тема цвет пузыри анимации обои шрифт стекло expressive glass чаты папки",
+        "Уведомления и звуки" to "звук вибрация превью",
         "Конфиденциальность" to "приватность номер телефона время захода фото звонки приглашения",
         "Данные и память" to "кэш память хранилище очистить",
-        "Устройства" to "сеансы сессии выйти",
-        "Дополнительно" to "язык сброс выход лицензии",
-        "Обновления" to "версия бета github"
+        "KiroX Настройки" to "сброс журнал ошибок выход лицензии",
+        "О приложении" to "версия обновления бета github"
     )
     fun matches(title: String) = query.isBlank() || title.contains(query, true) || keywords[title]?.contains(query, true) == true
-    val shown = groups.map { (name, rows) -> name to rows.filter { matches(it.second) } }.filter { it.second.isNotEmpty() }
+    val shown = groups.map { rows -> rows.filter { matches(it.second) } }.filter { it.isNotEmpty() }
+    fun open(title: String) = when (title) {
+        "Изменить профиль" -> onEditProfile()
+        "Telegram Premium" -> onOpenSection("Telegram Premium")
+        "Уведомления и звуки" -> onOpenSection("Уведомления")
+        "Конфиденциальность" -> onOpenSection("Конфиденциальность")
+        "Данные и память" -> onOpenSection("Данные и память")
+        "Оформление" -> onOpenCustomization()
+        "Язык", "KiroX Настройки" -> onOpenSection("Дополнительно")
+        "Помощь" -> runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://telegram.org/faq"))) }
+            .getOrElse { onNotice("Не удалось открыть telegram.org/faq") }.let { }
+        else -> onOpenUpdates()
+    }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
             Box {
+                if (Fusion.colors.glass) com.kirox.app.ui.components.FusionArtHeader(Modifier.matchParentSize())
                 SeasonalLayer(Modifier.matchParentSize())
                 Column {
-                    ScreenTitle("Настройки", seasonal = false) { TitleAction(KiroXIcon.Search, "Поиск настроек") { searching = !searching; if (!searching) query = "" } }
+                    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        TitleAction(KiroXIcon.Search, "Поиск настроек") { searching = !searching; if (!searching) query = "" }
+                        Spacer(Modifier.weight(1f))
+                        Box {
+                            TitleAction(KiroXIcon.More, "Ещё") { menu = true }
+                            DropdownMenu(menu, { menu = false }, modifier = Modifier.background(Fusion.colors.surface2)) {
+                                listOf("Мой профиль" to onOpenProfile, "Аккаунты" to { showAccounts = true }, "Контакты" to onOpenContacts, "Устройства" to onOpenDevices, "Чаты и папки" to { onOpenSection("Чаты и папки") })
+                                    .forEach { (title, action) -> DropdownMenuItem(text = { Text(title, color = Fusion.colors.textPrimary) }, onClick = { menu = false; action() }) }
+                            }
+                        }
+                    }
                     if (searching) com.kirox.app.ui.components.FusionSearchField(query, { query = it }, "Поиск настроек", Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-                    ProfileHeader(profile, onEdit = onEditProfile, onAccounts = { showAccounts = true }, onAvatar = onOpenProfile, onCamera = pickPhoto)
+                    ProfileHeader(profile, onAvatar = onOpenProfile, onCamera = pickPhoto)
                 }
             }
         }
         if (shown.isEmpty()) item { Text("Ничего не найдено", color = Fusion.colors.textSecondary, modifier = Modifier.padding(20.dp)) }
-        items(shown, key = { it.first }) { (name, rows) ->
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
-                Text(name, color = Fusion.colors.textSecondary, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 6.dp, bottom = 6.dp))
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).fusionPanel(Fusion.colors, RoundedCornerShape(22.dp))) {
-                    rows.forEachIndexed { index, (icon, title) ->
-                        if (index > 0) HorizontalDivider(Modifier.padding(start = 72.dp), color = Fusion.colors.outline)
-                        TileRow(icon, title, trailing = if (title == "Обновления") BuildConfig.VERSION_NAME else null) {
-                            when (title) {
-                                "Мой профиль" -> onOpenProfile()
-                                "Контакты" -> onOpenContacts()
-                                "Кастомизация" -> onOpenCustomization()
-                                "Обновления" -> onOpenUpdates()
-                                "Устройства" -> onOpenDevices()
-                                "О KiroX" -> onNotice("KiroX ${BuildConfig.VERSION_NAME} — независимый клиент Telegram на TDLib")
-                                else -> onOpenSection(title)
-                            }
-                        }
+        items(shown.size) { index ->
+            val rows = shown[index]
+            Column(Modifier.padding(horizontal = 14.dp, vertical = 5.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp)).fusionPanel(Fusion.colors, RoundedCornerShape(20.dp))) {
+                rows.forEachIndexed { i, (icon, title) ->
+                    if (i > 0) HorizontalDivider(Modifier.padding(start = 56.dp), color = Fusion.colors.outline)
+                    val trailing = when (title) {
+                        "Язык" -> "Русский"
+                        "Telegram Premium" -> if (profile?.isPremium == true) "Активен" else null
+                        "О приложении" -> BuildConfig.VERSION_NAME
+                        else -> null
                     }
+                    TileRow(icon, title, trailing = trailing, plainIcon = true) { open(title) }
                 }
             }
         }
@@ -119,45 +134,35 @@ internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Uni
 }
 
 @Composable
-private fun ProfileHeader(profile: TelegramUserProfile?, onEdit: () -> Unit, onAccounts: () -> Unit, onAvatar: () -> Unit, onCamera: () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(96.dp)) {
-            Box(Modifier.size(96.dp).border(1.5.dp, Fusion.colors.outlineStrong, CircleShape).padding(4.dp).clip(CircleShape).clickable(onClick = onAvatar), contentAlignment = Alignment.Center) {
-                TelegramAvatar(profile?.name.orEmpty(), profile?.photo, 88.dp)
-            }
+private fun ProfileHeader(profile: TelegramUserProfile?, onAvatar: () -> Unit, onCamera: () -> Unit) {
+    // Approved PNG: a ringed round avatar, name and a short line under it; actions live in the cards.
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.size(104.dp)) {
             Box(
-                Modifier.align(Alignment.BottomEnd).size(32.dp).clip(CircleShape).background(Fusion.colors.surface2).border(3.dp, Fusion.colors.background, CircleShape).clickable(onClick = onCamera),
+                Modifier.size(104.dp).border(2.dp, androidx.compose.ui.graphics.Brush.linearGradient(listOf(Fusion.colors.accent, Fusion.colors.outlineStrong)), CircleShape).padding(5.dp).clip(CircleShape).clickable(onClickLabel = "Открыть профиль", onClick = onAvatar),
                 contentAlignment = Alignment.Center
-            ) { IconGlyph(KiroXIcon.Camera, "Сменить фото", Modifier.size(16.dp), Fusion.colors.textPrimary) }
+            ) { TelegramAvatar(profile?.name.orEmpty(), profile?.photo, 94.dp) }
+            Box(
+                Modifier.align(Alignment.BottomEnd).size(30.dp).clip(CircleShape).background(Fusion.colors.surface2).border(3.dp, Fusion.colors.background, CircleShape).clickable(onClick = onCamera),
+                contentAlignment = Alignment.Center
+            ) { IconGlyph(KiroXIcon.Camera, "Сменить фото", Modifier.size(15.dp), Fusion.colors.textPrimary) }
         }
         Spacer(Modifier.height(10.dp))
-        Text(profile?.name ?: "Загрузка…", color = Fusion.colors.textPrimary, fontSize = 21.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        profile?.username?.let { Text("@$it", color = Fusion.colors.textSecondary, fontSize = 14.sp) }
-        Spacer(Modifier.height(12.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Row(
-                Modifier.clip(CircleShape).background(Fusion.colors.surface2).clickable(onClick = onEdit).heightIn(min = 44.dp).padding(horizontal = 18.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconGlyph(KiroXIcon.Edit, null, Modifier.size(17.dp), Fusion.colors.textPrimary)
-                Spacer(Modifier.width(8.dp))
-                Text("Редактировать профиль", color = Fusion.colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            }
-            Spacer(Modifier.width(8.dp))
-            Box(Modifier.size(44.dp).clip(CircleShape).background(Fusion.colors.surface2).clickable(onClick = onAccounts), contentAlignment = Alignment.Center) {
-                IconGlyph(KiroXIcon.Contacts, "Переключить аккаунт", Modifier.size(20.dp), Fusion.colors.textPrimary)
-            }
-        }
+        Text(profile?.name ?: "Загрузка…", color = Fusion.colors.textPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        // Only real data: @username from TDLib (no invented online status).
+        profile?.username?.let { Text("@$it", color = Fusion.colors.accent, fontSize = 14.sp) }
+        Spacer(Modifier.height(10.dp))
     }
 }
 
 /** Settings row as a Material 3 list item: icon in a Fusion tile, title, value and chevron. */
 @Composable
-internal fun TileRow(icon: KiroXIcon, title: String, trailing: String? = null, onClick: () -> Unit) {
+internal fun TileRow(icon: KiroXIcon, title: String, trailing: String? = null, plainIcon: Boolean = false, onClick: () -> Unit) {
     androidx.compose.material3.ListItem(
         headlineContent = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         leadingContent = {
-            Box(Modifier.size(40.dp).clip(MaterialTheme.shapes.small).background(Fusion.colors.iconContainer), contentAlignment = Alignment.Center) {
+            if (plainIcon) IconGlyph(icon, null, Modifier.size(22.dp), Fusion.colors.textPrimary)
+            else Box(Modifier.size(40.dp).clip(MaterialTheme.shapes.small).background(Fusion.colors.iconContainer), contentAlignment = Alignment.Center) {
                 IconGlyph(icon, null, Modifier.size(21.dp), Fusion.colors.textPrimary)
             }
         },
@@ -323,7 +328,7 @@ private fun <T> PillSegment(options: List<T>, selected: T, label: (T) -> String,
 private fun LivePreview(
     radius: Float,
     textScale: Float = 1f,
-    wallpaper: com.kirox.app.settings.ChatWallpaper = com.kirox.app.settings.ChatWallpaper.None,
+    wallpaper: com.kirox.app.settings.ChatWallpaper = com.kirox.app.settings.ChatWallpaper.Theme,
     density: com.kirox.app.settings.ChatDensity = com.kirox.app.settings.ChatDensity.Normal
 ) {
     Column(

@@ -19,7 +19,8 @@ fun ChatWallpaperLayer(wallpaper: ChatWallpaper, modifier: Modifier = Modifier, 
     // Expressive and Glass have their own tinted conversation background under every pattern.
     val base = colors.chatWallpaper?.let { Modifier.background(Brush.verticalGradient(it)) } ?: Modifier.background(colors.background)
     when (wallpaper) {
-        ChatWallpaper.None -> Box(modifier.then(base))
+        ChatWallpaper.Theme -> if (colors.chatWallpaper != null) FusionArt(modifier) else Box(modifier.background(colors.background))
+        ChatWallpaper.None -> Box(modifier.background(colors.background))
         ChatWallpaper.Gradient -> Box(modifier.background(Brush.verticalGradient(colors.chatWallpaper ?: listOf(colors.surface2, colors.background, colors.surface1))))
         ChatWallpaper.Dots -> Canvas(modifier.then(base)) {
             val step = 18.dp.toPx() * patternScale
