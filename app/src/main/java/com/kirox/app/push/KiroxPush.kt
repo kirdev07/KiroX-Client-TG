@@ -53,8 +53,14 @@ class KiroxPush(private val context: Context, private val client: TelegramClient
     }
 
     fun onUnifiedEndpoint(endpoint: String) {
+        if (prefs.getString(KEY_ENDPOINT, null) == endpoint) return
         prefs.edit().putString(KEY_ENDPOINT, endpoint).apply()
         registerWebPush(endpoint)
+    }
+
+    /** The distributor dropped us (uninstalled, user action): forget the endpoint so it is not re-registered. */
+    fun onUnifiedUnregistered() {
+        prefs.edit().remove(KEY_ENDPOINT).apply()
     }
 
     /**
@@ -151,10 +157,13 @@ object UnifiedPush {
 class UnifiedPushReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val push = context.push
-        // Only the distributor can address this receiver. A registration left from an earlier install
-        // may carry an older token, and its messages must still wake the app.
+        // The receiver is exported, so any app can send to it: only broadcasts carrying the secret
+        // token we gave the distributor are trusted. Others could redirect pushes or drain the battery.
+        if (intent.getStringExtra("token") != push.unifiedToken()) return
         when (intent.action) {
-            "org.unifiedpush.android.connector.NEW_ENDPOINT" -> intent.getStringExtra("endpoint")?.let(push::onUnifiedEndpoint)
+            "org.unifiedpush.android.connector.NEW_ENDPOINT" -> intent.getStringExtra("endpoint")
+                ?.takeIf { it.startsWith("https://") }?.let(push::onUnifiedEndpoint)
+            "org.unifiedpush.android.connector.UNREGISTERED" -> push.onUnifiedUnregistered()
             "org.unifiedpush.android.connector.MESSAGE" -> {
                 // Keep the process alive while TDLib syncs; returning at once lets Android kill it.
                 val pending = goAsync()

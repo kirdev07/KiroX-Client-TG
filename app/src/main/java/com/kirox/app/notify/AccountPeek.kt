@@ -60,10 +60,14 @@ class AccountPeek(context: Context) {
                 }
                 is TdApi.UpdateNewChat -> titles[update.chat.id] = update.chat.title
                 is TdApi.UpdateChatTitle -> titles[update.chatId] = update.title
-                is TdApi.UpdateNotificationGroup -> update.addedNotifications.forEach { notification ->
-                    val type = notification.type as? TdApi.NotificationTypeNewMessage ?: return@forEach
-                    if (notification.isSilent) return@forEach
-                    show(account, update.notificationGroupId, titles[update.chatId].orEmpty(), if (type.showPreview) messagePreview(type.message) else "Новое сообщение")
+                is TdApi.UpdateNotificationGroup -> {
+                    update.addedNotifications.forEach { notification ->
+                        val type = notification.type as? TdApi.NotificationTypeNewMessage ?: return@forEach
+                        if (notification.isSilent) return@forEach
+                        show(account, update.notificationGroupId, titles[update.chatId].orEmpty(), if (type.showPreview) messagePreview(type.message) else "Новое сообщение")
+                    }
+                    // Read on another device: the group is empty, its notification goes away.
+                    if (update.totalCount == 0) runCatching { NotificationManagerCompat.from(appContext).cancel(tagOf(account), update.notificationGroupId) }
                 }
                 else -> Unit
             }
@@ -101,10 +105,10 @@ class AccountPeek(context: Context) {
     private fun show(account: TelegramAccount, groupId: Int, chatTitle: String, text: String) {
         if (Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(appContext, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return
         val accountLabel = account.title.ifBlank { account.phone.ifBlank { "Другой аккаунт" } }
-        val tag = "kirox-account-${account.session}"
+        val tag = tagOf(account)
         val open = PendingIntent.getActivity(
             appContext, (account.session.hashCode() xor groupId),
-            Intent(appContext, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra(EXTRA_SESSION, account.session),
+            Intent(appContext, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra(EXTRA_SESSION, account.session).putExtra(EXTRA_KEY, secret(appContext)),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val notification = NotificationCompat.Builder(appContext, MessageNotifications.CHANNEL)
@@ -119,9 +123,19 @@ class AccountPeek(context: Context) {
         runCatching { NotificationManagerCompat.from(appContext).notify(tag, groupId, notification) }
     }
 
+    private fun tagOf(account: TelegramAccount) = "kirox-account-${account.session}"
+
     companion object {
         /** Intent extra: the account to open when the notification is tapped. */
         const val EXTRA_SESSION = "kirox.session"
+        /** Intent extra proving the intent came from our own notification, not another app. */
+        const val EXTRA_KEY = "kirox.session_key"
+
+        /** Random per-install secret; MainActivity is exported, so the session extra alone is not trusted. */
+        fun secret(context: Context): String {
+            val prefs = context.getSharedPreferences("kirox_peek", Context.MODE_PRIVATE)
+            return prefs.getString("secret", null) ?: java.util.UUID.randomUUID().toString().also { prefs.edit().putString("secret", it).apply() }
+        }
         private const val GROUPS = 10
         private const val GROUP_SIZE = 5
         private const val LOCK_MARGIN_MS = 20_000L

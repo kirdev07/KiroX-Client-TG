@@ -23,9 +23,23 @@ class KeepConnectedService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (!isEnabled(this) || !promote()) { stopSelf(); return START_NOT_STICKY }
+        // startForeground comes first even when stopping: a service started with
+        // startForegroundService that stops without it is reported as a crash.
+        val promoted = promote()
+        if (!isEnabled(this) || !promoted) {
+            running = false
+            if (promoted) stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        running = true
         (application as KiroXApplication).telegram.client.start()
         return START_STICKY
+    }
+
+    override fun onDestroy() {
+        running = false
+        super.onDestroy()
     }
 
     private fun promote(): Boolean {
@@ -55,6 +69,10 @@ class KeepConnectedService : Service() {
         private const val ID = 7301
         private const val PREFS = "kirox_push"
         private const val KEY = "keep_connected"
+
+        /** True while the service really runs in the foreground; the setting alone does not keep TDLib alive. */
+        @Volatile var running = false
+            private set
 
         fun isEnabled(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY, false)
 

@@ -206,6 +206,15 @@ fun KiroXApp() {
         }
     }
 
+    // A tapped message notification opens its chat once the chat list is up.
+    val notificationChat by com.kirox.app.notify.NotificationTarget.chat.collectAsStateWithLifecycle()
+    LaunchedEffect(notificationChat, authRevision) {
+        val target = notificationChat ?: return@LaunchedEffect
+        if (telegramAuth != TelegramAuthState.Ready || stack.current.graph != NavGraph.Main) return@LaunchedEffect
+        com.kirox.app.notify.NotificationTarget.chat.value = null
+        openChat(target)
+    }
+
     BackHandler(enabled = stack.canPop) { stack.pop() }
 
     Box(Modifier.fillMaxSize().background(Fusion.colors.background)) {

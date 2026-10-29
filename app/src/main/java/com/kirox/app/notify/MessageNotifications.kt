@@ -101,10 +101,20 @@ class MessageNotifications(
             .setStyle(style)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setOnlyAlertOnce(!alert)
+            // On a secure lock screen only "new message" shows, not the text.
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(
+                NotificationCompat.Builder(context, CHANNEL)
+                    .setSmallIcon(android.R.drawable.stat_notify_chat)
+                    .setContentTitle("KiroX")
+                    .setContentText("Новое сообщение")
+                    .build()
+            )
             .setAutoCancel(true)
             .setContentIntent(
                 PendingIntent.getActivity(
-                    context, groupId, Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                    context, groupId, Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        .putExtra(EXTRA_OPEN_CHAT, group.chatId),
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
             )
@@ -218,6 +228,8 @@ class MessageNotifications(
         private const val PAUSE_DELAY_MS = 1_500L
         internal const val EXTRA_GROUP = "group"
         internal const val EXTRA_CHAT = "chat"
+        /** MainActivity extra: the chat to open when a message notification is tapped. */
+        const val EXTRA_OPEN_CHAT = "kirox.open_chat"
         internal const val EXTRA_MESSAGES = "messages"
         internal const val EXTRA_MAX = "max"
 
@@ -261,6 +273,11 @@ class MessageActionReceiver : BroadcastReceiver() {
 }
 
 /** Whether any activity is started; notifications are not shown over the open app. */
+/** Chat a tapped notification asked to open; KiroXApp opens it once signed in and clears it. */
+object NotificationTarget {
+    val chat = kotlinx.coroutines.flow.MutableStateFlow<Long?>(null)
+}
+
 object AppVisibility {
     @Volatile var visible = false
         internal set(value) {

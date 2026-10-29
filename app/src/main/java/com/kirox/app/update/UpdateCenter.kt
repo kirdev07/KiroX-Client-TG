@@ -16,7 +16,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -70,7 +69,11 @@ class UpdateCenter(private val context: Context) {
 
     /** At most once a day, silently. */
     fun checkDaily() {
-        if (System.currentTimeMillis() - prefs.getLong(KEY_LAST_CHECK, 0) < DAY_MS) return
+        val now = System.currentTimeMillis()
+        if (now - prefs.getLong(KEY_LAST_CHECK, 0) < DAY_MS) return
+        // A failed check (offline, rate limit) is not retried on every process start, e.g. each push.
+        if (now - prefs.getLong(KEY_LAST_ATTEMPT, 0) < RETRY_MS) return
+        prefs.edit().putLong(KEY_LAST_ATTEMPT, now).apply()
         check()
     }
 
@@ -98,6 +101,12 @@ class UpdateCenter(private val context: Context) {
 
     /** Opens the system installer; asks for the "install unknown apps" permission first if needed. */
     fun install(file: File) {
+        if (!file.exists()) {
+            // The system may clear the cache between download and install.
+            val release = (_state.value as? UpdateState.Ready)?.release
+            _state.value = if (release != null) UpdateState.Available(release) else UpdateState.Idle
+            return
+        }
         if (!context.packageManager.canRequestPackageInstalls()) {
             context.startActivity(
                 Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -187,7 +196,7 @@ class UpdateCenter(private val context: Context) {
             connection.inputStream.use { input ->
                 file.outputStream().use { output ->
                     val buffer = ByteArray(64 * 1024)
-                    while (scope.isActive) {
+                    while (true) {
                         val read = input.read(buffer)
                         if (read < 0) break
                         output.write(buffer, 0, read)
@@ -245,6 +254,8 @@ class UpdateCenter(private val context: Context) {
         const val RELEASES_URL = "https://github.com/$REPO/releases"
         private const val KEY_BETA = "beta_channel"
         private const val KEY_LAST_CHECK = "last_check"
+        private const val KEY_LAST_ATTEMPT = "last_attempt"
+        private const val RETRY_MS = 3 * 60 * 60 * 1000L
         private const val KEY_ETAG = "etag"
         private const val KEY_BODY = "body"
         private const val DAY_MS = 24 * 60 * 60 * 1000L
