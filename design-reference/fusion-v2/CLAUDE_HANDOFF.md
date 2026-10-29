@@ -9,9 +9,9 @@
 
 **[Точный утверждённый оригинал 6 экранов: APPROVED_CORE_VISUAL_EXACT.md](APPROVED_CORE_VISUAL_EXACT.md)** — главный документ по Fusion Expressive и Fusion Glass. Он содержит SHA-256 оригинальной пользовательской картинки `1000084555.png` (1536×620), точную компоновку и разницу в темах.
 
-Если `assets/KiroX_Fusion_Expressive_Glass_APPROVED_ORIGINAL.png` отсутствует, **не продолжай выдавать новые screenshots за визуально согласованный дизайн**. В такой ситуации сообщи `MISSING_APPROVED_PNG` и запроси у владельца точный бинарный файл. Никакая градиентная реализация, старые изображения в `design-reference/`, Robolectric sample screenshots или HTML schematic не заменяют исходный PNG.
+**PNG теперь лежит в GitHub:** [`assets/KiroX_Fusion_Expressive_Glass_APPROVED_ORIGINAL.png`](assets/KiroX_Fusion_Expressive_Glass_APPROVED_ORIGINAL.png). Сверь SHA-256 с `APPROVED_CORE_VISUAL_EXACT.md`. Если файл в твоей рабочей копии всё же отсутствует, **не продолжай выдавать новые screenshots за визуально согласованный дизайн**. В такой ситуации сообщи `MISSING_APPROVED_PNG` и запроси у владельца точный бинарный файл. Никакая градиентная реализация, старые изображения в `design-reference/`, Robolectric sample screenshots или HTML schematic не заменяют исходный PNG.
 
-В коммите `e3d01c3` также были отключены анимации, хотя пользователь согласовал плавный Material 3 Expressive. Верни их по согласованному плану с надлежащим Reduce Motion/fallback, а не глобальным 0f. **Текущие screenshots пользователь визуально не одобрил.**
+В коммите `e3d01c3` также были отключены анимации, хотя пользователь согласовал плавный Material 3 Expressive. Верни их по согласованному плану с надлежащим Reduce Motion/fallback, а не глобальным 0f. **Текущие screenshots пользователь визуально не одобрил.** Прежде чем продолжать, сравни их с **новым загруженным оригинальным PNG** и предъяви перечень расхождений.
 
 ## Порядок чтения
 
