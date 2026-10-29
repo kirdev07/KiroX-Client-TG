@@ -64,10 +64,11 @@ import com.kirox.app.ui.theme.FusionMotion
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 
-/** The approved Fusion UI v2 dock. Contacts and the own profile are sub-screens now. */
+/** Fusion UI v2 dock in the owner's order; Chats in the middle stays the start tab. The own profile is a sub-screen. */
 private enum class MainTab(val item: FusionNavItem) {
-    Chats(FusionNavItem("Чаты", KiroXIcon.Chats)),
+    Contacts(FusionNavItem("Контакты", KiroXIcon.Contacts)),
     Calls(FusionNavItem("Звонки", KiroXIcon.Call)),
+    Chats(FusionNavItem("Чаты", KiroXIcon.Chats)),
     Stories(FusionNavItem("Истории", KiroXIcon.Stories)),
     Settings(FusionNavItem("Настройки", KiroXIcon.Tune))
 }
@@ -120,8 +121,8 @@ fun TelegramMainScreen(
     /** Screen shown first (screenshots): 0 chats, 1 calls, 2 stories, 3 settings, 4 contacts, 5 profile. */
     initialTab: Int = 0
 ) = androidx.compose.runtime.CompositionLocalProvider(com.kirox.app.ui.components.LocalSeasonalEffects provides seasonal) {
-    var tab by rememberSaveable { mutableStateOf(MainTab.entries.getOrElse(initialTab) { if (initialTab == 5) MainTab.Settings else MainTab.Chats }) }
-    var sub by rememberSaveable { mutableStateOf(when (initialTab) { 4 -> SubScreen.Contacts; 5 -> SubScreen.Profile; else -> SubScreen.None }) }
+    var tab by rememberSaveable { mutableStateOf(when (initialTab) { 1 -> MainTab.Calls; 2 -> MainTab.Stories; 3, 5 -> MainTab.Settings; 4 -> MainTab.Contacts; else -> MainTab.Chats }) }
+    var sub by rememberSaveable { mutableStateOf(if (initialTab == 5) SubScreen.Profile else SubScreen.None) }
     var notice by remember { mutableStateOf<UiNotice?>(null) }
     var viewingStoriesOf by rememberSaveable { mutableStateOf<Long?>(null) }
     val keyboardOpen = WindowInsets.isImeVisible
@@ -181,10 +182,11 @@ fun TelegramMainScreen(
                         motion, onMotion, seasonal, onSeasonal, effectScene, onEffectScene, effectsQuality, onEffectsQuality, weakDevice,
                         onBack = { sub = SubScreen.Customization }
                     )
-                    current == MainTab.Chats -> ChatsTab(lists, chatActions, connection, onOpenChat, storyChats, profile, { viewingStoriesOf = it.chatId }, onNewMessage = { sub = SubScreen.NewMessage }, onOpenContacts = { sub = SubScreen.Contacts }) { notice = it }
-                    current == MainTab.Calls -> CallsTab(calls, onLoadCalls, onOpenChat, showNotice, onStartCall, onOpenContacts = { sub = SubScreen.Contacts })
+                    current == MainTab.Chats -> ChatsTab(lists, chatActions, connection, onOpenChat, storyChats, profile, { viewingStoriesOf = it.chatId }, onNewMessage = { sub = SubScreen.NewMessage }, onOpenContacts = { tab = MainTab.Contacts; sub = SubScreen.None }) { notice = it }
+                    current == MainTab.Contacts -> ContactsTab(contacts, contactsLoading, onOpenContact, showNotice, onStartCall, onAddContact, onBack = null)
+                    current == MainTab.Calls -> CallsTab(calls, onLoadCalls, onOpenChat, showNotice, onStartCall, onOpenContacts = { tab = MainTab.Contacts; sub = SubScreen.None })
                     current == MainTab.Stories -> StoriesTab(storyChats, profile, onOpen = { viewingStoriesOf = it.chatId }, onNotice = { notice = it })
-                    else -> SettingsTab(profile, onOpenProfile = { sub = SubScreen.Profile }, onOpenContacts = { sub = SubScreen.Contacts }, onOpenCustomization = { sub = SubScreen.Customization }, onOpenUpdates = { sub = SubScreen.Updates }, onOpenDevices = { sub = SubScreen.Devices }, onEditProfile = { sub = SubScreen.ProfileEdit }, onOpenSection = { section ->
+                    else -> SettingsTab(profile, onOpenProfile = { sub = SubScreen.Profile }, onOpenContacts = { tab = MainTab.Contacts; sub = SubScreen.None }, onOpenCustomization = { sub = SubScreen.Customization }, onOpenUpdates = { sub = SubScreen.Updates }, onOpenDevices = { sub = SubScreen.Devices }, onEditProfile = { sub = SubScreen.ProfileEdit }, onOpenSection = { section ->
                         sub = when (section) {
                             "Уведомления" -> SubScreen.Notifications
                             "Конфиденциальность" -> SubScreen.Privacy
@@ -463,15 +465,9 @@ private fun FolderChip(title: String, selected: Boolean, onLongClick: (() -> Uni
 /** Chats header from the approved Fusion PNG: menu left, KiroX in the centre, search and new message right. */
 @Composable
 private fun ChatsHeader(status: String?, onSearch: () -> Unit, onNewMessage: () -> Unit, onOpenContacts: () -> Unit, onReadAll: () -> Unit) {
-    var menu by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 4.dp)) {
-        Box(Modifier.align(Alignment.CenterStart)) {
-            TitleAction(KiroXIcon.Menu, "Меню") { menu = true }
-            androidx.compose.material3.DropdownMenu(menu, { menu = false }, containerColor = Fusion.colors.surface2) {
-                androidx.compose.material3.DropdownMenuItem(text = { Text("Контакты", color = Fusion.colors.textPrimary) }, onClick = { menu = false; onOpenContacts() })
-                androidx.compose.material3.DropdownMenuItem(text = { Text("Отметить всё прочитанным", color = Fusion.colors.textPrimary) }, onClick = { menu = false; onReadAll() })
-            }
-        }
+        // Mark-all-read sits where it was before v2; Contacts moved to the dock.
+        Box(Modifier.align(Alignment.CenterStart)) { TitleAction(KiroXIcon.ReadAll, "Отметить всё прочитанным", onClick = onReadAll) }
         Text(
             status ?: "KiroX", color = Fusion.colors.textPrimary, maxLines = 1,
             style = if (status == null) androidx.compose.material3.MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold) else androidx.compose.material3.MaterialTheme.typography.titleMedium,
@@ -524,19 +520,21 @@ private fun ContactsTab(
     onNotice: (String) -> Unit,
     onStartCall: (userId: Long, isVideo: Boolean) -> Unit,
     onAddContact: suspend (phone: String, firstName: String, lastName: String) -> Long?,
-    onBack: () -> Unit
+    /** Null when Contacts is a dock tab: no back arrow then. */
+    onBack: (() -> Unit)?
 ) {
-    androidx.activity.compose.BackHandler(onBack = onBack)
+    if (onBack != null) androidx.activity.compose.BackHandler(onBack = onBack)
     var focusSearch by remember { mutableIntStateOf(0) }
     var card by remember { mutableStateOf<Long?>(null) }
     var adding by remember { mutableStateOf(false) }
     // In a private chat the chat id equals the user id.
     val call: (Long, Boolean) -> Unit = { userId, video -> if (com.kirox.app.ui.call.callsEnabled) onStartCall(userId, video) else onNotice(noCallsText) }
     Column(Modifier.fillMaxSize()) {
-        BackTitle("Контакты", onBack) {
+        val actions: @Composable RowScope.() -> Unit = {
             TitleAction(KiroXIcon.Search, "Поиск контактов") { focusSearch++ }
             TitleAction(KiroXIcon.Add, "Добавить контакт") { adding = true }
         }
+        if (onBack != null) BackTitle("Контакты", onBack, actions = actions) else ScreenTitle("Контакты", actions = actions)
         ContactsList(contacts, loading, focusSearch, onOpen = { card = it }, onCall = call, onAdd = { adding = true })
     }
     contacts.firstOrNull { it.id == card }?.let { contact ->
