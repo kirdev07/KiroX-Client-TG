@@ -53,3 +53,7 @@ Existing materials in parent directory are **older references** and conflict wit
 - [ ] TDLib actions/data: real, or clearly unavailable
 - [ ] Compilation + screenshot checks + test report included
 - [ ] Owner approves each implementation stage before merge
+
+## Согласованные дополнительные экраны — 29 октября 2026
+
+- [Авторизация и управление аккаунтами — 16 визуально утверждённых макетов](AUTH_ACCOUNTS_DRAFT.md). Splash, приветствие, телефон, код, 2FA, список аккаунтов, добавление и переключение в Expressive и Glass. Реализация ещё не выполнена.
