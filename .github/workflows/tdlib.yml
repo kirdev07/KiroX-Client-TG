@@ -4,7 +4,7 @@ name: TDLib build
 
 on:
   push:
-    branches: [main, "feature/**", "fix/**"]
+    branches: [main, "feature/**", "fix/**", "design/**"]
     paths: [tdlib.version, .github/workflows/tdlib.yml]
   workflow_dispatch:
 
