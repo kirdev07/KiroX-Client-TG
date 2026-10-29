@@ -32,7 +32,9 @@ jobs:
       - name: Render
         env:
           KIROX_SCREENSHOTS: "true"
-        run: ./gradlew --no-daemon :app:testDebugUnitTest --tests "com.kirox.app.screenshots.*" 2>&1 | tee render.log
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon :app:testDebugUnitTest --tests "com.kirox.app.screenshots.*" 2>&1 | tee render.log
 
       - name: Report failures
         if: always()
