@@ -34,7 +34,7 @@ class AccountPeek(context: Context) {
     private fun start(account: TelegramAccount, windowMs: Long) {
         val session = TelegramSessionManager(appContext, account.session)
         // Only encrypted, signed-in sessions are peeked; anything else waits for the user.
-        val key = session.keyStore.load() ?: return
+        val key = runCatching { session.keyStore.load() }.getOrNull() ?: return
         if (!session.hasDatabase) return
         val titles = HashMap<Long, String>()
         // TDLib may report its first state before Client.create returns, on its own thread: what has
@@ -42,6 +42,7 @@ class AccountPeek(context: Context) {
         val client = java.util.concurrent.atomic.AtomicReference<Client?>(null)
         val wantsParameters = java.util.concurrent.atomic.AtomicBoolean(false)
         val closeRequested = java.util.concurrent.atomic.AtomicBoolean(false)
+        val lock = java.util.concurrent.atomic.AtomicReference<Any?>(null)
         val handler = Client.ResultHandler { update ->
             when (update) {
                 is TdApi.UpdateAuthorizationState -> when (update.authorizationState) {
@@ -54,7 +55,8 @@ class AccountPeek(context: Context) {
                         c.send(TdApi.SetOption("notification_group_count_max", TdApi.OptionValueInteger(GROUPS.toLong())), null)
                         c.send(TdApi.SetOption("notification_group_size_max", TdApi.OptionValueInteger(GROUP_SIZE.toLong())), null)
                     }
-                    is TdApi.AuthorizationStateClosed -> com.kirox.app.telegram.SessionLocks.release(account.session)
+                    // Only our own hold: after the forced timeout the account may belong to the main client.
+                    is TdApi.AuthorizationStateClosed -> lock.get()?.let { com.kirox.app.telegram.SessionLocks.release(account.session, it) }
                     is TdApi.AuthorizationStateWaitPhoneNumber, is TdApi.AuthorizationStateLoggingOut -> client.get()?.send(TdApi.Close(), null)
                     else -> Unit
                 }
@@ -75,9 +77,10 @@ class AccountPeek(context: Context) {
         val close = { if (closeRequested.compareAndSet(false, true)) client.get()?.send(TdApi.Close(), null) }
         // Held by the main client (the user opened this account) or another peek: leave it alone.
         // Freed by force after the window and a margin if this client never reaches Closed.
-        if (!com.kirox.app.telegram.SessionLocks.acquire(account.session, windowMs + LOCK_MARGIN_MS) { close() }) return
+        val handle = com.kirox.app.telegram.SessionLocks.acquireHandle(account.session, windowMs + LOCK_MARGIN_MS) { close() } ?: return
+        lock.set(handle)
         val created = runCatching { Client.create(handler, null, null) }.getOrNull()
-        if (created == null) { com.kirox.app.telegram.SessionLocks.release(account.session); return }
+        if (created == null) { com.kirox.app.telegram.SessionLocks.release(account.session, handle); return }
         client.set(created)
         if (wantsParameters.compareAndSet(true, false)) created.send(parameters(session, key), null)
         // A close asked for before the client existed could not be sent: send it now.

@@ -22,15 +22,25 @@ class TelegramAccounts(context: Context) {
         get() = prefs.getString(KEY_ACTIVE, null)?.takeIf { s -> _accounts.value.any { it.session == s } } ?: PRIMARY
         set(value) { prefs.edit().putString(KEY_ACTIVE, value).apply() }
 
-    /** New empty slot; returns its session name. */
+    /** New empty slot; returns its session name. It stays "pending" until signed in. */
     fun create(): String {
         val session = "session-${System.currentTimeMillis()}"
+        prefs.edit().putBoolean("pending_$session", true).apply()
         save(_accounts.value + TelegramAccount(session, "", ""))
         return session
     }
 
+    /** True for a slot added with [create] that has never been signed in. */
+    fun isPending(session: String): Boolean = prefs.getBoolean("pending_$session", false)
+
+    /** The slot is signed in: it is a real account now and is never discarded as an abandoned sign-in. */
+    fun confirm(session: String) {
+        if (isPending(session)) prefs.edit().remove("pending_$session").apply()
+    }
+
     fun remove(session: String) {
         if (session == PRIMARY && _accounts.value.size == 1) return
+        prefs.edit().remove("pending_$session").apply()
         save(_accounts.value.filterNot { it.session == session })
     }
 

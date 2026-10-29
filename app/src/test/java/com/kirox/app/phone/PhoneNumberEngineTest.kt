@@ -46,4 +46,18 @@ class PhoneNumberEngineTest {
         val visible = engine.formatNational("7011234567", kz.regionCode)
         assertEquals("701123456", engine.nationalDigits(visible.dropLast(1), kz))
     }
+
+    @Test
+    fun `national prefix is not sent after the country code`() {
+        assertEquals("+77011234567", engine.international("KZ", "87011234567"))
+        assertEquals("+77011234567", engine.international("KZ", "7011234567"))
+        assertEquals("+447911123456", engine.international("GB", "07911123456"))
+    }
+
+    @Test
+    fun `Italian leading zero is kept`() {
+        val it = Country("IT", "Италия", 39)
+        assertEquals("0612345678", engine.nationalDigits("+39 06 1234 5678", it))
+        assertEquals("+390612345678", engine.international("IT", "0612345678"))
+    }
 }

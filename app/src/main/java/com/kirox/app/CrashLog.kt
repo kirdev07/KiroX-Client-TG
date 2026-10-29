@@ -6,8 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import java.io.File
-import java.io.PrintWriter
-import java.io.StringWriter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -32,6 +30,11 @@ object CrashLog {
         }
         // Reading exit reasons touches disk: off the main thread.
         Thread { runCatching { recordExitReasons(app) } }.start()
+    }
+
+    /** A caught error that the app survived, written like a crash so it can be reported. */
+    fun record(context: Context, title: String, error: Throwable) {
+        runCatching { write(context.applicationContext, title, stackTrace(error)) }
     }
 
     /** Native crashes, ANRs and low-memory kills since the last start, as Android reports them. */
@@ -89,7 +92,21 @@ object CrashLog {
         context.startActivity(Intent.createChooser(intent, "Отправить журнал").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
-    private fun stackTrace(error: Throwable): String = StringWriter().also { error.printStackTrace(PrintWriter(it)) }.toString()
+    /**
+     * Exception types and stack frames only. Messages are left out: they may carry message text,
+     * file paths or ids, and the journal can be shared.
+     */
+    private fun stackTrace(error: Throwable): String = buildString {
+        var current: Throwable? = error
+        var depth = 0
+        val seen = HashSet<Throwable>()
+        while (current != null && depth < 8 && seen.add(current)) {
+            append(if (depth == 0) "" else "Caused by: ").append(current.javaClass.name).append('\n')
+            current.stackTrace.take(40).forEach { append("    at ").append(it.toString()).append('\n') }
+            current = current.cause
+            depth++
+        }
+    }
 
     private fun format(time: Long) = SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault()).format(Date(time))
 }

@@ -58,7 +58,7 @@ fun TelegramAuthStepScreen(state: TelegramAuthState, repository: TelegramAuthRep
     val recovering = state is TelegramAuthState.WaitPassword && recoveryCodeSent
 
     val isPassword = state is TelegramAuthState.WaitPassword && !recovering
-    val numeric = state is TelegramAuthState.WaitCode || state is TelegramAuthState.WaitEmailCode
+    val numeric = (state is TelegramAuthState.WaitCode && !state.words) || state is TelegramAuthState.WaitEmailCode
     val title = when (state) {
         is TelegramAuthState.WaitCode -> "Код подтверждения"
         is TelegramAuthState.WaitPassword -> if (recovering) "Восстановление пароля" else "Облачный пароль"
@@ -157,7 +157,7 @@ fun TelegramAuthStepScreen(state: TelegramAuthState, repository: TelegramAuthRep
                     onValueChange = { raw ->
                         val value = if (numeric || recovering) raw.filter(Char::isDigit) else raw
                         val max = when (state) {
-                            is TelegramAuthState.WaitCode -> state.length.takeIf { it > 0 } ?: 12
+                            is TelegramAuthState.WaitCode -> state.length.takeIf { it > 0 } ?: if (state.words) 128 else 12
                             is TelegramAuthState.WaitEmailCode -> state.length.takeIf { it > 0 } ?: 12
                             else -> 128
                         }

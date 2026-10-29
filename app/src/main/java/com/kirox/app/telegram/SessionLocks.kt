@@ -16,18 +16,28 @@ object SessionLocks {
      * holder to let go. With [timeoutMs], the lock is freed by force if the holder never releases it
      * (a client that never reached Closed must not block the account forever).
      */
-    fun acquire(session: String, timeoutMs: Long = 0, close: () -> Unit): Boolean {
+    fun acquire(session: String, timeoutMs: Long = 0, close: () -> Unit): Boolean = acquireHandle(session, timeoutMs, close) != null
+
+    /**
+     * Like [acquire], but returns a handle (null when held by someone else). A holder that may be
+     * freed by the timeout releases with [release] and its handle, so a late release never frees
+     * whoever took the session after it.
+     */
+    fun acquireHandle(session: String, timeoutMs: Long = 0, close: () -> Unit): Any? {
         val holder = Holder(close)
         synchronized(this) {
-            if (holders.containsKey(session)) return false
+            if (holders.containsKey(session)) return null
             holders[session] = holder
         }
         if (timeoutMs > 0) timer.postDelayed({ release(session, holder) }, timeoutMs)
-        return true
+        return holder
     }
 
     /** Called by the holder once its client has closed; runs whatever waited for the session. */
     fun release(session: String) = release(session, null)
+
+    /** Releases [session] only if [handle] still holds it. */
+    fun release(session: String, handle: Any) = release(session, handle as? Holder ?: return)
 
     private fun release(session: String, only: Holder?) {
         val waiting = synchronized(this) {

@@ -251,7 +251,7 @@ fun KiroXApp() {
                             onQrLogin = telegramViewModel.auth::requestQr,
                             externalStatus = telegramBlocked ?: (telegramAuth as? TelegramAuthState.Blocked)?.message ?: telegramError,
                             busy = telegramBusy,
-                            onCancel = if (accounts.size > 1) tdClient::cancelNewAccount else null
+                            onCancel = if (accounts.size > 1 && tdClient.isAddingAccount()) tdClient::cancelNewAccount else null
                         )
                         Screen.Countries -> CountryPickerScreen(state, onBack = { stack.pop() })
                         Screen.AuthStep -> TelegramAuthStepScreen(telegramAuth, telegramViewModel.auth, telegramBusy, telegramError, recoveryCodeSent)

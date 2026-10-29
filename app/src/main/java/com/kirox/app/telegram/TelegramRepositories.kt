@@ -68,7 +68,9 @@ class TelegramAuthRepository(private val client: TelegramClient) {
                     is TdApi.AuthenticationCodeTypeCall -> CodeDestination.Call
                     is TdApi.AuthenticationCodeTypeFragment -> CodeDestination.Fragment
                     else -> CodeDestination.Other
-                }
+                },
+                // A word or a phrase sent by SMS instead of digits.
+                words = state.codeInfo.type is TdApi.AuthenticationCodeTypeSmsWord || state.codeInfo.type is TdApi.AuthenticationCodeTypeSmsPhrase
             )
             is TdApi.AuthorizationStateWaitPassword -> TelegramAuthState.WaitPassword(
                 state.passwordHint.orEmpty(), state.hasRecoveryEmailAddress, state.recoveryEmailAddressPattern.orEmpty()

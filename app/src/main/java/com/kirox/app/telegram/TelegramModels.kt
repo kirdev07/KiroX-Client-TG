@@ -3,7 +3,7 @@ package com.kirox.app.telegram
 sealed interface TelegramAuthState {
     data object Initializing : TelegramAuthState
     data object WaitPhoneNumber : TelegramAuthState
-    data class WaitCode(val phoneNumber: String, val length: Int, val canResend: Boolean, val timeout: Int, val sentTo: CodeDestination = CodeDestination.Other) : TelegramAuthState
+    data class WaitCode(val phoneNumber: String, val length: Int, val canResend: Boolean, val timeout: Int, val sentTo: CodeDestination = CodeDestination.Other, val words: Boolean = false) : TelegramAuthState
     data class WaitPassword(val hint: String, val hasRecoveryEmail: Boolean, val recoveryEmailPattern: String) : TelegramAuthState
     data object WaitEmailAddress : TelegramAuthState
     data class WaitEmailCode(val length: Int, val emailPattern: String = "") : TelegramAuthState

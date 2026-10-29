@@ -61,6 +61,8 @@ class CountryResolver(private val context: Context) {
         return phoneEngine.formatNational(digits, country.regionCode)
     }
 
+    fun international(country: Country, digits: String): String? = phoneEngine.international(country.regionCode, digits)
+
     fun validation(country: Country, digits: String): PhoneValidation {
         return phoneEngine.validation(country.regionCode, digits)
     }

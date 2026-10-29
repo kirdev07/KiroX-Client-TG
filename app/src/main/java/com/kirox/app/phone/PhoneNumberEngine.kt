@@ -28,7 +28,8 @@ internal class PhoneNumberEngine(
         val normalized = normalize(raw)
         if (!normalized.startsWith("+")) return normalized.filter(Char::isDigit).take(18)
         return runCatching {
-            phoneUtil.parse(normalized, "ZZ").nationalNumber.toString()
+            // Keeps an Italian-style leading zero, which nationalNumber drops.
+            phoneUtil.getNationalSignificantNumber(phoneUtil.parse(normalized, "ZZ"))
         }.getOrElse {
             normalized.drop(1).removePrefix(country.callingCode.toString()).filter(Char::isDigit)
         }.take(18)
@@ -51,6 +52,14 @@ internal class PhoneNumberEngine(
             else -> PhoneValidation.Invalid
         }
     }
+
+    /**
+     * The number as Telegram expects it (+77011234567). A national prefix typed by habit
+     * ("8 701…", "07911…") is dropped instead of being sent after the country code.
+     */
+    fun international(regionCode: String, digits: String): String? = runCatching {
+        phoneUtil.format(phoneUtil.parse(digits, regionCode), PhoneNumberUtil.PhoneNumberFormat.E164)
+    }.getOrNull()
 
     private fun normalize(raw: String) = raw.trim().replace(Regex("[^+\\d]"), "")
 }
