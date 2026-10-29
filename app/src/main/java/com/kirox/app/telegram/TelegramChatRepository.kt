@@ -14,6 +14,8 @@ class TelegramChatRepository(private val client: TelegramClient) {
     private var folders: List<TelegramFolder> = emptyList()
     private val loading = HashSet<TelegramChatListKey>()
     private val complete = HashSet<TelegramChatListKey>()
+    private val wanted = HashSet<TelegramChatListKey>()
+    private val failures = HashMap<TelegramChatListKey, Int>()
     private var publishScheduled = false
     private var myId = 0L
 
@@ -153,7 +155,10 @@ class TelegramChatRepository(private val client: TelegramClient) {
                     requestPage(TelegramChatListKey.Archive)
                 }
                 is TdApi.AuthorizationStateClosed -> {
-                    chatsById.clear(); folders = emptyList(); loading.clear(); complete.clear(); forumSupergroups.clear()
+                    // A background pause keeps the list on screen; it is refreshed on Ready.
+                    // Logout and account switch start from nothing.
+                    if (!client.paused) { chatsById.clear(); folders = emptyList(); forumSupergroups.clear() }
+                    loading.clear(); complete.clear(); wanted.clear(); failures.clear()
                     schedulePublish()
                 }
             }
@@ -185,15 +190,37 @@ class TelegramChatRepository(private val client: TelegramClient) {
     }
 
     private fun requestPage(key: TelegramChatListKey) {
-        if (key in loading || key in complete) return
+        if (key in complete) return
+        // Asked again while a page is loading: load the next one right after it.
+        if (key in loading) { wanted += key; return }
         loading += key
         schedulePublish()
-        client.send(TdApi.LoadChats(key.toTd(), PAGE_SIZE)) { result ->
+        val sent = client.send(TdApi.LoadChats(key.toTd(), PAGE_SIZE)) { result ->
             loading -= key
-            // 404: every chat of the list is already known.
-            if (result is TdApi.Error && result.code == 404) complete += key
+            val again = wanted.remove(key)
+            when {
+                // 404: every chat of the list is already known.
+                result is TdApi.Error && result.code == 404 -> complete += key
+                result is TdApi.Error -> {
+                    // Network or flood errors: try again a little later, a few times.
+                    val tries = (failures[key] ?: 0) + 1
+                    failures[key] = tries
+                    if (tries <= 3) client.post(2_000L * tries) { requestPage(key) }
+                }
+                else -> {
+                    failures.remove(key)
+                    // TDLib may answer with a short page (only pinned chats): fill the screen anyway.
+                    if (again || countIn(key) < MIN_FILL) client.post { requestPage(key) }
+                }
+            }
             schedulePublish()
         }
+        if (!sent) loading -= key
+    }
+
+    private fun countIn(key: TelegramChatListKey): Int {
+        val list = key.toTd()
+        return chatsById.values.count { chat -> chat.positions.any { sameChatList(it.list, list) && it.order != 0L } }
     }
 
     private fun mutate(id: Long, block: (TdApi.Chat) -> Unit) {
@@ -228,6 +255,7 @@ class TelegramChatRepository(private val client: TelegramClient) {
     }
 
     private companion object {
+        const val MIN_FILL = 30
         const val PAGE_SIZE = 50
         const val PUBLISH_DELAY_MS = 32L
         const val SEARCH_LIMIT = 50

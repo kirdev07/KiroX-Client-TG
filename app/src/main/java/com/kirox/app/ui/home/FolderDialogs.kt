@@ -25,7 +25,6 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun CreateFolderDialog(chats: List<TelegramChatItem>, onDismiss: () -> Unit, onNotice: (String) -> Unit) {
     val repo = (LocalContext.current.applicationContext as KiroXApplication).telegram.chats
-    val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf("") }
     var picked by remember { mutableStateOf(setOf<Long>()) }
     AlertDialog(
@@ -51,7 +50,8 @@ internal fun CreateFolderDialog(chats: List<TelegramChatItem>, onDismiss: () -> 
         confirmButton = {
             TextButton(enabled = name.isNotBlank() && picked.isNotEmpty(), onClick = {
                 onDismiss()
-                scope.launch {
+                // The dialog is gone right after this: its own scope would cancel the request.
+                com.kirox.app.AppScope.launch {
                     runCatching { repo.createFolder(name.trim(), picked.toList()) }
                         .onSuccess { onNotice("Папка создана") }.onFailure { onNotice("Не удалось создать папку") }
                 }
@@ -64,7 +64,6 @@ internal fun CreateFolderDialog(chats: List<TelegramChatItem>, onDismiss: () -> 
 @Composable
 internal fun DeleteFolderDialog(folder: TelegramFolder, onDismiss: () -> Unit, onNotice: (String) -> Unit) {
     val repo = (LocalContext.current.applicationContext as KiroXApplication).telegram.chats
-    val scope = rememberCoroutineScope()
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Fusion.colors.surface2,
@@ -73,7 +72,7 @@ internal fun DeleteFolderDialog(folder: TelegramFolder, onDismiss: () -> Unit, o
         confirmButton = {
             TextButton(onClick = {
                 onDismiss()
-                scope.launch { runCatching { repo.deleteFolder(folder.id) }.onSuccess { onNotice("Папка удалена") }.onFailure { onNotice("Не удалось удалить папку") } }
+                com.kirox.app.AppScope.launch { runCatching { repo.deleteFolder(folder.id) }.onSuccess { onNotice("Папка удалена") }.onFailure { onNotice("Не удалось удалить папку") } }
             }) { Text("Удалить", color = Fusion.colors.textPrimary) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Отмена", color = Fusion.colors.textSecondary) } }

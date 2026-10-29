@@ -728,8 +728,13 @@ internal fun NewMessageScreen(
                         Modifier.fillMaxWidth().clickable {
                             when {
                                 picking -> members = if (checked) members - contact.id else members + contact.id
-                                mode == NewChatMode.Secret -> scope.launch {
-                                    runCatching { chats.createSecretChat(contact.id) }.onSuccess(onOpenChat).onFailure { onNotice("Не удалось создать секретный чат") }
+                                // One tap, one chat: a double tap would start two secret chats.
+                                mode == NewChatMode.Secret -> if (!busy) {
+                                    busy = true
+                                    scope.launch {
+                                        runCatching { chats.createSecretChat(contact.id) }.onSuccess(onOpenChat).onFailure { onNotice("Не удалось создать секретный чат") }
+                                        busy = false
+                                    }
                                 }
                                 else -> onOpenContact(contact.id)
                             }
@@ -994,13 +999,15 @@ internal fun rememberProfilePhotoPicker(onNotice: (String) -> Unit): () -> Unit 
             val path = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 runCatching {
                     val out = java.io.File(context.cacheDir, "profile_photo_${System.currentTimeMillis()}.jpg")
-                    context.contentResolver.openInputStream(uri)?.use { input -> out.outputStream().use { input.copyTo(it) } }
+                    val input = context.contentResolver.openInputStream(uri) ?: error("no stream")
+                    input.use { out.outputStream().use { output -> it.copyTo(output) } }
                     out.absolutePath
                 }.getOrNull()
             }
             if (path == null) { onNotice("Не удалось прочитать фото"); return@launch }
             onNotice("Загружаю фото…")
             runCatching { users.setProfilePhoto(path) }
+                .also { java.io.File(path).delete() } // TDLib copied it while uploading.
                 .onSuccess { onNotice("Фото профиля обновлено") }
                 .onFailure { onNotice("Не удалось обновить фото") }
         }
@@ -1019,6 +1026,18 @@ internal fun ProfileEditScreen(profile: TelegramUserProfile?, onBack: () -> Unit
     var last by rememberSaveable(profile?.id) { mutableStateOf(profile?.lastName.orEmpty()) }
     var bio by rememberSaveable(profile?.id) { mutableStateOf(profile?.bio.orEmpty()) }
     var username by rememberSaveable(profile?.id) { mutableStateOf(profile?.username.orEmpty()) }
+    // What the fields were filled from. The bio arrives a moment after the name: an untouched field
+    // follows the profile, and saving compares with this, so a late bio is never sent back as "".
+    var base by remember(profile?.id) { mutableStateOf(profile) }
+    LaunchedEffect(profile) {
+        val now = profile ?: return@LaunchedEffect
+        val was = base
+        if (first == was?.firstName.orEmpty()) first = now.firstName
+        if (last == was?.lastName.orEmpty()) last = now.lastName
+        if (bio == was?.bio.orEmpty()) bio = now.bio
+        if (username == was?.username.orEmpty()) username = now.username.orEmpty()
+        base = now
+    }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val pickPhoto = rememberProfilePhotoPicker(onNotice)
@@ -1051,7 +1070,7 @@ internal fun ProfileEditScreen(profile: TelegramUserProfile?, onBack: () -> Unit
                     .clickable(enabled = canSave) {
                         busy = true; error = null
                         scope.launch {
-                            runCatching { users.updateProfile(first.trim(), last.trim(), bio.trim(), username.trim(), profile) }
+                            runCatching { users.updateProfile(first.trim(), last.trim(), bio.trim(), username.trim(), base) }
                                 .onSuccess { onNotice("Профиль сохранён"); onBack() }
                                 .onFailure { error = (it as? com.kirox.app.telegram.TdException)?.let { e -> profileError(e.message.orEmpty()) } ?: "Не удалось сохранить профиль" }
                             busy = false

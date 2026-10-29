@@ -249,21 +249,22 @@ private fun ChatsTab(
         }
         return
     }
-    menuFor?.let { chat ->
-        ChatContextSheet(
-            chat, onDismiss = { menuFor = null },
-            onPin = { actions.setPinned(if (chat.archived) TelegramChatListKey.Archive else TelegramChatListKey.Main, chat.id, !chat.isPinned) },
-            onRead = { toggleRead(chat) },
-            onArchive = { archive(chat) }
-        )
-    }
     var section by rememberSaveable { mutableStateOf(RealChatSection.Messages) }
     var folderId by rememberSaveable { mutableStateOf<Int?>(null) }
-    if (folderId != null && lists.folders.none { it.id == folderId }) folderId = null
+    // Folders arrive a moment after start: a saved folder is dropped only once the list is known.
+    if (folderId != null && (lists.folders.isNotEmpty() || lists.main.chats.isNotEmpty()) && lists.folders.none { it.id == folderId }) folderId = null
     val listKey: TelegramChatListKey = when {
         section == RealChatSection.Archive -> TelegramChatListKey.Archive
         folderId != null -> TelegramChatListKey.Folder(folderId!!)
         else -> TelegramChatListKey.Main
+    }
+    menuFor?.let { chat ->
+        ChatContextSheet(
+            chat, onDismiss = { menuFor = null },
+            onPin = { actions.setPinned(if (chat.archived) TelegramChatListKey.Archive else listKey, chat.id, !chat.isPinned) },
+            onRead = { toggleRead(chat) },
+            onArchive = { archive(chat) }
+        )
     }
     val state = lists[listKey]
     if (confirmReadAll) {
@@ -330,8 +331,9 @@ private fun LoadMoreEffect(listState: LazyListState, count: Int, complete: Boole
     val latest by rememberUpdatedState(loadMore)
     LaunchedEffect(listState, complete) {
         if (complete) return@LaunchedEffect
-        snapshotFlow { listState.layoutInfo.let { info -> info.totalItemsCount == 0 || (info.visibleItemsInfo.lastOrNull()?.index ?: 0) >= info.totalItemsCount - 10 } }
-            .distinctUntilChanged().filter { it }.collect { latest() }
+        // With the item count in the key, staying near the end after a page arrived asks for the next one.
+        snapshotFlow { listState.layoutInfo.let { info -> (info.totalItemsCount == 0 || (info.visibleItemsInfo.lastOrNull()?.index ?: 0) >= info.totalItemsCount - 10) to info.totalItemsCount } }
+            .distinctUntilChanged().filter { it.first }.collect { latest() }
     }
     LaunchedEffect(count) { if (!complete && listState.layoutInfo.visibleItemsInfo.size >= count) latest() }
 }

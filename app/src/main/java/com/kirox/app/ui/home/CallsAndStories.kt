@@ -84,6 +84,11 @@ internal fun CallsList(state: TelegramCallsState, onLoadMore: () -> Unit, onOpen
     val listState = rememberLazyListState()
     LaunchedEffect(Unit) { onLoadMore() }
     PagingEffect(listState, state.complete, onLoadMore)
+    // A page of 50 calls can fold into a few rows, or none for "Пропущенные": keep loading until the
+    // screen is filled or the history ends, without waiting for a scroll that cannot happen.
+    LaunchedEffect(shown.size, state.loading, state.complete) {
+        if (!state.complete && !state.loading && shown.size < 20) onLoadMore()
+    }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CallFilter.entries.forEach { value ->
@@ -112,8 +117,9 @@ private fun PagingEffect(listState: LazyListState, complete: Boolean, loadMore: 
     val latest by rememberUpdatedState(loadMore)
     LaunchedEffect(listState, complete) {
         if (complete) return@LaunchedEffect
-        snapshotFlow { listState.layoutInfo.let { (it.visibleItemsInfo.lastOrNull()?.index ?: 0) >= it.totalItemsCount - 10 } }
-            .distinctUntilChanged().filter { it }.collect { latest() }
+        // The item count is part of the key: near the end after a new page arrived asks again.
+        snapshotFlow { listState.layoutInfo.let { ((it.visibleItemsInfo.lastOrNull()?.index ?: 0) >= it.totalItemsCount - 10) to it.totalItemsCount } }
+            .distinctUntilChanged().filter { it.first }.collect { latest() }
     }
 }
 

@@ -15,6 +15,7 @@ class TelegramCallRepository(private val client: TelegramClient, private val cha
     private var loading = false
     private var complete = false
     private var started = false
+    private var failures = 0
 
     private val _state = MutableStateFlow(TelegramCallsState())
     val state: StateFlow<TelegramCallsState> = _state.asStateFlow()
@@ -29,7 +30,9 @@ class TelegramCallRepository(private val client: TelegramClient, private val cha
                     update.messageIds.forEach { calls.remove(key(update.chatId, it)) }; publish()
                 }
                 is TdApi.UpdateAuthorizationState -> if (update.authorizationState is TdApi.AuthorizationStateClosed) {
-                    calls.clear(); nextOffset = ""; loading = false; complete = false; started = false
+                    // Pending requests died with the client; a background pause keeps the list.
+                    if (client.paused) { loading = false; return@addUpdateHandler }
+                    calls.clear(); nextOffset = ""; loading = false; complete = false; started = false; failures = 0
                     _state.value = TelegramCallsState()
                 }
             }
@@ -46,11 +49,13 @@ class TelegramCallRepository(private val client: TelegramClient, private val cha
             loading = false
             when (result) {
                 is TdApi.FoundMessages -> {
+                    failures = 0
                     result.messages.filterNotNull().forEach { calls[key(it)] = it }
                     nextOffset = result.nextOffset.orEmpty()
                     if (nextOffset.isEmpty() || result.messages.isEmpty()) complete = true
                 }
-                is TdApi.Error -> complete = true
+                // A network failure is retried a few times instead of ending the history for the session.
+                is TdApi.Error -> if (++failures <= 3) client.post(3_000L * failures) { loadMore() } else complete = true
             }
             publish()
         }

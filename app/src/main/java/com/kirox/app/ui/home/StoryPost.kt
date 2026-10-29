@@ -27,7 +27,6 @@ import kotlinx.coroutines.withContext
 internal fun rememberStoryPoster(onNotice: (String) -> Unit): () -> Unit {
     val context = LocalContext.current
     val stories = (context.applicationContext as KiroXApplication).telegram.stories
-    val scope = rememberCoroutineScope()
     var picked by remember { mutableStateOf<Uri?>(null) }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { picked = it }
     picked?.let { uri ->
@@ -52,7 +51,8 @@ internal fun rememberStoryPoster(onNotice: (String) -> Unit): () -> Unit {
             confirmButton = {
                 TextButton(onClick = {
                     picked = null
-                    scope.launch {
+                    // Not tied to the chat list: switching tabs while a video is copied must not drop the story.
+                    com.kirox.app.AppScope.launch {
                         val path = withContext(Dispatchers.IO) { copyToCache(context, uri) }
                         if (path == null) { onNotice("Не удалось прочитать файл"); return@launch }
                         val isVideo = context.contentResolver.getType(uri)?.startsWith("video/") == true

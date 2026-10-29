@@ -22,7 +22,7 @@ class TelegramStoryRepository(
             when (update) {
                 is TdApi.UpdateAuthorizationState -> when (update.authorizationState) {
                     is TdApi.AuthorizationStateReady -> loadActive(remaining = MAX_PAGES)
-                    is TdApi.AuthorizationStateClosed -> { active.clear(); _chats.value = emptyList() }
+                    is TdApi.AuthorizationStateClosed -> if (!client.paused) { active.clear(); _chats.value = emptyList() }
                 }
                 is TdApi.UpdateChatActiveStories -> {
                     val stories = update.activeStories

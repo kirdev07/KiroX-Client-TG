@@ -62,7 +62,10 @@ fun rememberTelegramBitmap(file: TelegramFileRef?, sizePx: Int, priority: Int = 
     }
     val path by pathFlow.collectAsState()
     val bitmap by produceState(AvatarCache.peek(path, sizePx), path, sizePx) {
-        if (path != null && value == null) value = withContext(Dispatchers.IO) { AvatarCache.load(path!!, sizePx) }
+        // A new photo (changed avatar, next story) must not keep showing the previous one.
+        val current = path
+        value = AvatarCache.peek(current, sizePx)
+        if (current != null && value == null) value = withContext(Dispatchers.IO) { AvatarCache.load(current, sizePx) }
     }
     return bitmap
 }
@@ -96,6 +99,8 @@ private object AvatarCache {
         BitmapFactory.decodeFile(path, bounds)
         var sample = 1
         while (bounds.outWidth / (sample * 2) >= sizePx && bounds.outHeight / (sample * 2) >= sizePx) sample *= 2
+        // Very long or tall pictures: the long side is limited too, so one image cannot take tens of MB.
+        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > sizePx * 4) sample *= 2
         BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()
     }.getOrNull()?.also { cache.put("$path@$sizePx", it) }
 }
