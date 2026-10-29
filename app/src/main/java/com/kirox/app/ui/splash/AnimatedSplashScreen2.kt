@@ -15,6 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -120,6 +121,30 @@ fun AnimatedSplashScreen2(
             mode = SeasonalMode.Splash
         )
 
+        if (com.kirox.app.ui.theme.Fusion.colors.backdrop != null) {
+            // Fusion v2 «Заставка» (approved auth board): glow, plane mark, KiroX, progress and version.
+            val violet = com.kirox.app.ui.theme.Fusion.colors.accent
+            Box(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Brush.radialGradient(listOf(violet.copy(alpha = .30f * particleIntro), Color.Transparent), radius = 1400f)))
+            Column(Modifier.align(Alignment.Center).graphicsLayer { alpha = logoReveal; scaleX = .94f + .06f * logoReveal; scaleY = .94f + .06f * logoReveal }, horizontalAlignment = Alignment.CenterHorizontally) {
+                com.kirox.app.ui.icons.KiroXIcon(com.kirox.app.ui.icons.KiroXIcon.Send, null, Modifier.size(72.dp), Color.White)
+                Spacer(Modifier.height(14.dp))
+                Text("KiroX", color = Color.White, fontSize = 40.sp, fontWeight = FontWeight.Bold)
+                Text("Telegram Client", color = Color(0xFFB9B3C9), fontSize = 16.sp)
+            }
+            Column(
+                Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal = 56.dp, vertical = 48.dp).graphicsLayer { alpha = indicatorIntro },
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(Modifier.fillMaxWidth().height(4.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = .12f))) {
+                    Box(Modifier.fillMaxHeight().fillMaxWidth(((ms % 1600) / 1600f).coerceAtLeast(.08f)).clip(androidx.compose.foundation.shape.RoundedCornerShape(2.dp)).background(violet))
+                }
+                Spacer(Modifier.height(14.dp))
+                Text("Загрузка…", color = Color.White, fontSize = 14.sp)
+                Spacer(Modifier.height(6.dp))
+                Text("Версия ${com.kirox.app.BuildConfig.VERSION_NAME}", color = Color(0xFF8E8A99), fontSize = 13.sp)
+            }
+            return@Box
+        }
         Column(
             modifier = Modifier.align(Alignment.Center),
             horizontalAlignment = Alignment.CenterHorizontally
