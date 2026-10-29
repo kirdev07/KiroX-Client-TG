@@ -165,6 +165,28 @@ class TelegramChatRepository(private val client: TelegramClient) {
         }.getOrDefault(TelegramProfileInfo())
     }
 
+    /** Members of a group with their role; null for chats without a member list (users, channels you do not run). */
+    suspend fun members(chatId: Long): List<TelegramMember>? {
+        val type = onDispatcher { chatsById[chatId]?.type }
+        val raw: List<TdApi.ChatMember> = runCatching {
+            when (type) {
+                is TdApi.ChatTypeBasicGroup -> client.query(TdApi.GetBasicGroupFullInfo(type.basicGroupId)).members.toList()
+                is TdApi.ChatTypeSupergroup -> if (type.isChannel) return null else client.query(TdApi.GetSupergroupMembers(type.supergroupId, TdApi.SupergroupMembersFilterRecent(), 0, MEMBERS_LIMIT)).members.toList()
+                else -> return null
+            }
+        }.getOrElse { return null }
+        return raw.mapNotNull { member ->
+            val userId = (member.memberId as? TdApi.MessageSenderUser)?.userId ?: return@mapNotNull null
+            val user = runCatching { client.query(TdApi.GetUser(userId)) }.getOrNull() ?: return@mapNotNull null
+            val role = when (member.status) {
+                is TdApi.ChatMemberStatusCreator -> "Создатель"
+                is TdApi.ChatMemberStatusAdministrator -> "Администратор"
+                else -> ""
+            }
+            TelegramMember(userId, listOf(user.firstName, user.lastName).filter { it.isNotBlank() }.joinToString(" ").ifBlank { "Удалённый аккаунт" }, user.profilePhoto?.small?.toRef(), user.status.toStatus(), role)
+        }.sortedWith(compareBy({ if (it.role.isBlank()) 1 else 0 }, { it.name }))
+    }
+
     /** Newest photos/videos, files, voice notes or links of a chat, for the profile tabs. */
     suspend fun sharedMedia(chatId: Long, kind: SharedMediaKind): List<TelegramSharedItem> {
         val filter: TdApi.SearchMessagesFilter = when (kind) {
@@ -412,3 +434,7 @@ data class TelegramSharedItem(
 )
 
 private const val SHARED_LIMIT = 60
+
+data class TelegramMember(val userId: Long, val name: String, val photo: TelegramFileRef?, val status: TelegramUserStatus, val role: String)
+
+private const val MEMBERS_LIMIT = 200

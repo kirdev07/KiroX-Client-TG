@@ -64,6 +64,10 @@ internal fun PeerProfileScreen(
     var info by remember(chatId) { mutableStateOf(TelegramProfileInfo()) }
     var tab by remember { mutableStateOf(SharedMediaKind.Media) }
     var items by remember(chatId, tab) { mutableStateOf<List<TelegramSharedItem>?>(null) }
+    // Groups get «Участники» before the media tabs (approved groups board).
+    var members by remember(chatId) { mutableStateOf<List<com.kirox.app.telegram.TelegramMember>?>(null) }
+    var showMembers by remember(chatId) { mutableStateOf(false) }
+    LaunchedEffect(chatId) { members = chats.members(chatId); showMembers = members != null }
     LaunchedEffect(chatId) { info = chats.profileInfo(chatId) }
     LaunchedEffect(chatId, tab) { items = chats.sharedMedia(chatId, tab) }
     val accent = Fusion.colors.accent
@@ -114,18 +118,29 @@ internal fun PeerProfileScreen(
             }
         }
         item(span = { GridItemSpan(3) }) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                SharedMediaKind.entries.forEach { kind ->
-                    val selected = kind == tab
-                    Text(
-                        kind.title, color = if (selected) Fusion.colors.onAccent else Fusion.colors.textSecondary, fontSize = 14.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center,
-                        modifier = Modifier.weight(1f).clip(CircleShape).background(if (selected) accent else Color.Transparent).clickable { tab = kind }.padding(vertical = 8.dp)
-                    )
-                }
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                @Composable fun TabChip(title: String, selected: Boolean, onClick: () -> Unit) = Text(
+                    title, color = if (selected) Fusion.colors.onAccent else Fusion.colors.textSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center, maxLines = 1,
+                    modifier = Modifier.weight(1f).clip(CircleShape).background(if (selected) accent else Color.Transparent).clickable(onClick = onClick).padding(vertical = 8.dp)
+                )
+                if (members != null) TabChip("Участники", showMembers) { showMembers = true }
+                SharedMediaKind.entries.forEach { kind -> TabChip(kind.title, !showMembers && kind == tab) { showMembers = false; tab = kind } }
             }
         }
         val list = items
+        val people = members
         when {
+            showMembers && people != null -> items(people, key = { "u${it.userId}" }, span = { GridItemSpan(3) }) { member ->
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    TelegramAvatar(member.name, member.photo, 44.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(member.name, color = Fusion.colors.textPrimary, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(TelegramFormat.status(member.status), color = if (member.status == com.kirox.app.telegram.TelegramUserStatus.Online) accent else Fusion.colors.textSecondary, fontSize = 13.sp)
+                    }
+                    if (member.role.isNotBlank()) Text(member.role, color = accent, fontSize = 13.sp)
+                }
+            }
             list == null -> item(span = { GridItemSpan(3) }) { Box(Modifier.fillMaxWidth().padding(32.dp), Alignment.Center) { CircularProgressIndicator(Modifier.size(24.dp), color = accent, strokeWidth = 2.dp) } }
             list.isEmpty() -> item(span = { GridItemSpan(3) }) { Text("Здесь пока ничего нет", color = Fusion.colors.textSecondary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp)) }
             tab == SharedMediaKind.Media -> items(list, key = { it.messageId }) { item -> MediaTile(item) { onOpenMessage(item.messageId) } }

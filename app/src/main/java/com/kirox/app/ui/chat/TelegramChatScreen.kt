@@ -537,6 +537,21 @@ fun TelegramChatScreen(
                 )
                 LaunchedEffect(message) { kotlinx.coroutines.delay(2200); notice = null }
             }
+                    // Read-only channel (approved board 6): a notifications switch where the composer would be.
+            if (history.peerKind == TelegramPeerKind.Channel && history.threadTitle == null && menu != null && history.chatId != 0L) {
+                LaunchedEffect(history.chatId) { muted = runCatching { menu.isMuted(history.chatId) }.getOrNull() }
+                muted?.let { isMuted ->
+                    Text(
+                        if (isMuted) "ВКЛ. УВЕДОМЛЕНИЯ" else "ВЫКЛ. УВЕДОМЛЕНИЯ", color = Fusion.colors.accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
+                        modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(16.dp).fillMaxWidth().clip(RoundedCornerShape(24.dp))
+                            .background(Fusion.colors.surface1).clickable {
+                                val target = !isMuted
+                                muted = target
+                                scope.launch { runCatching { menu.setMuted(history.chatId, target) }.onFailure { muted = isMuted } }
+                            }.padding(vertical = 14.dp)
+                    )
+                }
+            }
         }
     }
     }
@@ -1023,15 +1038,26 @@ private fun SearchResults(results: List<TelegramMessage>, canLoadMore: Boolean, 
 @Composable
 private fun ForumTopicsList(chatId: Long, actions: TelegramChatActions, onOpen: (com.kirox.app.telegram.TelegramForumTopic) -> Unit) {
     var topics by remember(chatId) { mutableStateOf<List<com.kirox.app.telegram.TelegramForumTopic>?>(null) }
+    var topicQuery by remember(chatId) { mutableStateOf("") }
     LaunchedEffect(chatId) { topics = actions.forumTopics(chatId) }
     val current = topics
     when {
         current == null -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(Modifier.size(26.dp), color = Fusion.colors.textSecondary, strokeWidth = 2.dp) }
         current.isEmpty() -> Box(Modifier.fillMaxSize(), Alignment.Center) { Text("Темы не загрузились", color = Fusion.colors.textSecondary) }
         else -> LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background)) {
-            items(current, key = { it.id }) { topic ->
+            // Approved groups board: search over topics and coloured square marks.
+            item {
+                androidx.compose.foundation.text.BasicTextField(
+                    topicQuery, { topicQuery = it }, singleLine = true,
+                    textStyle = androidx.compose.ui.text.TextStyle(Fusion.colors.textPrimary, 15.sp), cursorBrush = androidx.compose.ui.graphics.SolidColor(Fusion.colors.accent),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Fusion.colors.surface1).padding(horizontal = 16.dp, vertical = 12.dp),
+                    decorationBox = { inner -> Box { if (topicQuery.isEmpty()) Text("Поиск по темам", color = Fusion.colors.textTertiary, fontSize = 15.sp); inner() } }
+                )
+            }
+            items(current.filter { topicQuery.isBlank() || it.title.contains(topicQuery, true) }, key = { it.id }) { topic ->
                 Row(Modifier.fillMaxWidth().clickable { onOpen(topic) }.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(42.dp).clip(RoundedCornerShape(21.dp)).background(Fusion.colors.surface3), contentAlignment = Alignment.Center) {
+                    val v2 = Fusion.colors.backdrop != null
+                    Box(Modifier.size(42.dp).clip(RoundedCornerShape(if (v2) 12.dp else 21.dp)).background(if (v2) topicTint(topic.id) else Fusion.colors.surface3), contentAlignment = Alignment.Center) {
                         Text(if (topic.isGeneral) "#" else topic.title.take(1).uppercase(), color = Fusion.colors.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.width(12.dp))
@@ -1048,7 +1074,7 @@ private fun ForumTopicsList(chatId: Long, actions: TelegramChatActions, onOpen: 
                             Text(topic.preview, color = Fusion.colors.textSecondary, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                             if (topic.unreadCount > 0) Text(
                                 "${topic.unreadCount}", color = Fusion.colors.background, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(10.dp)).background(Fusion.colors.textPrimary).padding(horizontal = 7.dp, vertical = 1.dp)
+                                modifier = Modifier.padding(start = 6.dp).clip(RoundedCornerShape(10.dp)).background(if (Fusion.colors.backdrop != null) Fusion.colors.accent else Fusion.colors.textPrimary).padding(horizontal = 7.dp, vertical = 1.dp)
                             )
                         }
                     }
@@ -1141,3 +1167,6 @@ private fun PollToggle(title: String, checked: Boolean, enabled: Boolean = true,
 
 /** ARGB as the Long that [ChatAppearance] stores. */
 private fun androidx.compose.ui.graphics.Color.argb(): Long = toArgb().toLong() and 0xFFFFFFFFL
+
+/** Stable colour for a forum topic mark (approved groups board). */
+private fun topicTint(id: Int): androidx.compose.ui.graphics.Color = listOf(0xFFE5484D, 0xFF2E9F6B, 0xFF6E56CF, 0xFFE38D2B, 0xFF3B82F6, 0xFFD6409F).map { androidx.compose.ui.graphics.Color(it) }[Math.floorMod(id, 6)]
