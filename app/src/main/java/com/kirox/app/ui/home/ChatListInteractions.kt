@@ -125,11 +125,13 @@ internal fun ChatContextSheet(chat: TelegramChatItem, onDismiss: () -> Unit, onP
 
 @Composable
 private fun SheetAction(icon: KiroXIcon, title: String, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 52.dp).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-        IconGlyph(icon, null, Modifier.size(22.dp), Fusion.colors.textPrimary)
-        Spacer(Modifier.width(16.dp))
-        Text(title, color = Fusion.colors.textPrimary, fontSize = 15.sp)
-    }
+    // Material 3 list item on the sheet surface.
+    androidx.compose.material3.ListItem(
+        headlineContent = { Text(title) },
+        leadingContent = { IconGlyph(icon, null, Modifier.size(22.dp), Fusion.colors.textPrimary) },
+        colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Fusion.colors.surface1, headlineColor = Fusion.colors.textPrimary),
+        modifier = Modifier.clickable(onClick = onClick)
+    )
 }
 
 /**

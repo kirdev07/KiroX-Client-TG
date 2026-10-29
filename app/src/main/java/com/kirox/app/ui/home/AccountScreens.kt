@@ -91,14 +91,7 @@ internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Uni
                 SeasonalLayer(Modifier.matchParentSize())
                 Column {
                     ScreenTitle("Настройки", seasonal = false) { TitleAction(KiroXIcon.Search, "Поиск настроек") { searching = !searching; if (!searching) query = "" } }
-                    if (searching) androidx.compose.foundation.text.BasicTextField(
-                        query, { query = it }, singleLine = true,
-                        textStyle = androidx.compose.ui.text.TextStyle(Fusion.colors.textPrimary, 16.sp),
-                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Fusion.colors.textPrimary),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).fillMaxWidth().heightIn(min = 48.dp)
-                            .clip(RoundedCornerShape(24.dp)).background(Fusion.colors.surface1).padding(horizontal = 18.dp, vertical = 14.dp),
-                        decorationBox = { inner -> Box { if (query.isEmpty()) Text("Поиск настроек", color = Fusion.colors.textTertiary, fontSize = 16.sp); inner() } }
-                    )
+                    if (searching) com.kirox.app.ui.components.FusionSearchField(query, { query = it }, "Поиск настроек", Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                     ProfileHeader(profile, onEdit = onEditProfile, onAccounts = { showAccounts = true }, onAvatar = onOpenProfile, onCamera = pickPhoto)
                 }
             }

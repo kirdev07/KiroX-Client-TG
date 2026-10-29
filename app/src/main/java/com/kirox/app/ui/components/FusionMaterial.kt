@@ -13,6 +13,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kirox.app.ui.theme.Fusion
@@ -54,5 +55,42 @@ fun <T> FusionSegmented(options: List<T>, selected: T, label: (T) -> String, onS
                 label = { Text(label(option), maxLines = 1, overflow = TextOverflow.Ellipsis) }
             )
         }
+    }
+}
+
+/**
+ * Search field in the Material 3 search bar style: a full-height pill with a search icon and a clear
+ * button, on the Fusion surface colour.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun FusionSearchField(
+    value: String,
+    onChange: (String) -> Unit,
+    hint: String,
+    modifier: Modifier = Modifier,
+    focusRequester: androidx.compose.ui.focus.FocusRequester? = null
+) {
+    androidx.compose.material3.Surface(
+        shape = androidx.compose.foundation.shape.CircleShape,
+        color = Fusion.colors.surface1,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        androidx.compose.material3.SearchBarDefaults.InputField(
+            query = value,
+            onQueryChange = onChange,
+            onSearch = {},
+            expanded = false,
+            onExpandedChange = {},
+            modifier = Modifier.fillMaxWidth().let { if (focusRequester != null) it.focusRequester(focusRequester) else it },
+            placeholder = { Text(hint, color = Fusion.colors.textTertiary) },
+            leadingIcon = { com.kirox.app.ui.icons.KiroXIcon(com.kirox.app.ui.icons.KiroXIcon.Search, null, Modifier.size(20.dp), Fusion.colors.textSecondary) },
+            trailingIcon = if (value.isNotEmpty()) ({
+                androidx.compose.material3.IconButton(onClick = { onChange("") }) { Text("×", color = Fusion.colors.textSecondary, style = MaterialTheme.typography.titleLarge) }
+            }) else null,
+            colors = androidx.compose.material3.SearchBarDefaults.inputFieldColors(
+                focusedTextColor = Fusion.colors.textPrimary, unfocusedTextColor = Fusion.colors.textPrimary, cursorColor = Fusion.colors.textPrimary
+            )
+        )
     }
 }

@@ -19,7 +19,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -31,8 +30,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -671,20 +668,7 @@ private fun SearchField(value: String, hint: String, autoFocus: Boolean = false,
     val focus = remember { androidx.compose.ui.focus.FocusRequester() }
     if (autoFocus) LaunchedEffect(Unit) { focus.requestFocus() }
     LaunchedEffect(focusTrigger) { if (focusTrigger > 0) focus.requestFocus() }
-    Row(
-        Modifier.padding(horizontal = 16.dp, vertical = 6.dp).fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(14.dp))
-            .background(Fusion.colors.surface1).padding(horizontal = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconGlyph(KiroXIcon.Search, null, Modifier.size(19.dp), Fusion.colors.textSecondary)
-        Spacer(Modifier.width(10.dp))
-        BasicTextField(
-            value, onChange, Modifier.weight(1f).focusRequester(focus), singleLine = true,
-            textStyle = TextStyle(color = Fusion.colors.textPrimary, fontSize = 15.sp), cursorBrush = SolidColor(Fusion.colors.textPrimary),
-            decorationBox = { inner -> Box { if (value.isEmpty()) Text(hint, color = Fusion.colors.textTertiary, fontSize = 15.sp); inner() } }
-        )
-        if (value.isNotEmpty()) Text("×", color = Fusion.colors.textSecondary, fontSize = 20.sp, modifier = Modifier.clip(CircleShape).clickable { onChange("") }.padding(horizontal = 8.dp))
-    }
+    com.kirox.app.ui.components.FusionSearchField(value, onChange, hint, Modifier.padding(horizontal = 16.dp, vertical = 6.dp), focus)
 }
 
 @Composable
