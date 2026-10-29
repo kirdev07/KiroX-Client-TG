@@ -53,6 +53,9 @@ interface GroupCallActions {
     fun switchCamera() {}
     fun setLocalSink(sink: org.webrtc.VideoSink?) {}
     fun setRemoteSink(endpoint: String, sink: org.webrtc.VideoSink?) {}
+    /** [consent]: result of the system screen capture dialog. */
+    fun startScreenShare(consent: android.content.Intent) {}
+    fun stopScreenShare() {}
 }
 
 /**
@@ -81,6 +84,15 @@ fun GroupCallScreen(call: TelegramGroupCall, actions: GroupCallActions) {
         onDispose { router.stop() }
     }
     val route by router.route.collectAsState()
+    // Screen sharing asks the system for consent first; the dialog also lets the user pick one app.
+    val screenConsent = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { result ->
+        val data = result.data
+        if (result.resultCode == android.app.Activity.RESULT_OK && data != null) actions.startScreenShare(data)
+    }
+    val askScreen = {
+        val projection = context.getSystemService(android.media.projection.MediaProjectionManager::class.java)
+        if (projection != null) runCatching { screenConsent.launch(projection.createScreenCaptureIntent()) }
+    }
     Column(Modifier.fillMaxSize().background(Color(0xFF050608)).statusBarsPadding().navigationBarsPadding()) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("Видеочат", color = Color(0xB3FFFFFF), fontSize = 13.sp)
@@ -97,11 +109,16 @@ fun GroupCallScreen(call: TelegramGroupCall, actions: GroupCallActions) {
         }
         Box(Modifier.fillMaxWidth().weight(1f)) {
             if (call.members.isEmpty() && failed == null) CircularProgressIndicator(Modifier.align(Alignment.Center).size(28.dp), color = Color.White, strokeWidth = 2.dp)
-            val anyVideo = call.cameraOn || call.members.any { it.videoEndpoint != null }
+            val anyVideo = call.cameraOn || call.members.any { it.videoEndpoint != null || it.screenEndpoint != null }
             LazyVerticalGrid(
                 GridCells.Adaptive(if (anyVideo) 150.dp else 96.dp), contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // Shared screens first, full width: they are what everyone is looking at.
+                items(call.members.filter { it.screenEndpoint != null }, key = { it.key + ":screen" }, span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) { member ->
+                    val endpoint = member.screenEndpoint!!
+                    VideoTile(member.copy(name = member.name + " · экран"), mirror = false, fit = true) { sink -> actions.setRemoteSink(endpoint, sink) }
+                }
                 items(call.members, key = { it.key }) { member ->
                     when {
                         member.isSelf && call.cameraOn -> VideoTile(member, mirror = call.frontCamera, attach = actions::setLocalSink)
@@ -119,6 +136,11 @@ fun GroupCallScreen(call: TelegramGroupCall, actions: GroupCallActions) {
                 GroupButton(route.label, active = route != CallAudioRoute.Earpiece) { router.toggle() }
                 if (call.canEnableVideo || call.cameraOn) GroupButton(if (call.cameraOn) "Камера" else "Включить камеру", active = call.cameraOn, icon = "📷") { actions.setCamera(!call.cameraOn) }
                 if (call.cameraOn) GroupButton("Повернуть", active = false, icon = "🔄") { actions.switchCamera() }
+                if (call.phase == GroupCallPhase.Connected && (call.canEnableVideo || call.screenSharing)) {
+                    GroupButton(if (call.screenSharing) "Остановить показ" else "Экран", active = call.screenSharing, icon = "🖥") {
+                        if (call.screenSharing) actions.stopScreenShare() else askScreen()
+                    }
+                }
                 GroupButton(
                     if (!call.canUnmute) "Микрофон выключен админом" else if (call.muted) "Включить микрофон" else "Микрофон",
                     active = !call.muted, enabled = call.canUnmute
@@ -150,19 +172,20 @@ private fun MemberTile(member: GroupCallMember) {
  * on screen, released when it leaves.
  */
 @Composable
-private fun VideoTile(member: GroupCallMember, mirror: Boolean, attach: (org.webrtc.VideoSink?) -> Unit) {
+private fun VideoTile(member: GroupCallMember, mirror: Boolean, fit: Boolean = false, attach: (org.webrtc.VideoSink?) -> Unit) {
     val context = LocalContext.current
     val renderer = androidx.compose.runtime.remember { org.webrtc.TextureViewRenderer(context) }
     androidx.compose.runtime.DisposableEffect(renderer) {
         renderer.init(com.kirox.app.voip.VideoCapturerDevice.getSharedEGLContext(), null)
-        renderer.setScalingType(org.webrtc.RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+        // A screen is shown whole (text must stay readable); cameras fill the tile.
+        renderer.setScalingType(if (fit) org.webrtc.RendererCommon.ScalingType.SCALE_ASPECT_FIT else org.webrtc.RendererCommon.ScalingType.SCALE_ASPECT_FILL)
         attach(renderer)
         onDispose { attach(null); renderer.release() }
     }
     androidx.compose.runtime.LaunchedEffect(mirror) { renderer.setMirror(mirror) }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
-            Modifier.fillMaxWidth().height(200.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).background(Color(0xFF15171B))
+            Modifier.fillMaxWidth().height(if (fit) 240.dp else 200.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).background(Color(0xFF15171B))
                 .border(if (member.speaking) 3.dp else 0.dp, if (member.speaking) Color.White else Color.Transparent, androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
         ) {
             androidx.compose.ui.viewinterop.AndroidView({ renderer }, Modifier.fillMaxSize())

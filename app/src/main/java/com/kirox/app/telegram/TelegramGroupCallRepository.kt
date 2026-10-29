@@ -1,6 +1,7 @@
 package com.kirox.app.telegram
 
 import com.kirox.app.voip.NativeGroupCall
+import com.kirox.app.voip.ScreenShare
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,7 +17,9 @@ data class GroupCallMember(
     val muted: Boolean,
     val handRaised: Boolean,
     /** Endpoint of their camera stream while it is on, for the renderer. */
-    val videoEndpoint: String? = null
+    val videoEndpoint: String? = null,
+    /** Endpoint of the screen they share, while they share it. */
+    val screenEndpoint: String? = null
 )
 
 /** TDLib source groups → "SIM:1,2,3;FID:1,4" for the engine. */
@@ -43,13 +46,15 @@ data class TelegramGroupCall(
     val cameraOn: Boolean = false,
     val frontCamera: Boolean = true,
     /** Whether Telegram allows this account to turn its camera on here. */
-    val canEnableVideo: Boolean = true
+    val canEnableVideo: Boolean = true,
+    /** Our screen sharing: asked for (the service then gets the media projection type) and running. */
+    val screenSharing: Boolean = false
 )
 
 /**
  * Voice chats of groups and channels: joins the chat's active video chat (or starts one when allowed),
- * keeps the member list from TDLib updates and drives the tgcalls group engine. Video and screen
- * sharing are not sent; others' voices are heard. Only one video chat at a time.
+ * keeps the member list from TDLib updates and drives the tgcalls group engine: voice, cameras and
+ * screen sharing both ways (our screen through a second, send-only engine). Only one video chat at a time.
  */
 class TelegramGroupCallRepository(private val client: TelegramClient, private val chats: TelegramChatRepository, private val users: TelegramUserRepository) {
     private val _call = MutableStateFlow<TelegramGroupCall?>(null)
@@ -69,6 +74,9 @@ class TelegramGroupCallRepository(private val client: TelegramClient, private va
     /** Renderers on screen; re-attached to every new engine (rejoin), so video survives it. */
     private var localSink: org.webrtc.VideoSink? = null
     private val remoteSinks = HashMap<String, org.webrtc.VideoSink>()
+    /** Send-only engine of our screen sharing, separate from the main one as Telegram requires. */
+    private var screenEngine: NativeGroupCall? = null
+    private var screenSession = 0
 
     init {
         client.addUpdateHandler { update ->
@@ -186,6 +194,8 @@ class TelegramGroupCallRepository(private val client: TelegramClient, private va
     }
 
     private fun rejoin() {
+        // The screen instance was joined to the old session: it has to be started again by the user.
+        stopScreenShareNow(sendEnd = false)
         val current = _call.value ?: return
         rejoining = true
         _call.value = current.copy(phase = GroupCallPhase.Reconnecting)
@@ -230,6 +240,63 @@ class TelegramGroupCallRepository(private val client: TelegramClient, private va
         engine?.setRemoteSink(endpoint, sink)
     }
 
+    /**
+     * Shares the screen: [consent] is the MediaProjection permission result. The video chat service first
+     * enters the foreground with the media projection type (Android 14 needs it before capture starts),
+     * then calls [screenForegroundReady].
+     */
+    fun startScreenShare(consent: android.content.Intent) = client.post {
+        val current = _call.value ?: return@post
+        if (current.phase != GroupCallPhase.Connected || current.screenSharing) return@post
+        ScreenShare.permissionData = consent
+        ScreenShare.onStopped = { stopScreenShare() }
+        _call.value = current.copy(screenSharing = true)
+    }
+
+    /** The service is in the foreground with the media projection type: start capturing and joining. */
+    fun screenForegroundReady() = client.post {
+        val current = _call.value ?: return@post
+        if (!current.screenSharing || screenEngine != null) return@post
+        val id = ++screenSession
+        val groupCallId = current.groupCallId
+        screenEngine = NativeGroupCall.start(object : NativeGroupCall.Listener {
+            override fun onJoinPayload(audioSourceId: Int, payload: String) = client.post {
+                if (id != screenSession) return@post
+                client.send(TdApi.StartGroupCallScreenSharing(groupCallId, audioSourceId, payload)) { result ->
+                    if (id != screenSession) {
+                        if (result is TdApi.Text) client.send(TdApi.EndGroupCallScreenSharing(groupCallId))
+                        return@send
+                    }
+                    when (result) {
+                        is TdApi.Text -> screenEngine?.setJoinResponse(result.text)
+                        is TdApi.Error -> { stopScreenShareNow(sendEnd = false); _error.value = humanError(result) }
+                    }
+                }
+            }
+            override fun onNetwork(connected: Boolean) {}
+            override fun onLevels(sources: IntArray, levels: FloatArray) {}
+        }, screencast = true)
+        if (screenEngine == null) { stopScreenShareNow(sendEnd = false); _error.value = "Не удалось начать показ экрана" }
+    }
+
+    fun stopScreenShare() = client.post { stopScreenShareNow(sendEnd = true) }
+
+    private fun stopScreenShareNow(sendEnd: Boolean) {
+        screenSession++
+        val current = _call.value
+        if (sendEnd && screenEngine != null && current != null && current.groupCallId != 0) client.send(TdApi.EndGroupCallScreenSharing(current.groupCallId))
+        screenEngine?.stop()
+        screenEngine = null
+        ScreenShare.permissionData = null
+        ScreenShare.onStopped = null
+        if (current?.screenSharing == true) _call.value = current.copy(screenSharing = false)
+    }
+
+    private val _error = MutableStateFlow<String?>(null)
+    /** Screen sharing problems for a short notice on the video chat screen. */
+    val error: StateFlow<String?> = _error.asStateFlow()
+    fun clearError() { _error.value = null }
+
     fun leave() = client.post {
         val current = _call.value ?: return@post
         if (current.groupCallId != 0) client.send(TdApi.LeaveGroupCall(current.groupCallId))
@@ -240,6 +307,7 @@ class TelegramGroupCallRepository(private val client: TelegramClient, private va
     fun dismiss() = client.post { if (_call.value?.phase is GroupCallPhase.Failed) _call.value = null }
 
     private fun end(message: String?) {
+        stopScreenShareNow(sendEnd = false)
         session++
         rejoining = false
         engine?.stop()
@@ -261,7 +329,14 @@ class TelegramGroupCallRepository(private val client: TelegramClient, private va
             .mapNotNull { p -> p.videoInfo?.takeIf { !it.isPaused && it.endpointId.isNotBlank() }?.let { info -> NativeGroupCall.VideoChannel(p.audioSourceId, info.endpointId, encodeSourceGroups(info.sourceGroups)) } }
             .take(MAX_VIDEOS)
             .toList()
+        // Screens others share; they come first in the grid and are always received.
+        val screens = ordered.asSequence()
+            .filter { !it.isCurrentUser }
+            .mapNotNull { p -> p.screenSharingVideoInfo?.takeIf { !it.isPaused && it.endpointId.isNotBlank() }?.let { info -> NativeGroupCall.VideoChannel(p.screenSharingAudioSourceId, info.endpointId, encodeSourceGroups(info.sourceGroups)) } }
+            .take(MAX_SCREENS)
+            .toList()
         val shownEndpoints = video.map { it.endpoint }.toSet()
+        val screenEndpoints = screens.map { it.endpoint }.toSet()
         val members = ordered.map { p ->
             GroupCallMember(
                 key = keyOf(p.participantId),
@@ -271,12 +346,15 @@ class TelegramGroupCallRepository(private val client: TelegramClient, private va
                 speaking = p.isSpeaking || (p.audioSourceId != 0 && p.audioSourceId in speakingSources),
                 muted = p.isMutedForAllUsers || p.isMutedForCurrentUser || (p.isCurrentUser && current.muted),
                 handRaised = p.isHandRaised,
-                videoEndpoint = p.videoInfo?.endpointId?.takeIf { !p.isCurrentUser && it in shownEndpoints }
+                videoEndpoint = p.videoInfo?.endpointId?.takeIf { !p.isCurrentUser && it in shownEndpoints },
+                screenEndpoint = p.screenSharingVideoInfo?.endpointId?.takeIf { !p.isCurrentUser && it in screenEndpoints }
             )
         }
-        if (video != requestedVideo) {
-            requestedVideo = video
-            engine?.setVideoChannels(video, full = video.size == 1)
+        val wanted = screens + video
+        if (wanted != requestedVideo) {
+            requestedVideo = wanted
+            // A shared screen needs to be readable: full quality whenever one is shown.
+            engine?.setVideoChannels(wanted, full = wanted.size == 1 || screens.isNotEmpty())
         }
         _call.value = current.copy(
             members = members,
@@ -307,6 +385,7 @@ class TelegramGroupCallRepository(private val client: TelegramClient, private va
         const val PARTICIPANTS_LIMIT = 100
         const val SPEAKING_LEVEL = 0.05f
         const val MAX_VIDEOS = 4
+        const val MAX_SCREENS = 2
         const val CONNECT_TIMEOUT_MS = 30_000L
     }
 }

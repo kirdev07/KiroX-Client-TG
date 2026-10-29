@@ -49,7 +49,7 @@ class NativeGroupCall private constructor(private val listener: Listener) {
     @Suppress("unused") private fun onLevels(sources: IntArray, levels: FloatArray) = listener.onLevels(sources, levels)
     @Suppress("unused") private fun onStopped() {}
 
-    private external fun nativeStart(): Long
+    private external fun nativeStart(screencast: Boolean): Long
     private external fun nativeSetJoinResponse(handle: Long, payload: String)
     private external fun nativeSetMuted(handle: Long, muted: Boolean)
     private external fun nativeRemoveSsrcs(handle: Long, ssrcs: IntArray)
@@ -60,11 +60,14 @@ class NativeGroupCall private constructor(private val listener: Listener) {
     private external fun nativeStop(handle: Long)
 
     companion object {
-        /** Starts the engine; null when the call library is not available on this device. */
-        fun start(listener: Listener): NativeGroupCall? {
+        /**
+         * Starts the engine; null when the call library is not available on this device. With
+         * [screencast] it is the send-only screen sharing instance (needs [ScreenShare.permissionData]).
+         */
+        fun start(listener: Listener, screencast: Boolean = false): NativeGroupCall? {
             if (!NativeCall.awaitLoaded()) return null
             val call = NativeGroupCall(listener)
-            call.handle = runCatching { call.nativeStart() }.getOrDefault(0L)
+            call.handle = runCatching { call.nativeStart(screencast) }.getOrDefault(0L)
             return call.takeIf { it.handle != 0L }
         }
     }

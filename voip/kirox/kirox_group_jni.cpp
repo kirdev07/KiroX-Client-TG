@@ -105,17 +105,25 @@ void callJava(jobject target, const char *name, const char *signature, const std
 
 extern "C" {
 
-JNIEXPORT jlong JNICALL Java_com_kirox_app_voip_NativeGroupCall_nativeStart(JNIEnv *env, jobject thiz) {
+JNIEXPORT jlong JNICALL Java_com_kirox_app_voip_NativeGroupCall_nativeStart(JNIEnv *env, jobject thiz, jboolean screencast) {
     auto *call = new GroupCall();
     call->java = std::make_shared<JavaRef>(env, thiz);
-    call->context = std::make_shared<AndroidContext>(env, nullptr, thiz, false);
+    call->context = std::make_shared<AndroidContext>(env, nullptr, thiz, static_cast<bool>(screencast));
     std::shared_ptr<JavaRef> java = call->java;
 
     GroupInstanceDescriptor descriptor;
     descriptor.threads = StaticThreads::getThreads();
     descriptor.config.need_log = false;
-    // Announces video in the join payload, so the camera can be turned on later without rejoining.
-    descriptor.videoContentType = VideoContentType::Generic;
+    if (screencast) {
+        // A second, send-only instance for screen sharing, as Telegram does: the screen as video,
+        // no microphone and no incoming streams (the main instance receives everything).
+        descriptor.videoContentType = VideoContentType::Screencast;
+        descriptor.disableIncomingChannels = true;
+        descriptor.disableAudioInput = true;
+    } else {
+        // Announces video in the join payload, so the camera can be turned on later without rejoining.
+        descriptor.videoContentType = VideoContentType::Generic;
+    }
     descriptor.networkStateUpdated = [java](GroupNetworkState state) {
         callJava(java->ref, "onNetwork", "(Z)V", [&](JNIEnv *e, jmethodID m) { e->CallVoidMethod(java->ref, m, static_cast<jboolean>(state.isConnected)); });
     };
@@ -151,6 +159,13 @@ JNIEXPORT jlong JNICALL Java_com_kirox_app_voip_NativeGroupCall_nativeStart(JNIE
     };
 
     call->instance = std::make_unique<GroupInstanceCustomImpl>(std::move(descriptor));
+    if (screencast) {
+        // The screen capturer (VideoCapturerDevice in screencast mode, MediaProjection) starts at once.
+        call->cameraId = "screen";
+        call->capture = VideoCaptureInterface::Create(StaticThreads::getThreads(), "screen", true, call->context);
+        call->instance->setVideoCapture(call->capture);
+        call->capture->setState(VideoState::Active);
+    }
     call->instance->emitJoinPayload([java](GroupJoinPayload const &payload) {
         callJava(java->ref, "onJoinPayload", "(ILjava/lang/String;)V", [&](JNIEnv *e, jmethodID m) {
             jstring json = e->NewStringUTF(payload.json.c_str());

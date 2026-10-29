@@ -158,7 +158,14 @@ fun KiroXApp() {
             override fun switchCamera() = telegramViewModel.groupCalls.switchCamera()
             override fun setLocalSink(sink: org.webrtc.VideoSink?) = telegramViewModel.groupCalls.setLocalSink(sink)
             override fun setRemoteSink(endpoint: String, sink: org.webrtc.VideoSink?) = telegramViewModel.groupCalls.setRemoteSink(endpoint, sink)
+            override fun startScreenShare(consent: android.content.Intent) = telegramViewModel.groupCalls.startScreenShare(consent)
+            override fun stopScreenShare() = telegramViewModel.groupCalls.stopScreenShare()
         }
+    }
+    // Screen sharing problems (Telegram refused, capture failed) as a short toast.
+    val groupCallError by telegramViewModel.groupCalls.error.collectAsStateWithLifecycle()
+    LaunchedEffect(groupCallError) {
+        groupCallError?.let { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show(); telegramViewModel.groupCalls.clearError() }
     }
     val permittedCallActions = remember(callActions) {
         object : com.kirox.app.ui.call.CallActions by callActions {

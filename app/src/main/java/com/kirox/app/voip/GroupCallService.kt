@@ -20,12 +20,14 @@ import kotlinx.coroutines.launch
 /**
  * Keeps a video chat going with KiroX in the background: Android 11+ gives the microphone to a
  * backgrounded app only from a foreground service of the microphone type. Started when the user
- * joins (KiroX is on screen then); stops itself when the video chat ends or is left.
+ * joins (KiroX is on screen then); stops itself when the video chat ends or is left. While the screen
+ * is shared it also carries the media projection type.
  */
 class GroupCallService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var started = false
     private var withCamera = false
+    private var withScreen = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -48,14 +50,18 @@ class GroupCallService : Service() {
                     if (!seen) finish()
                 }
                 // Only what the notification shows: speaking levels change many times a second.
-                calls.call.map { it?.let { c -> Shown(c.title, c.phase, c.muted, c.cameraOn) } }.distinctUntilChanged().collect { shown ->
+                calls.call.map { it?.let { c -> Shown(c.title, c.phase, c.muted, c.cameraOn, c.screenSharing) } }.distinctUntilChanged().collect { shown ->
                     val current = calls.call.value
                     when {
                         shown == null || current == null -> if (seen) finish()
                         shown.phase is GroupCallPhase.Failed -> finish()
                         else -> {
                             seen = true
-                            if (current.cameraOn != withCamera) {
+                            if (current.screenSharing != withScreen) {
+                                // Android 14+: the media projection type must be in place before capture starts.
+                                val ok = enterForeground(current)
+                                if (current.screenSharing) { if (ok) calls.screenForegroundReady() else calls.stopScreenShare() }
+                            } else if (current.cameraOn != withCamera) {
                                 if (!enterForeground(current)) { calls.setCamera(false) }
                             } else {
                                 CallNotifications.manager(this@GroupCallService).notify(CallNotifications.GROUP_ID, CallNotifications.groupOngoing(this@GroupCallService, current))
@@ -68,7 +74,7 @@ class GroupCallService : Service() {
         return START_NOT_STICKY
     }
 
-    private data class Shown(val title: String, val phase: GroupCallPhase, val muted: Boolean, val camera: Boolean)
+    private data class Shown(val title: String, val phase: GroupCallPhase, val muted: Boolean, val camera: Boolean, val screen: Boolean)
 
     private fun finish() {
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
@@ -81,11 +87,13 @@ class GroupCallService : Service() {
      */
     private fun enterForeground(call: com.kirox.app.telegram.TelegramGroupCall?): Boolean {
         withCamera = call?.cameraOn == true
+        withScreen = call?.screenSharing == true
         var type = 0
         if (Build.VERSION.SDK_INT >= 30) {
             type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             if (withCamera) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
         }
+        if (withScreen) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
         val notification = if (call != null) CallNotifications.groupOngoing(this, call) else CallNotifications.groupConnecting(this)
         return runCatching { ServiceCompat.startForeground(this, CallNotifications.GROUP_ID, notification, type) }.isSuccess
     }
