@@ -37,18 +37,25 @@ class AccountPeek(context: Context) {
         val key = session.keyStore.load() ?: return
         if (!session.hasDatabase) return
         val titles = HashMap<Long, String>()
-        var client: Client? = null
+        // TDLib may report its first state before Client.create returns, on its own thread: what has
+        // to be sent then is remembered and sent as soon as the client exists.
+        val client = java.util.concurrent.atomic.AtomicReference<Client?>(null)
+        val wantsParameters = java.util.concurrent.atomic.AtomicBoolean(false)
+        val closeRequested = java.util.concurrent.atomic.AtomicBoolean(false)
         val handler = Client.ResultHandler { update ->
             when (update) {
                 is TdApi.UpdateAuthorizationState -> when (update.authorizationState) {
-                    is TdApi.AuthorizationStateWaitTdlibParameters -> client?.send(parameters(session, key), null)
-                    is TdApi.AuthorizationStateReady -> {
-                        client?.send(TdApi.SetOption("online", TdApi.OptionValueBoolean(false)), null)
-                        client?.send(TdApi.SetOption("notification_group_count_max", TdApi.OptionValueInteger(GROUPS.toLong())), null)
-                        client?.send(TdApi.SetOption("notification_group_size_max", TdApi.OptionValueInteger(GROUP_SIZE.toLong())), null)
+                    is TdApi.AuthorizationStateWaitTdlibParameters -> {
+                        wantsParameters.set(true)
+                        client.get()?.let { if (wantsParameters.compareAndSet(true, false)) it.send(parameters(session, key), null) }
+                    }
+                    is TdApi.AuthorizationStateReady -> client.get()?.let { c ->
+                        c.send(TdApi.SetOption("online", TdApi.OptionValueBoolean(false)), null)
+                        c.send(TdApi.SetOption("notification_group_count_max", TdApi.OptionValueInteger(GROUPS.toLong())), null)
+                        c.send(TdApi.SetOption("notification_group_size_max", TdApi.OptionValueInteger(GROUP_SIZE.toLong())), null)
                     }
                     is TdApi.AuthorizationStateClosed -> com.kirox.app.telegram.SessionLocks.release(account.session)
-                    is TdApi.AuthorizationStateWaitPhoneNumber, is TdApi.AuthorizationStateLoggingOut -> client?.send(TdApi.Close(), null)
+                    is TdApi.AuthorizationStateWaitPhoneNumber, is TdApi.AuthorizationStateLoggingOut -> client.get()?.send(TdApi.Close(), null)
                     else -> Unit
                 }
                 is TdApi.UpdateNewChat -> titles[update.chat.id] = update.chat.title
@@ -61,13 +68,17 @@ class AccountPeek(context: Context) {
                 else -> Unit
             }
         }
-        val closeRequested = java.util.concurrent.atomic.AtomicBoolean(false)
-        val close = { if (closeRequested.compareAndSet(false, true)) client?.send(TdApi.Close(), null) }
-        // The main client may be opening this account (the user switched to it): leave it alone then.
-        if (!com.kirox.app.telegram.SessionLocks.acquire(account.session) { close() }) return
-        client = runCatching { Client.create(handler, null, null) }.getOrNull()
-        if (client == null) { com.kirox.app.telegram.SessionLocks.release(account.session); return }
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ close() }, windowMs)
+        val close = { if (closeRequested.compareAndSet(false, true)) client.get()?.send(TdApi.Close(), null) }
+        // Held by the main client (the user opened this account) or another peek: leave it alone.
+        // Freed by force after the window and a margin if this client never reaches Closed.
+        if (!com.kirox.app.telegram.SessionLocks.acquire(account.session, windowMs + LOCK_MARGIN_MS) { close() }) return
+        val created = runCatching { Client.create(handler, null, null) }.getOrNull()
+        if (created == null) { com.kirox.app.telegram.SessionLocks.release(account.session); return }
+        client.set(created)
+        if (wantsParameters.compareAndSet(true, false)) created.send(parameters(session, key), null)
+        // A close asked for before the client existed could not be sent: send it now.
+        if (closeRequested.get()) created.send(TdApi.Close(), null)
+        else android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ close() }, windowMs)
     }
 
     private fun parameters(session: TelegramSessionManager, key: ByteArray) = TdApi.SetTdlibParameters().apply {
@@ -113,5 +124,6 @@ class AccountPeek(context: Context) {
         const val EXTRA_SESSION = "kirox.session"
         private const val GROUPS = 10
         private const val GROUP_SIZE = 5
+        private const val LOCK_MARGIN_MS = 20_000L
     }
 }

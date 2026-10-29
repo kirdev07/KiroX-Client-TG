@@ -71,8 +71,9 @@ class TelegramClient(context: Context) {
             return
         }
         session = TelegramSessionManager(appContext, accounts.active)
-        // A notification peek may have this account open: let it close first, then start again.
-        if (SessionLocks.isHeld(session.name)) { SessionLocks.whenFree(session.name) { start() }; return }
+        // One client per database: a notification peek may have this account open; let it close
+        // first, then start again. The lock is released on Closed.
+        if (!SessionLocks.acquire(session.name) {}) { SessionLocks.whenFree(session.name) { start() }; return }
         try {
             Client.execute<TdApi.Ok>(TdApi.SetLogVerbosityLevel(1))
             Client.setLogMessageHandler(1) { _, _ -> /* Never persist TDLib logs in the app. */ }
@@ -82,6 +83,7 @@ class TelegramClient(context: Context) {
                 { throwable -> scope.launch { fail(throwable.message ?: "Ошибка TDLib") } }
             )
         } catch (error: Throwable) {
+            SessionLocks.release(session.name)
             _blocked.value = "Native TDLib не загрузилась: ${error.javaClass.simpleName}"
         }
     }
@@ -143,6 +145,7 @@ class TelegramClient(context: Context) {
         updateHandlers.forEach { it(update) }
         if (update is TdApi.UpdateAuthorizationState && update.authorizationState is TdApi.AuthorizationStateClosed) {
             client = null
+            SessionLocks.release(session.name)
             discardOnClose?.let { TelegramSessionManager(appContext, it).reset() }
             discardOnClose = null
             // A logged-out extra account leaves the list; the next one opens instead of an empty sign-in.

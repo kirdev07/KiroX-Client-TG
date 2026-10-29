@@ -38,8 +38,11 @@ class AutoDownloadPolicy(private val client: TelegramClient, monitor: Connection
 
     init {
         client.addUpdateHandler { update ->
-            if (update is TdApi.UpdateAuthorizationState && update.authorizationState is TdApi.AuthorizationStateReady) {
-                client.send(TdApi.GetAutoDownloadSettingsPresets()) { result -> if (result is TdApi.AutoDownloadSettingsPresets) presets.value = result }
+            if (update !is TdApi.UpdateAuthorizationState) return@addUpdateHandler
+            when (update.authorizationState) {
+                is TdApi.AuthorizationStateReady -> client.send(TdApi.GetAutoDownloadSettingsPresets()) { result -> if (result is TdApi.AutoDownloadSettingsPresets) presets.value = result }
+                // Another account has its own presets; nothing downloads by itself until they load.
+                is TdApi.AuthorizationStateClosed -> if (!client.paused) presets.value = null
             }
         }
     }

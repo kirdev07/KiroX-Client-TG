@@ -44,6 +44,8 @@ class MessageNotifications(
         AppVisibility.listener = { visible -> client.send(TdApi.SetOption("online", TdApi.OptionValueBoolean(visible))) }
         client.addUpdateHandler { update ->
             when (update) {
+                is TdApi.UpdateMessageSendSucceeded -> sending.remove(update.oldMessageId)?.complete(true)
+                is TdApi.UpdateMessageSendFailed -> sending.remove(update.oldMessageId)?.complete(false)
                 is TdApi.UpdateAuthorizationState -> when (update.authorizationState) {
                     is TdApi.AuthorizationStateReady -> enable()
                     // A background pause keeps what is already shown; logout and account switch clear it.
@@ -146,13 +148,27 @@ class MessageNotifications(
      */
     suspend fun reply(groupId: Int, chatId: Long, maxNotificationId: Int, text: String): Boolean {
         client.start()
-        if (kotlinx.coroutines.withTimeoutOrNull(REPLY_WAIT_MS) { client.ready.first { it } } == null) return false
-        val sent = runCatching {
-            client.query(TdApi.SendMessage(chatId, null, null, null, null, TdApi.InputMessageText(TdApi.FormattedText(text, emptyArray()), null, true)))
-        }.isSuccess
-        if (sent) markRead(groupId, chatId, maxNotificationId)
-        return sent
+        try {
+            if (kotlinx.coroutines.withTimeoutOrNull(REPLY_WAIT_MS) { client.ready.first { it } } == null) return false
+            // SendMessage answers with a local, still pending message; only UpdateMessageSendSucceeded
+            // means Telegram has it, so the process is kept until then.
+            val done = kotlinx.coroutines.CompletableDeferred<Boolean>()
+            val pending = runCatching {
+                client.query(TdApi.SendMessage(chatId, null, null, null, null, TdApi.InputMessageText(TdApi.FormattedText(text, emptyArray()), null, true)))
+            }.getOrNull() ?: return false
+            if (pending.sendingState == null) done.complete(true) else sending[pending.id] = done
+            val sent = kotlinx.coroutines.withTimeoutOrNull(SEND_WAIT_MS) { done.await() } ?: false
+            sending.remove(pending.id)
+            if (sent) markRead(groupId, chatId, maxNotificationId)
+            return sent
+        } finally {
+            // Started for this reply while in the background: close TDLib again so pushes keep coming.
+            client.post(PAUSE_DELAY_MS) { client.pauseIfIdle() }
+        }
     }
+
+    /** Messages sent from notifications, by their temporary id, waiting for Telegram's answer. */
+    private val sending = java.util.concurrent.ConcurrentHashMap<Long, kotlinx.coroutines.CompletableDeferred<Boolean>>()
 
     /** Removes the notification of [groupId] at once (TDLib also removes it after markRead). */
     fun dismiss(groupId: Int) = cancel(groupId)
@@ -196,7 +212,10 @@ class MessageNotifications(
         internal const val KEY_REPLY = "reply_text"
         /** Keeps the reply and read PendingIntents of one group apart. */
         private const val REPLY_REQUEST_OFFSET = 1 shl 20
-        private const val REPLY_WAIT_MS = 20_000L
+        private const val REPLY_WAIT_MS = 15_000L
+        private const val SEND_WAIT_MS = 10_000L
+        /** Lets markRead reach Telegram before TDLib is closed. */
+        private const val PAUSE_DELAY_MS = 1_500L
         internal const val EXTRA_GROUP = "group"
         internal const val EXTRA_CHAT = "chat"
         internal const val EXTRA_MESSAGES = "messages"

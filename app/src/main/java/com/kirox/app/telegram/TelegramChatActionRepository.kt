@@ -82,7 +82,11 @@ class TelegramChatActionRepository(private val client: TelegramClient, private v
                 is TdApi.UpdateNewMessage -> {
                     // A message from someone ends what they were doing, even before the cancel arrives.
                     val sender = (update.message.senderId as? TdApi.MessageSenderUser)?.userId ?: return@addUpdateHandler
-                    if (active[update.message.chatId]?.remove(sender) != null) publish()
+                    val chat = active[update.message.chatId] ?: return@addUpdateHandler
+                    if (chat.remove(sender) != null) {
+                        if (chat.isEmpty()) active.remove(update.message.chatId)
+                        publish()
+                    }
                 }
                 is TdApi.UpdateAuthorizationState -> if (update.authorizationState is TdApi.AuthorizationStateClosed) {
                     active.clear(); lastSent.clear(); _lines.value = emptyMap()
@@ -136,7 +140,7 @@ class TelegramChatActionRepository(private val client: TelegramClient, private v
     }
 
     private fun publish() {
-        _lines.value = active.mapValues { (chatId, entries) ->
+        _lines.value = active.filterValues { it.isNotEmpty() }.mapValues { (chatId, entries) ->
             val list = entries.values.toList()
             val type = chats.chat(chatId)?.type
             val isGroup = type is TdApi.ChatTypeBasicGroup || type is TdApi.ChatTypeSupergroup

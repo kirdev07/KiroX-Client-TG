@@ -153,7 +153,7 @@ class TelegramChatRepository(private val client: TelegramClient) {
                     requestPage(TelegramChatListKey.Archive)
                 }
                 is TdApi.AuthorizationStateClosed -> {
-                    chatsById.clear(); folders = emptyList(); loading.clear(); complete.clear()
+                    chatsById.clear(); folders = emptyList(); loading.clear(); complete.clear(); forumSupergroups.clear()
                     schedulePublish()
                 }
             }

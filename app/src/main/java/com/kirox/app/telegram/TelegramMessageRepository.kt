@@ -226,9 +226,10 @@ class TelegramMessageRepository(
     /** Leaves a comment thread or forum topic (its screen closed); a plain open chat is left alone. */
     fun closeThread() = client.post {
         threadRequest++
-        if (topic == null || chatId == 0L) return@post
-        client.send(TdApi.CloseChat(chatId))
-        chatId = 0; topic = null; threadTitle = null; threadRoot = 0
+        if (topic == null) return@post
+        // After a background pause chatId is 0 and the thread waits in resumeChatId: drop that too.
+        if (chatId != 0L) client.send(TdApi.CloseChat(chatId))
+        chatId = 0; resumeChatId = 0; topic = null; threadTitle = null; threadRoot = 0; threadDraft = ""
         messages.clear(); viewed.clear(); pinnedIds.clear(); pinnedCache.clear()
         _history.value = TelegramChatHistory()
     }
@@ -389,7 +390,7 @@ class TelegramMessageRepository(
     private fun handle(update: TdApi.Object) {
         when (update) {
             is TdApi.UpdateNewMessage -> if (update.message.chatId == chatId && inTopic(update.message)) { messages[update.message.id] = update.message; schedulePublish() }
-            is TdApi.UpdateMessageSendSucceeded -> if (update.message.chatId == chatId) {
+            is TdApi.UpdateMessageSendSucceeded -> if (update.message.chatId == chatId && (update.oldMessageId in messages || inTopic(update.message))) {
                 messages.remove(update.oldMessageId); messages[update.message.id] = update.message; schedulePublish()
             }
             is TdApi.UpdateMessageSendFailed -> if (update.message.chatId == chatId) {
@@ -424,12 +425,20 @@ class TelegramMessageRepository(
             is TdApi.UpdateUser, is TdApi.UpdateUserStatus -> if (chatId != 0L) schedulePublish()
             is TdApi.UpdateAuthorizationState -> when (update.authorizationState) {
                 // After a background pause the open chat loads again; logout and account switch drop it.
+                // A thread or topic stays as it was (topic, title, root, draft) and reopens as itself.
                 is TdApi.AuthorizationStateClosed -> {
                     resumeChatId = if (client.paused) chatId else 0
                     chatId = 0; messages.clear(); viewed.clear()
-                    if (resumeChatId == 0L) _history.value = TelegramChatHistory()
+                    if (resumeChatId == 0L) {
+                        topic = null; threadTitle = null; threadRoot = 0; threadDraft = ""
+                        _history.value = TelegramChatHistory()
+                    }
                 }
-                is TdApi.AuthorizationStateReady -> if (resumeChatId != 0L) { open(resumeChatId); resumeChatId = 0 }
+                is TdApi.AuthorizationStateReady -> if (resumeChatId != 0L) {
+                    val id = resumeChatId
+                    resumeChatId = 0
+                    if (topic != null) openLoaded(id) else open(id)
+                }
             }
         }
     }

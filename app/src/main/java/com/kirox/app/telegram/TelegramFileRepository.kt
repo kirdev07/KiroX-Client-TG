@@ -34,7 +34,13 @@ class TelegramFileRepository(private val client: TelegramClient) {
                     states[file.id]?.value = file.toState()
                 }
                 is TdApi.UpdateAuthorizationState -> if (update.authorizationState is TdApi.AuthorizationStateClosed) {
-                    paths.clear(); states.clear()
+                    if (client.paused) {
+                        // Same account after the pause: file ids stay valid and screens keep these flows.
+                        // Downloads stopped with TDLib; the next start resumes them on request.
+                        states.values.forEach { flow -> flow.value = flow.value.copy(downloading = false) }
+                    } else {
+                        paths.clear(); states.clear()
+                    }
                 }
             }
         }

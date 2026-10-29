@@ -1,29 +1,46 @@
 package com.kirox.app.telegram
 
 /**
- * Which account databases are open outside the main client (notification peeks), so the main
- * client never opens the same TDLib database at the same time. Thread-safe.
+ * Which account databases are open right now, by the main client or by a notification peek, so two
+ * TDLib clients never open the same database directory. Thread-safe.
  */
 object SessionLocks {
     private class Holder(val close: () -> Unit, val waiting: MutableList<() -> Unit> = mutableListOf())
     private val holders = HashMap<String, Holder>()
+    private val timer by lazy { android.os.Handler(android.os.Looper.getMainLooper()) }
 
     @Synchronized fun isHeld(session: String): Boolean = holders.containsKey(session)
 
-    @Synchronized fun acquire(session: String, close: () -> Unit): Boolean {
-        if (holders.containsKey(session)) return false
-        holders[session] = Holder(close)
+    /**
+     * Takes [session] for one client; false when another holds it. [close] is how others ask the
+     * holder to let go. With [timeoutMs], the lock is freed by force if the holder never releases it
+     * (a client that never reached Closed must not block the account forever).
+     */
+    fun acquire(session: String, timeoutMs: Long = 0, close: () -> Unit): Boolean {
+        val holder = Holder(close)
+        synchronized(this) {
+            if (holders.containsKey(session)) return false
+            holders[session] = holder
+        }
+        if (timeoutMs > 0) timer.postDelayed({ release(session, holder) }, timeoutMs)
         return true
     }
 
     /** Called by the holder once its client has closed; runs whatever waited for the session. */
-    fun release(session: String) {
-        val waiting = synchronized(this) { holders.remove(session)?.waiting?.toList().orEmpty() }
+    fun release(session: String) = release(session, null)
+
+    private fun release(session: String, only: Holder?) {
+        val waiting = synchronized(this) {
+            val current = holders[session] ?: return
+            if (only != null && current !== only) return
+            holders.remove(session)
+            current.waiting.toList()
+        }
         waiting.forEach { it() }
     }
 
     /**
-     * Runs [block] now when nobody else holds [session]; otherwise asks the holder to close and runs
+     * Runs [block] now when nobody holds [session]; otherwise asks the holder to close and runs
      * [block] after it did. Returns true when [block] ran immediately.
      */
     fun whenFree(session: String, block: () -> Unit): Boolean {
