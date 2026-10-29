@@ -72,6 +72,13 @@ jobs:
           [ -f "$f" ] || exit 0
           grep -E ': Error: ' "$f" | head -40 | while IFS= read -r line; do echo "::error title=lint::${line//%/%25}"; done
           grep -cE ': Warning: ' "$f" | xargs -I{} echo "::notice title=lint::{} warnings, see lint-results-debug in the artifact"
+          # Warnings too, 15 per annotation (GitHub keeps only a few annotations per step).
+          grep -E ': Warning: ' "$f" | sed "s|$PWD/||" | split -l 15 - /tmp/lintw_
+          for part in /tmp/lintw_*; do
+            [ -f "$part" ] || continue
+            body=$(sed 's/%/%25/g' "$part" | awk '{printf "%s%%0A", $0}')
+            echo "::notice title=lint-warnings::$body"
+          done
 
       - uses: actions/upload-artifact@v4
         if: always()
