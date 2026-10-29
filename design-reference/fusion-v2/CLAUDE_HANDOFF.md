@@ -1,66 +1,28 @@
-# Claude Code — KiroX Fusion Expressive / Fusion Glass handoff
+# Claude Code — быстрый старт KiroX Fusion UI
 
-**Read this before touching Android code.**
+**Дата утверждения:** 29 октября 2026.  
+**Ветка GitHub:** `design/kirox-fusion-expressive-glass`.  
+**Важный статус:** все 92 визуальных варианта (46 на каждый из 2 стилей) согласованы; **реализация нового UI не выполнена**.
 
-Repository: https://github.com/kirdev07/KiroX-Client-TG_Kirdev.07
-Branch: `design/kirox-fusion-expressive-glass` (do not write to main).
-Status: owner **approved visual designs**, not a blanket approval to rewrite routing/Telegram integration.
+## Порядок чтения
 
-## Preparation
+1. [Единое ТЗ: CLAUDE_MASTER_TASK.md](CLAUDE_MASTER_TASK.md) — основной источник требований, этапы A–H и критерии приёмки.
+2. [FINAL_DESIGN_REVIEW.md](FINAL_DESIGN_REVIEW.md) — точная матрица согласований, что уже есть в текущем коде, а что не проверено.
+3. [README.md](README.md) — полный индекс всех отдельных согласованных блоков.
+4. [DESIGN_SPEC.md](DESIGN_SPEC.md) и [theme-tokens.json](theme-tokens.json) — геометрия, цвета, UX-принципы.
+5. Остальные связанные спецификации. Историческое слово `DRAFT` в имени файла не отменяет **VISUALLY APPROVED** внутри документа.
 
-1. Check out the named branch and examine its current HEAD; confirm the checked-out branch before writing.
-2. Read `design-reference/fusion-v2/README.md`, `DESIGN_SPEC.md`, `theme-tokens.json`, and `preview.html`.
-3. **Also load the exact composite reference image approved by the owner in ChatGPT on 2026-10-29.** It contains two rows of seven Android screenshots: purple Expressive first, blue Glass second. This image is **not stored in this branch**; request it if missing. Do NOT use a new generated concept to override it.
-4. Inspect actual source and route logic before editing: `app/src/main/java/com/kirox/app/ui/theme/FusionTheme.kt`, `ui/components/FusionBottomBar.kt`, `ui/home/TelegramMainScreen.kt`, `ui/chat/TelegramChatScreen.kt`, `ui/home/SettingsScreens.kt`, `ui/KiroXApp.kt`, settings persistence and the TDLib managers. Inspect other sources as needed. Old docs in `design-reference/` are a historical baseline, not current owner-approved visual composition.
-5. Make an **inventory of what is already implemented**, noting present vs missing capabilities. Current GitHub code already includes theme palettes and a pill dock — avoid reinventing these.
+## Критически важно
 
-## Critical functional question before changing routing
+- Перед pixel-perfect сравнением получить **оригинальные утверждённые PNG из беседы владельца**. На GitHub сейчас есть только документация и упрощённый `preview.html`. Новые картинки не заменяют согласованный макет.
+- Использовать **существующий** KiroX на Kotlin, Jetpack Compose и TDLib. Не начинать проект с нуля, не копировать исходники или artwork Yougram.
+- Не заменять реальные Telegram-состояния demo-данными или фиктивными Premium/verification.
+- Сохранить все работающие сценарии, включая Stories, VoIP, создание групп/каналов, папки и аккаунты; непроверенные сценарии маркировать NOT TESTED.
+- **Перед перепривязкой нижнего dock** согласовать карту маршрутов: визуальная цель `Чаты · Звонки · Истории · Настройки`; существующий код использует `Контакты · Чаты · Настройки · Профиль`. Контакты/собственный профиль/аккаунты должны остаться доступны.
+- **Не изменять main и не сливать ветки.** Один этап — один отчёт и остановка до подтверждения.
 
-- Owner's visual target has bottom bar: Chats / Calls / Stories / Settings.
-- Existing source had Contacts / Chats / Settings / Profile.
-- Show the owner an explicit route mapping which retains **contacts**, **own profile**, **account switching** and user settings; do not silently make old features unreachable.
-- Calls / Stories must never be populated with fictional data. If real TDLib feature isn't ready, use genuine empty / unsupported states.
-- Visual "KiroX Premium" labels in generated imagery are not permission to claim premium. Render official state only from TDLib; do not invent subscriptions, badges, calls or active sessions.
+## Точная стартовая задача
 
-## Desired code approach
+> Проверь, что работаешь в ветке `design/kirox-fusion-expressive-glass`. Прочитай `design-reference/fusion-v2/CLAUDE_MASTER_TASK.md` и `FINAL_DESIGN_REVIEW.md`, а также индекс всех утверждённых макетов. Начни **только этап A**: аудит существующего кода и реальных Telegram-возможностей, список reuse/adapt/create, карту нижней навигации before/after, риски, план файлов, доступные baseline тесты. Представь отчёт с PASS/FAIL/NOT TESTED и остановись для моего утверждения. Не переписывай UI, TDLib, звонки или авторизацию на этапе A. Если изображений-эталонов нет — укажи это отдельно, не придумывай замену.
 
-- Keep existing Kotlin Compose and Material 3 ecosystem, adopt expressive shapes/typography/motion only where compatible with installed Compose Material3 version.
-- One reusable screen/state layer for all themes; don't duplicate feature state, repositories, navigation or TDLib bindings.
-- Extend existing `FusionTheme` with **Fusion Expressive** + **Fusion Glass** style configuration; minimize regressions to any existing palettes.
-- Read the proposed theme token JSON as a design guide, not as a runtime parser dependency.
-- Provide opaque fallback to Glass blur on unsupported/low-tier phones and when accessibility/energy settings reduce effects. Full-viewport blur should not duplicate and reprocess all image content every frame.
-- Use stable keys / lazy lists, preserve chat scroll positions, account scoping, drafts, Android Back, keyboard and insets.
-- Don't copy Yougram code or artwork. User uses Yougram **only as design quality reference**; implementation, assets, text and architecture must be original and license-clean.
-- Screenshot reference is the approved composition, **do not rearrange key widgets**.
-
-## Work in small, reviewable checkpoints
-
-1. **Stage A:** screenshot/code audit + route mapping + changed-file plan. Report differences from each approved screen. If the owner wants to proceed, implement the next stage.
-2. **Stage B:** theme foundations and persistence, optional glass layer with fallback.
-3. **Stage C:** approved chat list + dock (after route mapping approval).
-4. **Stage D:** approved conversation and composer.
-5. **Stage E:** approved profile and settings.
-6. **Stage F:** approved call list and active call styling where actual VoIP state exists.
-7. **Stage G:** approved appearance customization and previews.
-8. **Stage H:** QA, screen capture comparison, build verification and doc updates.
-
-**After each stage:** provide commit SHA, changed files, APK location when built, visual screenshots from real device/emulator, tests PASSED/FAILED/NOT TESTED, performance caveats and user-visible gaps. Stop after a stage for user approval. No merge to main without explicit approval.
-
-## Useful commands
-
-~~~shell
-git fetch origin
-git switch design/kirox-fusion-expressive-glass
-git status
-./gradlew testDebugUnitTest assembleDebug lintDebug
-~~~
-
-Run Gradle only when Android SDK/NDK and JDK are installed; report NOT TESTED otherwise. Never fabricate successful builds or fake Telegram network tests.
-
-## Preview disclaimer
-
-`preview.html` is a small **standalone visual schematic** for discussing the two skin systems; it is **not a production Compose implementation** and does not prove TDLib feature availability. Compare against actual owner-approved raster for pixel decisions.
-
-## Future design scope
-
-Once these seven core screens in two themes are reviewed, separately design/approve incoming-call and real video-call states, stories viewer/editor, media gallery, contacts, search, auth and empty/error states. Their final layouts are not pre-approved by the owner here.
+Это короткий входной документ. **Полные критерии этапов и ограничения находятся в `CLAUDE_MASTER_TASK.md`.**
