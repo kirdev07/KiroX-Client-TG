@@ -77,6 +77,20 @@ fun PhoneLoginScreen(
         // The form scrolls above the buttons, so the keyboard never pushes buttons over it.
         Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp)) {
+            if (Fusion.colors.backdrop != null) {
+                // Fusion UI v2 (approved auth board): centred mark, title and hint.
+                Spacer(Modifier.height(40.dp))
+                Box(
+                    Modifier.align(Alignment.CenterHorizontally).size(76.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(androidx.compose.ui.graphics.Brush.radialGradient(listOf(Fusion.colors.accent.copy(alpha = 0.45f), androidx.compose.ui.graphics.Color.Transparent))),
+                    contentAlignment = Alignment.Center
+                ) { com.kirox.app.ui.icons.KiroXIcon(com.kirox.app.ui.icons.KiroXIcon.Send, null, Modifier.size(38.dp), Fusion.colors.accent) }
+                Spacer(Modifier.height(18.dp))
+                Text("Введите номер", color = KiroXWhite, fontSize = 26.sp, fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(8.dp))
+                Text("Ваш номер телефона\nдля входа в Telegram", color = KiroXSecondary, fontSize = 15.sp, lineHeight = 21.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(32.dp))
+            } else {
             Spacer(Modifier.height(18.dp))
             BrandLogo()
             Spacer(Modifier.height(58.dp))
@@ -90,6 +104,7 @@ fun PhoneLoginScreen(
             Spacer(Modifier.height(16.dp))
             Text("Введите номер, чтобы продолжить\nвход в Telegram через kiroX.", color = KiroXSecondary, fontSize = 15.sp, lineHeight = 21.sp)
             Spacer(Modifier.height(32.dp))
+            }
             FieldLabel("СТРАНА")
             Spacer(Modifier.height(8.dp))
             CountrySelector(state, onChooseCountry)
@@ -254,8 +269,8 @@ internal fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(Fusion.colors.accent)
+            .clip(RoundedCornerShape(if (Fusion.colors.backdrop != null) 28.dp else 18.dp))
+            .background(if (Fusion.colors.backdrop != null) androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(androidx.compose.ui.graphics.lerp(Fusion.colors.accent, androidx.compose.ui.graphics.Color.White, 0.15f), Fusion.colors.accent)) else androidx.compose.ui.graphics.SolidColor(Fusion.colors.accent))
             .clickable(interactionSource = interaction, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {

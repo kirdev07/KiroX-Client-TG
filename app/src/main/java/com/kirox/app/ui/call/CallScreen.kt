@@ -241,7 +241,10 @@ private fun PulsingAvatar(call: TelegramActiveCall, pulsing: Boolean) {
         } else Canvas(Modifier.fillMaxSize()) {
             drawCircle(Brush.radialGradient(listOf(glow, Color.Transparent)), radius = size.minDimension * 0.5f)
         }
-        TelegramAvatar(call.name, call.photo, 128.dp)
+        // v2: the avatar sits in an accent ring (approved calls board).
+        if (com.kirox.app.ui.theme.Fusion.colors.backdrop != null) Box(Modifier.size(160.dp).border(3.dp, com.kirox.app.ui.theme.Fusion.colors.accent, CircleShape).padding(6.dp), contentAlignment = Alignment.Center) {
+            TelegramAvatar(call.name, call.photo, 148.dp)
+        } else TelegramAvatar(call.name, call.photo, 128.dp)
     }
 }
 
@@ -298,6 +301,20 @@ private fun ActiveControls(
     isVideo: Boolean, micOff: Boolean, route: CallAudioRoute, manyRoutes: Boolean, camera: Boolean,
     onMic: () -> Unit, onSpeaker: () -> Unit, onCamera: () -> Unit, onFlip: () -> Unit, onEnd: () -> Unit
 ) {
+    if (com.kirox.app.ui.theme.Fusion.colors.backdrop != null) {
+        // Fusion UI v2 (approved calls board): rounded square tiles with labels, the red end button below.
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                if (isVideo && camera) TileButton(KiroXIcon.FlipCamera, "Повернуть", false, onFlip)
+                else TileButton(KiroXIcon.Speaker, if (manyRoutes) route.label else "Динамик", route != CallAudioRoute.Earpiece, onSpeaker)
+                TileButton(KiroXIcon.Video, if (isVideo) "Камера" else "Видео", camera, onCamera, crossed = !camera)
+                TileButton(KiroXIcon.Voice, if (micOff) "Без звука" else "Микрофон", micOff, onMic, crossed = micOff)
+            }
+            Spacer(Modifier.height(28.dp))
+            RoundButton(KiroXIcon.CallEnd, "Завершить", CallRed, Color.White, size = 72.dp, onClick = onEnd)
+        }
+        return
+    }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Top) {
         if (isVideo && camera) LabeledButton("Повернуть") { ToggleButton(KiroXIcon.FlipCamera, "Сменить камеру", false, onFlip) }
         // With only the phone and the speaker the button is a speaker switch; with a headset it cycles routes.
@@ -307,6 +324,27 @@ private fun ActiveControls(
         LabeledButton(if (isVideo) "Камера" else "Видео") { ToggleButton(KiroXIcon.Video, "Камера", camera, onCamera, crossed = !camera) }
         LabeledButton(if (micOff) "Без звука" else "Микрофон") { ToggleButton(KiroXIcon.Voice, "Микрофон", micOff, onMic, crossed = micOff) }
         LabeledButton("Завершить") { RoundButton(KiroXIcon.CallEnd, "Завершить", CallRed, Color.White, size = 60.dp, onClick = onEnd) }
+    }
+}
+
+/** v2 call control: a 72 dp rounded square, accent when on, translucent when off, label under it. */
+@Composable
+private fun TileButton(icon: KiroXIcon, label: String, on: Boolean, onClick: () -> Unit, crossed: Boolean = false) {
+    val colors = com.kirox.app.ui.theme.Fusion.colors
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(88.dp)) {
+        Box(
+            Modifier.size(72.dp).clip(RoundedCornerShape(24.dp)).background(if (on) colors.accent else Color(0x29FFFFFF))
+                .border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(24.dp))
+                .clickable(onClickLabel = label, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            IconGlyph(icon, label, Modifier.size(28.dp), Color.White)
+            if (crossed) Canvas(Modifier.size(34.dp)) {
+                drawLine(Color.White, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(size.width, size.height), 2.dp.toPx())
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(label, color = Color(0xDDFFFFFF), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

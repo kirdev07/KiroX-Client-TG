@@ -722,7 +722,10 @@ private fun ContactRow(contact: TelegramContact, onOpen: () -> Unit, onCall: () 
 private fun ContactCard(contact: TelegramContact, onDismiss: () -> Unit, onMessage: () -> Unit, onCall: (isVideo: Boolean) -> Unit) {
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Fusion.colors.surface1) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            TelegramAvatar(contact.name, contact.photo, 88.dp)
+            // v2 (approved contacts board): the avatar sits in an accent ring.
+            if (Fusion.colors.backdrop != null) Box(Modifier.size(112.dp).border(2.dp, Fusion.colors.accent, CircleShape).padding(5.dp), contentAlignment = Alignment.Center) {
+                TelegramAvatar(contact.name, contact.photo, 102.dp)
+            } else TelegramAvatar(contact.name, contact.photo, 88.dp)
             Spacer(Modifier.height(12.dp))
             Text(contact.name, color = Fusion.colors.textPrimary, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(4.dp))
@@ -730,7 +733,7 @@ private fun ContactCard(contact: TelegramContact, onDismiss: () -> Unit, onMessa
             Text(subtitle, color = Fusion.colors.textSecondary, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(20.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                CardAction(KiroXIcon.Chat, "Написать", Modifier.weight(1f), onMessage)
+                CardAction(KiroXIcon.Chat, "Сообщение", Modifier.weight(1f), onMessage)
                 CardAction(KiroXIcon.Call, "Звонок", Modifier.weight(1f)) { onCall(false) }
                 CardAction(KiroXIcon.Video, "Видео", Modifier.weight(1f)) { onCall(true) }
             }
@@ -748,10 +751,10 @@ private fun ContactCard(contact: TelegramContact, onDismiss: () -> Unit, onMessa
 @Composable
 private fun CardAction(icon: KiroXIcon, label: String, modifier: Modifier, onClick: () -> Unit) {
     Column(
-        modifier.clip(RoundedCornerShape(16.dp)).background(Fusion.colors.surface2).clickable(onClick = onClick).padding(vertical = 14.dp),
+        modifier.clip(RoundedCornerShape(18.dp)).fusionPanel(Fusion.colors, RoundedCornerShape(18.dp), opaque = Fusion.colors.surface2).clickable(onClick = onClick).padding(vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        IconGlyph(icon, null, Modifier.size(24.dp), Fusion.colors.textPrimary)
+        IconGlyph(icon, null, Modifier.size(24.dp), if (Fusion.colors.backdrop != null) Fusion.colors.accent else Fusion.colors.textPrimary)
         Spacer(Modifier.height(6.dp))
         Text(label, color = Fusion.colors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
     }

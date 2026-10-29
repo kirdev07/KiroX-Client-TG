@@ -1,5 +1,6 @@
 package com.kirox.app.ui.home
 
+import com.kirox.app.ui.components.fusionPanel
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -89,15 +90,21 @@ internal fun CallsList(state: TelegramCallsState, onLoadMore: () -> Unit, onOpen
         if (!state.complete && !state.loading && shown.size < 20) onLoadMore()
     }
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // v2 (approved calls board): segmented group in a rounded container, the active one filled with the accent.
+        val segmented = Fusion.colors.backdrop != null
+        Row(
+            (if (segmented) Modifier.padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(22.dp)).fusionPanel(Fusion.colors, RoundedCornerShape(22.dp)).padding(4.dp)
+            else Modifier.padding(horizontal = 16.dp, vertical = 10.dp)).horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(if (segmented) 2.dp else 8.dp)
+        ) {
             CallFilter.entries.forEach { value ->
                 val v2 = Fusion.colors.backdrop != null
                 val active = filter == value
                 Text(
-                    value.title, color = if (active) (if (v2) Fusion.colors.onSelectedPill else Fusion.colors.onAccent) else Fusion.colors.textSecondary,
+                    value.title, color = if (active) Fusion.colors.onAccent else Fusion.colors.textSecondary,
                     fontSize = if (v2) 14.sp else 13.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
                     modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(when {
-                        active && v2 -> Fusion.colors.selectedPill
+                        active && v2 -> Fusion.colors.accent
                         active -> Fusion.colors.accent
                         v2 -> androidx.compose.ui.graphics.Color.Transparent
                         else -> Fusion.colors.surface2
