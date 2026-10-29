@@ -2,7 +2,6 @@
 
 package com.kirox.app.ui.home
 
-import androidx.core.net.toUri
 import com.kirox.app.ui.components.fusionPanel
 import androidx.compose.material3.MaterialTheme
 import androidx.core.net.toUri
