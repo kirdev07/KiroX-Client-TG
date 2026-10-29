@@ -45,6 +45,9 @@ class CallAudioRouter(context: Context) {
     private var video = false
     /** Chosen by the user; until then headsets are followed automatically. */
     private var userChoice: CallAudioRoute? = null
+    /** Music and voice notes pause for the call and resume after it. */
+    private var focus: android.media.AudioFocusRequest? = null
+    val isRunning: Boolean get() = running
 
     private val _route = MutableStateFlow(CallAudioRoute.Earpiece)
     val route: StateFlow<CallAudioRoute> = _route.asStateFlow()
@@ -62,6 +65,11 @@ class CallAudioRouter(context: Context) {
         video = isVideo
         userChoice = null
         previousMode = audio.mode
+        focus = android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+            .setAudioAttributes(
+                android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build()
+            ).build().also { runCatching { audio.requestAudioFocus(it) } }
         audio.mode = AudioManager.MODE_IN_COMMUNICATION
         audio.registerAudioDeviceCallback(deviceCallback, handler)
         refreshAvailable()
@@ -89,6 +97,8 @@ class CallAudioRouter(context: Context) {
             if (audio.isBluetoothScoOn) { audio.stopBluetoothSco(); audio.isBluetoothScoOn = false }
         }
         audio.mode = previousMode
+        focus?.let { runCatching { audio.abandonAudioFocusRequest(it) } }
+        focus = null
     }
 
     private fun devicesChanged(headsetAdded: Boolean) {

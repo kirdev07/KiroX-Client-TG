@@ -54,14 +54,22 @@ class TelegramVoipRepository(private val client: TelegramClient, private val use
     private var activeSince = 0L
     private var remoteSink: VideoSink? = null
     private var localSink: VideoSink? = null
+    /** Hang up was pressed before TDLib gave the outgoing call an id: discard it as soon as it has one. */
+    private var cancelOutgoing = false
+    /** Signaling that arrived before the engine of that call started; fed to it on start. */
+    private val earlySignaling = ArrayList<Pair<Int, ByteArray>>()
 
     init {
         client.addUpdateHandler { update ->
             when (update) {
                 is TdApi.UpdateCall -> onCall(update.call)
-                is TdApi.UpdateNewCallSignalingData -> if (update.callId == engineCallId) engine?.receiveSignaling(update.data)
+                is TdApi.UpdateNewCallSignalingData -> {
+                    val running = engine
+                    if (update.callId == engineCallId && running != null) running.receiveSignaling(update.data)
+                    else if (earlySignaling.size < 64) earlySignaling += update.callId to update.data
+                }
                 is TdApi.UpdateAuthorizationState -> if (update.authorizationState is TdApi.AuthorizationStateClosed) {
-                    stopEngine(); _call.value = null
+                    stopEngine(); _call.value = null; cancelOutgoing = false; earlySignaling.clear()
                 }
             }
         }
@@ -69,6 +77,7 @@ class TelegramVoipRepository(private val client: TelegramClient, private val use
 
     fun start(userId: Long, isVideo: Boolean) = client.post {
         if (_call.value?.phase.isLive()) return@post
+        cancelOutgoing = false
         NativeCall.awaitLoaded()
         val user = users.user(userId)
         // Placeholder until TDLib reports the call id.
@@ -76,6 +85,7 @@ class TelegramVoipRepository(private val client: TelegramClient, private val use
         client.send(TdApi.CreateCall(userId, protocol(), isVideo)) { result ->
             if (result is TdApi.Error && com.kirox.app.BuildConfig.DEBUG) android.util.Log.d(TAG, "CreateCall: $result")
             if (result is TdApi.Error) _call.update { it?.copy(phase = CallPhase.Failed(errorText(result))) }
+            if (result is TdApi.CallId && cancelOutgoing) discardCancelled(result.id, isVideo)
         }
     }
 
@@ -90,6 +100,12 @@ class TelegramVoipRepository(private val client: TelegramClient, private val use
     /** Declines an incoming call or hangs up any other. */
     fun hangUp() = client.post {
         val current = _call.value ?: return@post
+        if (current.id == 0 && current.phase.isLive()) {
+            // CreateCall is still in flight: the call must not ring the other side anyway.
+            cancelOutgoing = true
+            _call.value = null
+            return@post
+        }
         if (current.id == 0 || !current.phase.isLive()) { _call.value = null; return@post }
         val duration = (current.phase as? CallPhase.Active)?.let { ((System.currentTimeMillis() - it.sinceMillis) / 1000).toInt() } ?: 0
         client.send(TdApi.DiscardCall(current.id, false, "", duration, current.isVideo, 0))
@@ -121,10 +137,22 @@ class TelegramVoipRepository(private val client: TelegramClient, private val use
         engine?.setSinks(remote, local)
     }
 
+    private fun discardCancelled(callId: Int, isVideo: Boolean) {
+        cancelOutgoing = false
+        client.send(TdApi.DiscardCall(callId, false, "", 0, isVideo, 0))
+    }
+
     private fun onCall(call: TdApi.Call) {
         val current = _call.value
+        // Our outgoing call that was hung up before it had an id.
+        if (cancelOutgoing && call.isOutgoing && current == null) {
+            if (call.state is TdApi.CallStatePending) discardCancelled(call.id, call.isVideo)
+            return
+        }
+        // While dialing (no id yet) an incoming call is declined like during any other call.
+        val dialing = current != null && current.id == 0 && current.phase.isLive() && !call.isOutgoing
         // A second call while one is live: decline it, the caller sees "busy".
-        if (current != null && current.id != 0 && current.id != call.id && current.phase.isLive()) {
+        if (dialing || (current != null && current.id != 0 && current.id != call.id && current.phase.isLive())) {
             if (call.state is TdApi.CallStatePending && !call.isOutgoing) client.send(TdApi.DiscardCall(call.id, false, "", 0, call.isVideo, 0))
             return
         }
@@ -147,6 +175,7 @@ class TelegramVoipRepository(private val client: TelegramClient, private val use
             is TdApi.CallStateHangingUp -> current?.phase ?: CallPhase.Connecting
             is TdApi.CallStateDiscarded -> {
                 stopEngine()
+                earlySignaling.removeAll { it.first == call.id }
                 CallPhase.Ended(
                     when (state.reason) {
                         is TdApi.CallDiscardReasonDeclined -> CallEndReason.Declined
@@ -157,7 +186,7 @@ class TelegramVoipRepository(private val client: TelegramClient, private val use
                     (current?.phase as? CallPhase.Active)?.let { ((System.currentTimeMillis() - it.sinceMillis) / 1000).toInt() } ?: 0
                 )
             }
-            is TdApi.CallStateError -> { stopEngine(); CallPhase.Failed(errorText(state.error)) }
+            is TdApi.CallStateError -> { stopEngine(); earlySignaling.removeAll { it.first == call.id }; CallPhase.Failed(errorText(state.error)) }
             else -> return
         }
         val base = current?.takeIf { it.id == call.id || it.id == 0 }
@@ -221,18 +250,26 @@ class TelegramVoipRepository(private val client: TelegramClient, private val use
                 client.send(TdApi.SendCallSignalingData(callId, data))
             }
 
+            // Late callbacks of a stopped engine must not touch the next call.
             override fun onRemoteMedia(audioMuted: Boolean, videoActive: Boolean) = client.post {
-                _call.update { it?.copy(remoteMuted = audioMuted, remoteVideo = videoActive) }
+                if (engineCallId == callId) _call.update { it?.copy(remoteMuted = audioMuted, remoteVideo = videoActive) }
             }
 
-            override fun onSignalBars(bars: Int) = client.post { _call.update { it?.copy(signalBars = bars) } }
+            override fun onSignalBars(bars: Int) = client.post { if (engineCallId == callId) _call.update { it?.copy(signalBars = bars) } }
         }
-        val version = ready.protocol.libraryVersions.firstOrNull() ?: return
+        val version = ready.protocol.libraryVersions.firstOrNull() ?: run {
+            // No common engine version: end the call instead of hanging on "Соединение…".
+            client.send(TdApi.DiscardCall(callId, true, "", 0, call.isVideo, 0))
+            return
+        }
         engine = NativeCall.start(
             listener, version, ready.encryptionKey, call.isOutgoing, ready.allowP2p, ready.customParameters,
             ready.protocol.maxLayer, servers, video
         )?.also { native ->
             native.setSinks(remoteSink, localSink)
+            // Signaling that came before the engine existed.
+            earlySignaling.filter { it.first == callId }.forEach { native.receiveSignaling(it.second) }
+            earlySignaling.clear()
             _call.value?.micMuted?.let { if (it) native.setMuted(true) }
         }
         if (engine == null) client.send(TdApi.DiscardCall(callId, true, "", 0, call.isVideo, 0))

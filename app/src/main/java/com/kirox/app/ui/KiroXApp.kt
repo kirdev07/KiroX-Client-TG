@@ -74,6 +74,7 @@ fun KiroXApp() {
     val autoDownloadRule by telegramViewModel.autoDownload.rule.collectAsStateWithLifecycle()
     val messageError by telegramViewModel.messages.error.collectAsStateWithLifecycle()
     val callsState by telegramViewModel.calls.state.collectAsStateWithLifecycle()
+    // Ringtone, audio route and proximity lock follow the call in CallMedia, not this screen state.
     val activeCall by telegramViewModel.voip.call.collectAsStateWithLifecycle()
     val groupCall by telegramViewModel.groupCalls.call.collectAsStateWithLifecycle()
     var groupCallNotice by remember { mutableStateOf<String?>(null) }
@@ -90,13 +91,31 @@ fun KiroXApp() {
     }
     // Microphone (and camera for video) are asked right before a call starts or is answered.
     var pendingCall by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var pendingNeedsCamera by remember { mutableStateOf(false) }
+    var pendingWantsVideo by remember { mutableStateOf(false) }
+    fun granted(permission: String) =
+        androidx.core.content.ContextCompat.checkSelfPermission(context, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
     val callPermissions = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
-    ) { granted ->
+    ) { _ ->
         val action = pendingCall
         pendingCall = null
-        if (granted[android.Manifest.permission.RECORD_AUDIO] == true) action?.invoke()
-        else android.widget.Toast.makeText(context, "Без доступа к микрофону звонок невозможен", android.widget.Toast.LENGTH_LONG).show()
+        val camera = granted(android.Manifest.permission.CAMERA)
+        when {
+            !granted(android.Manifest.permission.RECORD_AUDIO) ->
+                android.widget.Toast.makeText(context, "Без доступа к микрофону звонок невозможен", android.widget.Toast.LENGTH_LONG).show()
+            // Turning the camera on needs the camera; nothing to do without it.
+            pendingNeedsCamera && !camera ->
+                android.widget.Toast.makeText(context, "Нет доступа к камере", android.widget.Toast.LENGTH_SHORT).show()
+            else -> {
+                action?.invoke()
+                // A video call without camera access goes on as a voice call with the camera off.
+                if (pendingWantsVideo && !camera) {
+                    telegramViewModel.voip.setCamera(false)
+                    android.widget.Toast.makeText(context, "Нет доступа к камере — звонок без видео", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
     // Android 13+: ask once after sign-in, so new-message notifications can be shown.
     val notificationPermission = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -107,7 +126,7 @@ fun KiroXApp() {
             androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
         ) notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
     }
-    fun withCallPermissions(video: Boolean, action: () -> Unit) {
+    fun withCallPermissions(video: Boolean, cameraOnly: Boolean = false, action: () -> Unit) {
         val needed = listOfNotNull(
             android.Manifest.permission.RECORD_AUDIO,
             if (video) android.Manifest.permission.CAMERA else null,
@@ -115,7 +134,12 @@ fun KiroXApp() {
             if (android.os.Build.VERSION.SDK_INT >= 33) android.Manifest.permission.POST_NOTIFICATIONS else null
         )
             .filter { androidx.core.content.ContextCompat.checkSelfPermission(context, it) != android.content.pm.PackageManager.PERMISSION_GRANTED }
-        if (needed.isEmpty()) action() else { pendingCall = action; callPermissions.launch(needed.toTypedArray()) }
+        if (needed.isEmpty()) action() else {
+            pendingCall = action
+            pendingNeedsCamera = cameraOnly
+            pendingWantsVideo = video && !cameraOnly
+            callPermissions.launch(needed.toTypedArray())
+        }
     }
     val groupCallActions = remember {
         object : com.kirox.app.ui.call.GroupCallActions {
@@ -124,7 +148,7 @@ fun KiroXApp() {
             override fun dismiss() = telegramViewModel.groupCalls.dismiss()
             override fun setCamera(on: Boolean) {
                 // The video chat service adds the camera type itself when the camera turns on.
-                if (on) withCallPermissions(video = true) { telegramViewModel.groupCalls.setCamera(true) }
+                if (on) withCallPermissions(video = true, cameraOnly = true) { telegramViewModel.groupCalls.setCamera(true) }
                 else telegramViewModel.groupCalls.setCamera(false)
             }
             override fun switchCamera() = telegramViewModel.groupCalls.switchCamera()
@@ -139,7 +163,7 @@ fun KiroXApp() {
                 withCallPermissions(video) { telegramViewModel.groupCalls.leave(); callActions.accept() }
             }
             override fun setCamera(on: Boolean) {
-                if (on) withCallPermissions(video = true) { callActions.setCamera(true) } else callActions.setCamera(false)
+                if (on) withCallPermissions(video = true, cameraOnly = true) { callActions.setCamera(true) } else callActions.setCamera(false)
             }
         }
     }

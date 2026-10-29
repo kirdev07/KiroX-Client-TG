@@ -76,12 +76,16 @@ class NativeCall private constructor(private val listener: Listener) {
 
         private val loaded = java.util.concurrent.CountDownLatch(1)
 
+        /** [available] for the UI: the engine may finish loading after the call screen is shown. */
+        val ready = kotlinx.coroutines.flow.MutableStateFlow(false)
+
         fun load(context: Context) {
             if (available) return
             available = runCatching {
                 ContextUtils.initialize(context.applicationContext)
                 System.loadLibrary("kiroxvoip")
             }.isSuccess
+            ready.value = available
             loaded.countDown()
         }
 

@@ -39,6 +39,7 @@ class CallController(private val app: Application, private val voip: TelegramVoi
 
     private fun update() {
         val call = voip.call.value
+        CallMedia.sync(app, call)
         // Background without a call: close TDLib after a grace period so Telegram sends pushes.
         if (appVisible) { pauseJob?.cancel(); pauseJob = null; client.start(); com.kirox.app.notify.KeepConnectedService.start(app) }
         else if (call == null && pauseJob?.isActive != true) pauseJob = scope.launch { kotlinx.coroutines.delay(BACKGROUND_GRACE_MS); client.pauseIfIdle() }

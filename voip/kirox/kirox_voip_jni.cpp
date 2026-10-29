@@ -1,6 +1,8 @@
 // JNI bridge between com.kirox.app.voip.NativeCall and the tgcalls engine.
 // Written for KiroX; tgcalls itself is LGPL-3.0, WebRTC is BSD-3-Clause.
 
+#include <atomic>
+#include <memory>
 #include <jni.h>
 
 #include <algorithm>
@@ -71,15 +73,33 @@ void callJava(jobject target, const char *name, const char *signature, const std
     if (env->ExceptionCheck()) env->ExceptionClear();
 }
 
+/**
+ * Global reference to the Java NativeCall, shared by the engine callbacks. The engine frees its
+ * internals (and these callbacks) on its own threads some time after stop completes, so the
+ * reference lives until the last callback is gone, and callbacks after stop do nothing.
+ */
+struct JavaRef {
+    jobject ref = nullptr;
+    std::atomic<bool> stopped{false};
+    explicit JavaRef(JNIEnv *env, jobject object) : ref(env->NewGlobalRef(object)) {}
+    ~JavaRef() {
+        if (ref) webrtc::AttachCurrentThreadIfNeeded()->DeleteGlobalRef(ref);
+    }
+    JavaRef(const JavaRef &) = delete;
+    JavaRef &operator=(const JavaRef &) = delete;
+};
+
 struct Call {
     std::shared_ptr<PlatformContext> context;
     std::shared_ptr<VideoCaptureInterface> capture;
     std::unique_ptr<Instance> instance;
     std::shared_ptr<rtc::VideoSinkInterface<webrtc::VideoFrame>> remoteSink;
     std::shared_ptr<rtc::VideoSinkInterface<webrtc::VideoFrame>> localSink;
-    jobject javaCall = nullptr;
+    std::shared_ptr<JavaRef> java;
     bool videoEnabled = false;
     std::string cameraId = "front";
+    /** Camera the capturer really uses; differs from cameraId after a switch while the camera was off. */
+    std::string capturedCameraId = "front";
 };
 
 Call *fromHandle(jlong handle) { return reinterpret_cast<Call *>(static_cast<intptr_t>(handle)); }
@@ -119,19 +139,20 @@ JNIEXPORT jlong JNICALL Java_com_kirox_app_voip_NativeCall_nativeStart(
         jintArray reflectorIds, jobjectArray peerTags,
         jboolean video, jboolean frontCamera) {
     auto *call = new Call();
-    call->javaCall = env->NewGlobalRef(thiz);
+    call->java = std::make_shared<JavaRef>(env, thiz);
     call->context = std::make_shared<AndroidContext>(env, thiz, nullptr, false);
     call->videoEnabled = video;
     call->cameraId = frontCamera ? "front" : "back";
     if (video) {
         call->capture = VideoCaptureInterface::Create(StaticThreads::getThreads(), call->cameraId, false, call->context);
+        call->capturedCameraId = call->cameraId;
     }
 
     std::vector<uint8_t> keyBytes = toBytes(env, key);
     auto keyValue = std::make_shared<std::array<uint8_t, EncryptionKey::kSize>>();
     std::copy_n(keyBytes.begin(), std::min<size_t>(keyBytes.size(), EncryptionKey::kSize), keyValue->begin());
 
-    jobject javaCall = call->javaCall;
+    std::shared_ptr<JavaRef> java = call->java;
     Descriptor descriptor = {
         .version = toStd(env, version),
         .config = Config{
@@ -150,7 +171,8 @@ JNIEXPORT jlong JNICALL Java_com_kirox_app_voip_NativeCall_nativeStart(
         },
         .encryptionKey = EncryptionKey(keyValue, isOutgoing),
         .videoCapture = call->capture,
-        .stateUpdated = [javaCall](State state) {
+        .stateUpdated = [java](State state) {
+            if (java->stopped) return;
             jint value = kStateConnecting;
             switch (state) {
                 case State::Established: value = kStateEstablished; break;
@@ -158,20 +180,23 @@ JNIEXPORT jlong JNICALL Java_com_kirox_app_voip_NativeCall_nativeStart(
                 case State::Reconnecting: value = kStateReconnecting; break;
                 default: break;
             }
-            callJava(javaCall, "onEngineState", "(I)V", [&](JNIEnv *e, jmethodID m) { e->CallVoidMethod(javaCall, m, value); });
+            callJava(java->ref, "onEngineState", "(I)V", [&](JNIEnv *e, jmethodID m) { e->CallVoidMethod(java->ref, m, value); });
         },
-        .signalBarsUpdated = [javaCall](int bars) {
-            callJava(javaCall, "onSignalBars", "(I)V", [&](JNIEnv *e, jmethodID m) { e->CallVoidMethod(javaCall, m, static_cast<jint>(bars)); });
+        .signalBarsUpdated = [java](int bars) {
+            if (java->stopped) return;
+            callJava(java->ref, "onSignalBars", "(I)V", [&](JNIEnv *e, jmethodID m) { e->CallVoidMethod(java->ref, m, static_cast<jint>(bars)); });
         },
-        .remoteMediaStateUpdated = [javaCall](AudioState audio, VideoState videoState) {
-            callJava(javaCall, "onRemoteMedia", "(ZI)V", [&](JNIEnv *e, jmethodID m) {
-                e->CallVoidMethod(javaCall, m, static_cast<jboolean>(audio == AudioState::Muted), static_cast<jint>(videoState));
+        .remoteMediaStateUpdated = [java](AudioState audio, VideoState videoState) {
+            if (java->stopped) return;
+            callJava(java->ref, "onRemoteMedia", "(ZI)V", [&](JNIEnv *e, jmethodID m) {
+                e->CallVoidMethod(java->ref, m, static_cast<jboolean>(audio == AudioState::Muted), static_cast<jint>(videoState));
             });
         },
-        .signalingDataEmitted = [javaCall](const std::vector<uint8_t> &data) {
-            callJava(javaCall, "onSignalingData", "([B)V", [&](JNIEnv *e, jmethodID m) {
+        .signalingDataEmitted = [java](const std::vector<uint8_t> &data) {
+            if (java->stopped) return;
+            callJava(java->ref, "onSignalingData", "([B)V", [&](JNIEnv *e, jmethodID m) {
                 jbyteArray array = toJava(e, data);
-                e->CallVoidMethod(javaCall, m, array);
+                e->CallVoidMethod(java->ref, m, array);
                 e->DeleteLocalRef(array);
             });
         },
@@ -224,7 +249,6 @@ JNIEXPORT jlong JNICALL Java_com_kirox_app_voip_NativeCall_nativeStart(
 
     call->instance = Meta::Create(descriptor.version, std::move(descriptor));
     if (!call->instance) {
-        env->DeleteGlobalRef(call->javaCall);
         delete call;
         return 0;
     }
@@ -247,10 +271,16 @@ JNIEXPORT void JNICALL Java_com_kirox_app_voip_NativeCall_nativeSetVideo(JNIEnv 
     if (!call || !call->instance) return;
     if (enabled && !call->capture) {
         call->capture = VideoCaptureInterface::Create(StaticThreads::getThreads(), call->cameraId, false, call->context);
+        call->capturedCameraId = call->cameraId;
         if (call->localSink) call->capture->setOutput(call->localSink);
         call->instance->setVideoCapture(call->capture);
     }
     if (call->capture) call->capture->setState(enabled ? VideoState::Active : VideoState::Inactive);
+    // The camera was flipped while off: the running capturer could not switch then.
+    if (enabled && call->capture && call->capturedCameraId != call->cameraId) {
+        call->capture->switchToDevice(call->cameraId, false);
+        call->capturedCameraId = call->cameraId;
+    }
     call->videoEnabled = enabled;
 }
 
@@ -258,7 +288,11 @@ JNIEXPORT void JNICALL Java_com_kirox_app_voip_NativeCall_nativeSwitchCamera(JNI
     Call *call = fromHandle(handle);
     if (!call) return;
     call->cameraId = front ? "front" : "back";
-    if (call->capture) call->capture->switchToDevice(call->cameraId, false);
+    // Only a running camera can switch; otherwise it switches when turned on.
+    if (call->capture && call->videoEnabled) {
+        call->capture->switchToDevice(call->cameraId, false);
+        call->capturedCameraId = call->cameraId;
+    }
 }
 
 JNIEXPORT void JNICALL Java_com_kirox_app_voip_NativeCall_nativeSetSinks(JNIEnv *env, jobject, jlong handle, jobject remoteSink, jobject localSink) {
@@ -275,20 +309,20 @@ JNIEXPORT void JNICALL Java_com_kirox_app_voip_NativeCall_nativeStop(JNIEnv *env
     if (!call) return;
     if (call->capture) call->capture->setState(VideoState::Inactive);
     std::shared_ptr<Instance> instance(std::move(call->instance));
-    jobject javaCall = call->javaCall;
+    std::shared_ptr<JavaRef> java = call->java;
+    // From now on engine callbacks are ignored; only onStopped below reaches Java.
+    java->stopped = true;
     auto keepAlive = std::make_shared<Call *>(call);
     if (instance) {
-        instance->stop([instance, javaCall, keepAlive](FinalState) {
+        instance->stop([instance, java, keepAlive](FinalState) {
             Call *finished = *keepAlive;
-            JNIEnv *e = webrtc::AttachCurrentThreadIfNeeded();
-            callJava(javaCall, "onStopped", "()V", [&](JNIEnv *ee, jmethodID m) { ee->CallVoidMethod(javaCall, m); });
+            callJava(java->ref, "onStopped", "()V", [&](JNIEnv *ee, jmethodID m) { ee->CallVoidMethod(java->ref, m); });
             finished->capture.reset();
             finished->context.reset();
-            e->DeleteGlobalRef(javaCall);
+            // The reference itself goes when the engine has dropped its callbacks too.
             delete finished;
         });
     } else {
-        env->DeleteGlobalRef(javaCall);
         delete call;
     }
 }

@@ -1,9 +1,5 @@
 package com.kirox.app.ui.call
 
-import android.media.AudioAttributes
-import android.media.RingtoneManager
-import android.os.VibrationEffect
-import android.os.Vibrator
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -174,12 +170,10 @@ private fun CallWindow(live: Boolean, earMode: Boolean) {
             if (activity != null) { activity.setShowWhenLocked(false); activity.setTurnScreenOn(false) }
         }
     }
+    // Held by CallMedia, which also lets it go when the call ends while this screen is not updating.
     DisposableEffect(earMode) {
-        val power = context.getSystemService(android.os.PowerManager::class.java)
-        val lock = if (earMode && power?.isWakeLockLevelSupported(android.os.PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK) == true)
-            power.newWakeLock(android.os.PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "kirox:call-proximity").apply { acquire(3 * 60 * 60 * 1000L) }
-        else null
-        onDispose { if (lock?.isHeld == true) lock.release() }
+        com.kirox.app.voip.CallMedia.setProximity(context, earMode)
+        onDispose { com.kirox.app.voip.CallMedia.setProximity(context, false) }
     }
 }
 
@@ -190,18 +184,18 @@ private fun CallWindow(live: Boolean, earMode: Boolean) {
 @Composable
 private fun callAudioRouter(callId: Int, active: Boolean, video: Boolean): CallAudioRouter {
     val context = LocalContext.current
-    val router = remember(callId) { CallAudioRouter(context) }
+    // Owned by CallMedia for the whole call: started and stopped with the call, not with this screen.
+    val router = remember(callId) { com.kirox.app.voip.CallMedia.router(context, callId) }
     val bluetoothPermission = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
     ) { granted -> if (granted && active) { router.stop(); router.start(video) } }
-    DisposableEffect(router, active) {
+    LaunchedEffect(router, active) {
         if (active) {
-            router.start(video)
+            if (!router.isRunning) router.start(video)
             if (android.os.Build.VERSION.SDK_INT >= 31 &&
                 context.checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != android.content.pm.PackageManager.PERMISSION_GRANTED
             ) runCatching { bluetoothPermission.launch(android.Manifest.permission.BLUETOOTH_CONNECT) }
         }
-        onDispose { router.stop() }
     }
     return router
 }
@@ -279,11 +273,14 @@ private fun StatusLine(call: TelegramActiveCall) {
 
 @Composable
 private fun IncomingControls(call: TelegramActiveCall, actions: CallActions) {
+    // After a cold start from a push the engine may still be loading: the Accept button appears then.
+    val engineReady by com.kirox.app.voip.NativeCall.ready.collectAsState()
+    val canAnswer = engineReady || callsEnabled
     val transition = rememberInfiniteTransition(label = "accept")
     val bounce by transition.animateFloat(0f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "bounce")
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Bottom) {
         LabeledButton("Отклонить") { RoundButton(KiroXIcon.CallEnd, "Отклонить", CallRed, Color.White, size = 72.dp, onClick = actions::hangUp) }
-        if (callsEnabled) LabeledButton(if (call.isVideo) "С видео" else "Принять") {
+        if (canAnswer) LabeledButton(if (call.isVideo) "С видео" else "Принять") {
             Box(Modifier.padding(bottom = (6 * bounce).dp)) {
                 RoundButton(if (call.isVideo) KiroXIcon.Video else KiroXIcon.Call, "Принять", CallGreen, Color.White, size = 72.dp, onClick = actions::accept)
             }
@@ -336,25 +333,10 @@ private fun RoundButton(icon: KiroXIcon, description: String, background: Color,
 @Composable
 private fun IncomingAlert(active: Boolean) {
     val context = LocalContext.current
+    // CallMedia also stops it when the call stops ringing while this screen is in the background.
     DisposableEffect(active) {
-        if (!active) return@DisposableEffect onDispose {}
-        val ringtone = runCatching {
-            RingtoneManager.getRingtone(context, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))?.apply {
-                audioAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).build()
-                isLooping = true
-                play()
-            }
-        }.getOrNull()
-        @Suppress("DEPRECATION")
-        val vibrator = context.getSystemService(Vibrator::class.java)
-        val pattern = longArrayOf(0, 600, 900)
-        runCatching {
-            vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
-        }
-        onDispose {
-            runCatching { ringtone?.stop() }
-            runCatching { vibrator?.cancel() }
-        }
+        if (active) com.kirox.app.voip.CallMedia.startRinging(context)
+        onDispose { com.kirox.app.voip.CallMedia.stopRinging() }
     }
 }
 
