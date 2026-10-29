@@ -157,16 +157,33 @@ internal fun ChatSearchResults(
         results = search(q)
         if (q.length >= 2) messages = searchMessages(q)
     }
-    val current = results
+    // Tabs of the approved search board; filtering is local over what the search returned.
+    var tab by rememberSaveable { mutableIntStateOf(0) }
+    val tabs = listOf("Все", "Люди", "Каналы", "Группы", "Сообщения")
+    val kind = when (tab) { 1 -> com.kirox.app.telegram.TelegramChatKind.Private; 2 -> com.kirox.app.telegram.TelegramChatKind.Channel; 3 -> com.kirox.app.telegram.TelegramChatKind.Group; else -> null }
+    val current = results?.let { list -> when { tab == 4 -> emptyList(); kind != null -> list.filter { it.kind == kind }; else -> list } }
+    val shownMessages = if (tab == 0 || tab == 4) messages else emptyList()
+    if (query.isNotBlank()) androidx.compose.foundation.lazy.LazyRow(
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        items(tabs.size) { i ->
+            val selected = i == tab
+            Text(
+                tabs[i], color = if (selected) Fusion.colors.onSelectedPill else Fusion.colors.textSecondary, fontSize = 14.sp, fontWeight = FontWeight.Medium,
+                modifier = Modifier.clip(CircleShape).background(if (selected) Fusion.colors.selectedPill else androidx.compose.ui.graphics.Color.Transparent)
+                    .clickable { tab = i }.padding(horizontal = 14.dp, vertical = 8.dp)
+            )
+        }
+    }
     when {
         query.isBlank() -> Hint("Введите название чата, имя или текст сообщения")
         current == null -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(Modifier.size(24.dp), color = Fusion.colors.textSecondary, strokeWidth = 2.dp) }
-        current.isEmpty() && messages.isEmpty() -> Hint("Ничего не найдено")
+        current.isEmpty() && shownMessages.isEmpty() -> Hint("Ничего не найдено")
         else -> LazyColumn(Modifier.fillMaxSize()) {
             if (current.isNotEmpty()) item(key = "chats") { SectionTitle("Чаты и каналы") }
             items(current, key = { it.id }) { row(it) }
-            if (messages.isNotEmpty()) item(key = "messages") { SectionTitle("Сообщения") }
-            items(messages, key = { "m${it.chatId}_${it.messageId}" }) { found ->
+            if (shownMessages.isNotEmpty()) item(key = "messages") { SectionTitle("Сообщения") }
+            items(shownMessages, key = { "m${it.chatId}_${it.messageId}" }) { found ->
                 Row(Modifier.fillMaxWidth().clickable { onOpenMessage(found) }.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     com.kirox.app.ui.components.TelegramAvatar(found.chatTitle, found.photo, 44.dp)
                     Spacer(Modifier.width(12.dp))

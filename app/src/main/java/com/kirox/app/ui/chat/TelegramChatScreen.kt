@@ -212,6 +212,8 @@ fun TelegramChatScreen(
     var searchQuery by remember(history.chatId) { mutableStateOf("") }
     var muted by remember(history.chatId) { mutableStateOf<Boolean?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
+    var profileOpen by remember { mutableStateOf(false) }
+
     var autoDeleteOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     // Search filters the loaded part of the conversation.
@@ -352,6 +354,21 @@ fun TelegramChatScreen(
             onGroupCall != null && history.threadTitle == null && (history.peerKind == TelegramPeerKind.Group || history.peerKind == TelegramPeerKind.Channel),
         canVideoCall = onCall != null && history.peerKind == TelegramPeerKind.User && !history.isSecret
     )
+    if (profileOpen) androidx.compose.ui.window.Dialog(
+        onDismissRequest = { profileOpen = false },
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) {
+        PeerProfileScreen(
+            chatId = history.chatId, title = peer.name, photo = peer.photo, status = peer.status,
+            canCall = onCall != null && history.peerKind == TelegramPeerKind.User && !history.isSecret,
+            onCall = { video -> profileOpen = false; onCall?.invoke(video) },
+            muted = muted,
+            onToggleMute = menu?.let { m -> { target -> muted = target; scope.launch { runCatching { m.setMuted(history.chatId, target) }.onFailure { muted = !target } } } },
+            onSearch = { profileOpen = false; searching = true },
+            onOpenMessage = { id -> profileOpen = false; actions.jumpTo(id) },
+            onBack = { profileOpen = false }
+        )
+    }
 
     // The wallpaper spans the whole screen, so a translucent Glass header and the floating composer sit over it.
     Box(Modifier.fillMaxSize()) {
@@ -373,7 +390,10 @@ fun TelegramChatScreen(
             ) else if (searching) Column(Modifier.statusBarsPadding()) {
                 ChatSearchField(searchQuery, { searchQuery = it }, onClose = { searching = false; searchQuery = "" })
             } else Column {
-                ChatHeader(peer, onBack, onProfile = {}, onOverflow = {
+                ChatHeader(peer, onBack, onProfile = {
+                    profileOpen = true
+                    if (menu != null) scope.launch { muted = runCatching { menu.isMuted(history.chatId) }.getOrNull() }
+                }, onOverflow = {
                 if (menu == null) notice = "Меню чата недоступно" else {
                     menuOpen = true
                     scope.launch { muted = runCatching { menu.isMuted(history.chatId) }.getOrNull() }

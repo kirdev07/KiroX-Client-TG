@@ -56,12 +56,29 @@ class TelegramChatRepository(private val client: TelegramClient) {
     suspend fun deleteFolder(id: Int) { client.query(TdApi.DeleteChatFolder(id, LongArray(0))) }
 
     /** New basic group with [userIds]; returns its chat id. */
-    suspend fun createGroup(title: String, userIds: List<Long>): Long =
-        client.query(TdApi.CreateNewBasicGroupChat(userIds.toLongArray(), title, 0)).chatId
+    suspend fun createGroup(title: String, userIds: List<Long>, description: String = ""): Long {
+        val id = client.query(TdApi.CreateNewBasicGroupChat(userIds.toLongArray(), title, 0)).chatId
+        if (description.isNotBlank()) runCatching { client.query(TdApi.SetChatDescription(id, description)) }
+        return id
+    }
 
-    /** New broadcast channel; returns its chat id. */
-    suspend fun createChannel(title: String, description: String): Long =
-        client.query(TdApi.CreateNewSupergroupChat(title, false, true, description, null, 0, false)).id
+    /** Why [username] cannot be a new public link, or null when it is free. */
+    suspend fun publicLinkProblem(username: String): String? =
+        when (runCatching { client.query(TdApi.CheckChatUsername(0, username)) }.getOrNull()) {
+            is TdApi.CheckChatUsernameResultOk -> null
+            is TdApi.CheckChatUsernameResultUsernameInvalid -> "Ссылка может содержать латиницу, цифры и «_», от 5 символов"
+            is TdApi.CheckChatUsernameResultUsernameOccupied, is TdApi.CheckChatUsernameResultUsernamePurchasable -> "Эта ссылка уже занята"
+            is TdApi.CheckChatUsernameResultPublicChatsTooMany -> "Слишком много публичных каналов и групп"
+            else -> "Не удалось проверить ссылку"
+        }
+
+    /** New broadcast channel, public under t.me/[username] when it is given; returns its chat id. */
+    suspend fun createChannel(title: String, description: String, username: String? = null): Long {
+        val chat = client.query(TdApi.CreateNewSupergroupChat(title, false, true, description, null, 0, false))
+        val supergroupId = (chat.type as? TdApi.ChatTypeSupergroup)?.supergroupId
+        if (!username.isNullOrBlank() && supergroupId != null) client.query(TdApi.SetSupergroupUsername(supergroupId, username))
+        return chat.id
+    }
 
     suspend fun isMuted(chatId: Long): Boolean =
         client.query(TdApi.GetChat(chatId)).notificationSettings.let { !it.useDefaultMuteFor && it.muteFor > 0 }
@@ -113,6 +130,52 @@ class TelegramChatRepository(private val client: TelegramClient) {
         val public = if (query.trim().length >= 4) runCatching { client.query(TdApi.SearchPublicChats(query, null)).chatIds.toList() }.getOrDefault(emptyList()) else emptyList()
         return items((local + server + public).distinct())
     }
+
+    /** Username, about text and phone shown on a chat's profile; empty strings when there are none. */
+    suspend fun profileInfo(chatId: Long): TelegramProfileInfo {
+        val type = onDispatcher { chatsById[chatId]?.type }
+        return runCatching {
+            when (type) {
+                is TdApi.ChatTypePrivate, is TdApi.ChatTypeSecret -> {
+                    val userId = (type as? TdApi.ChatTypePrivate)?.userId ?: (type as TdApi.ChatTypeSecret).userId
+                    val user = client.query(TdApi.GetUser(userId))
+                    val full = runCatching { client.query(TdApi.GetUserFullInfo(userId)) }.getOrNull()
+                    TelegramProfileInfo(user.usernames?.activeUsernames?.firstOrNull().orEmpty(), full?.bio?.text.orEmpty(), user.phoneNumber.orEmpty())
+                }
+                is TdApi.ChatTypeSupergroup -> {
+                    val group = client.query(TdApi.GetSupergroup(type.supergroupId))
+                    val full = runCatching { client.query(TdApi.GetSupergroupFullInfo(type.supergroupId)) }.getOrNull()
+                    TelegramProfileInfo(group.usernames?.activeUsernames?.firstOrNull().orEmpty(), full?.description.orEmpty(), "")
+                }
+                is TdApi.ChatTypeBasicGroup -> TelegramProfileInfo("", runCatching { client.query(TdApi.GetBasicGroupFullInfo(type.basicGroupId)).description }.getOrNull().orEmpty(), "")
+                else -> TelegramProfileInfo()
+            }
+        }.getOrDefault(TelegramProfileInfo())
+    }
+
+    /** Newest photos/videos, files, voice notes or links of a chat, for the profile tabs. */
+    suspend fun sharedMedia(chatId: Long, kind: SharedMediaKind): List<TelegramSharedItem> {
+        val filter: TdApi.SearchMessagesFilter = when (kind) {
+            SharedMediaKind.Media -> TdApi.SearchMessagesFilterPhotoAndVideo()
+            SharedMediaKind.Files -> TdApi.SearchMessagesFilterDocument()
+            SharedMediaKind.Voice -> TdApi.SearchMessagesFilterVoiceNote()
+            SharedMediaKind.Links -> TdApi.SearchMessagesFilterUrl()
+        }
+        val found = runCatching { client.query(TdApi.SearchChatMessages(chatId, null, "", null, 0, 0, SHARED_LIMIT, filter)) }.getOrNull() ?: return emptyList()
+        return found.messages.filterNotNull().map { message ->
+            when (val content = message.content) {
+                is TdApi.MessagePhoto -> TelegramSharedItem(message.id, message.date, thumb = content.photo.sizes.minByOrNull { kotlin.math.abs(it.width - 320) }?.photo?.toRef())
+                is TdApi.MessageVideo -> TelegramSharedItem(message.id, message.date, thumb = content.video.thumbnail?.file?.toRef(), subtitle = durationText(content.video.duration), isVideo = true)
+                is TdApi.MessageDocument -> TelegramSharedItem(message.id, message.date, title = content.document.fileName.ifBlank { "Файл" }, subtitle = sizeText(content.document.document.size))
+                is TdApi.MessageVoiceNote -> TelegramSharedItem(message.id, message.date, title = "Голосовое сообщение", subtitle = durationText(content.voiceNote.duration))
+                is TdApi.MessageText -> TelegramSharedItem(message.id, message.date, title = Regex("https?://\\S+|t\\.me/\\S+|[\\w.-]+\\.[a-z]{2,}/\\S*").find(content.text.text)?.value ?: content.text.text.take(80), subtitle = content.text.text.take(120))
+                else -> TelegramSharedItem(message.id, message.date, title = messagePreview(message))
+            }
+        }
+    }
+
+    private fun durationText(seconds: Int) = "%d:%02d".format(seconds / 60, seconds % 60)
+    private fun sizeText(bytes: Long) = when { bytes >= 1_048_576 -> "%.1f МБ".format(bytes / 1_048_576.0); bytes >= 1024 -> "${bytes / 1024} КБ"; else -> "$bytes Б" }
 
     /** Messages matching [query] in all chats of the main list, newest first. */
     suspend fun searchMessages(query: String): List<TelegramFoundMessage> {
@@ -322,3 +385,18 @@ internal fun messagePreview(message: TdApi.Message?): String = when (val content
 }
 
 private const val MUTE_FOREVER_S = 400 * 24 * 60 * 60
+
+data class TelegramProfileInfo(val username: String = "", val about: String = "", val phone: String = "")
+
+enum class SharedMediaKind(val title: String) { Media("Медиа"), Files("Файлы"), Voice("Голосовые"), Links("Ссылки") }
+
+data class TelegramSharedItem(
+    val messageId: Long,
+    val date: Int,
+    val thumb: TelegramFileRef? = null,
+    val title: String = "",
+    val subtitle: String = "",
+    val isVideo: Boolean = false
+)
+
+private const val SHARED_LIMIT = 60
