@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.background
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -655,14 +656,21 @@ internal fun filterContacts(contacts: List<TelegramContact>, query: String): Lis
 private fun ContactsList(contacts: List<TelegramContact>, loading: Boolean, focusSearch: Int, onOpen: (Long) -> Unit, onCall: (Long, Boolean) -> Unit, onAdd: () -> Unit = {}) {
     var query by rememberSaveable { mutableStateOf("") }
     val shown = remember(contacts, query) { filterContacts(contacts, query) }
+    val v2 = Fusion.colors.backdrop != null
     val context = androidx.compose.ui.platform.LocalContext.current
     Column(Modifier.fillMaxSize()) {
         SearchField(query, "Имя, @ник или номер", focusTrigger = focusSearch) { query = it }
         // Approved contacts layout: «Новый контакт» and «Пригласить в Telegram» above the list.
-        if (query.isBlank()) Column(Modifier.padding(horizontal = 14.dp, vertical = 6.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp)).fusionPanel(Fusion.colors, RoundedCornerShape(20.dp))) {
-            TileRow(KiroXIcon.Add, "Новый контакт", plainIcon = true, onClick = onAdd)
-            HorizontalDivider(Modifier.padding(start = 56.dp), color = Fusion.colors.outline)
-            TileRow(KiroXIcon.Link, "Пригласить в Telegram", plainIcon = true) { inviteFriends(context) }
+        if (query.isBlank()) {
+            if (Fusion.colors.backdrop != null) {
+                // Approved contacts board: violet square icons, no card around them.
+                AccentRow(KiroXIcon.Add, "Новый контакт", onAdd)
+                AccentRow(KiroXIcon.Link, "Пригласить в Telegram") { inviteFriends(context) }
+            } else Column(Modifier.padding(horizontal = 14.dp, vertical = 6.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp)).fusionPanel(Fusion.colors, RoundedCornerShape(20.dp))) {
+                TileRow(KiroXIcon.Add, "Новый контакт", plainIcon = true, onClick = onAdd)
+                HorizontalDivider(Modifier.padding(start = 56.dp), color = Fusion.colors.outline)
+                TileRow(KiroXIcon.Link, "Пригласить в Telegram", plainIcon = true) { inviteFriends(context) }
+            }
         }
         Box(Modifier.weight(1f)) {
             when {
@@ -672,7 +680,8 @@ private fun ContactsList(contacts: List<TelegramContact>, loading: Boolean, focu
                 else -> LazyColumn(Modifier.fillMaxSize()) {
                     val online = shown.takeWhile { it.status == TelegramUserStatus.Online }
                     val rest = shown.drop(online.size)
-                    if (online.isNotEmpty() && query.isBlank()) item(key = "h_online") { ContactSection("В сети") }
+                    if (query.isBlank() && v2) item(key = "h_mine") { ContactSection("Мои контакты") }
+                    if (online.isNotEmpty() && query.isBlank() && !v2) item(key = "h_online") { ContactSection("В сети") }
                     items(online, key = { it.id }) { contact -> ContactRow(contact, onOpen = { onOpen(contact.id) }, onCall = { onCall(contact.id, false) }) }
                     rest.groupBy { it.name.firstOrNull()?.uppercaseChar() ?: '#' }.forEach { (letter, group) ->
                         if (query.isBlank()) item(key = "h_$letter") { ContactSection(letter.toString()) }
@@ -700,7 +709,13 @@ private fun ContactSection(title: String) {
 @Composable
 private fun ContactRow(contact: TelegramContact, onOpen: () -> Unit, onCall: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onOpen).heightIn(min = 72.dp).padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        TelegramAvatar(contact.name, contact.photo, 50.dp)
+        Box {
+            TelegramAvatar(contact.name, contact.photo, 50.dp)
+            // Green dot for contacts online right now (approved contacts board).
+            if (contact.status == TelegramUserStatus.Online && Fusion.colors.backdrop != null) Box(
+                Modifier.align(Alignment.BottomEnd).size(14.dp).clip(CircleShape).background(Fusion.colors.background).padding(2.dp).clip(CircleShape).background(androidx.compose.ui.graphics.Color(0xFF3DDC84))
+            )
+        }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(contact.name, color = Fusion.colors.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -712,13 +727,27 @@ private fun ContactRow(contact: TelegramContact, onOpen: () -> Unit, onCall: () 
         }
         HeaderAction(KiroXIcon.Call, "Позвонить ${contact.name}", onCall)
     }
-    HorizontalDivider(Modifier.padding(start = 78.dp), color = Fusion.colors.outline)
+    if (Fusion.colors.backdrop == null) HorizontalDivider(Modifier.padding(start = 78.dp), color = Fusion.colors.outline)
+}
+
+/** Row with an icon in a violet rounded square (approved contacts board). */
+@Composable
+private fun AccentRow(icon: KiroXIcon, title: String, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 60.dp).padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(Fusion.colors.accent), contentAlignment = Alignment.Center) {
+            IconGlyph(icon, null, Modifier.size(22.dp), Fusion.colors.onAccent)
+        }
+        Spacer(Modifier.width(14.dp))
+        Text(title, color = Fusion.colors.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+    }
 }
 
 /** Bottom card: who it is and the three things you do with a contact. */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 private fun ContactCard(contact: TelegramContact, onDismiss: () -> Unit, onMessage: () -> Unit, onCall: (isVideo: Boolean) -> Unit) {
+    var more by remember { mutableStateOf(false) }
+    if (more) ContactActions(contact, onDismiss = { more = false }, onDone = { more = false; onDismiss() })
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Fusion.colors.surface1) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             // v2 (approved contacts board): the avatar sits in an accent ring.
@@ -735,6 +764,14 @@ private fun ContactCard(contact: TelegramContact, onDismiss: () -> Unit, onMessa
                 CardAction(KiroXIcon.Chat, "Сообщение", Modifier.weight(1f), onMessage)
                 CardAction(KiroXIcon.Call, "Звонок", Modifier.weight(1f)) { onCall(false) }
                 CardAction(KiroXIcon.Video, "Видео", Modifier.weight(1f)) { onCall(true) }
+                CardAction(KiroXIcon.More, "Ещё", Modifier.weight(1f)) { more = true }
+            }
+            contact.username?.let { name ->
+                Spacer(Modifier.height(16.dp))
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Fusion.colors.surface2).padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text("Имя пользователя", color = Fusion.colors.textSecondary, fontSize = 12.sp)
+                    Text("@$name", color = Fusion.colors.textPrimary, fontSize = 16.sp)
+                }
             }
             if (contact.phone.isNotBlank()) {
                 Spacer(Modifier.height(16.dp))
@@ -759,6 +796,48 @@ private fun CardAction(icon: KiroXIcon, label: String, modifier: Modifier, onCli
     }
 }
 
+/** «Действия с контактом» (approved contacts board): share, remove, block. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun ContactActions(contact: TelegramContact, onDismiss: () -> Unit, onDone: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val users = (context.applicationContext as com.kirox.app.KiroXApplication).telegram.users
+    val scope = rememberCoroutineScope()
+    var confirm by remember { mutableStateOf<String?>(null) }
+    var done by remember { mutableStateOf<String?>(null) }
+    fun run(action: suspend () -> Unit, ok: String) = scope.launch {
+        runCatching { action() }.onSuccess { android.widget.Toast.makeText(context, ok, android.widget.Toast.LENGTH_SHORT).show(); onDone() }
+            .onFailure { android.widget.Toast.makeText(context, "Не получилось, попробуйте ещё раз", android.widget.Toast.LENGTH_SHORT).show() }
+    }
+    confirm?.let { what ->
+        AlertDialog(
+            onDismissRequest = { confirm = null },
+            containerColor = Fusion.colors.surface1,
+            title = { Text(if (what == "remove") "Удалить ${contact.name} из контактов?" else "Заблокировать ${contact.name}?", color = Fusion.colors.textPrimary) },
+            text = { Text(if (what == "remove") "Переписка останется, контакт пропадёт из списка." else "Этот человек не сможет писать вам и звонить.", color = Fusion.colors.textSecondary) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirm = null
+                    if (what == "remove") run({ users.removeContact(contact.id) }, "Контакт удалён") else run({ users.setBlocked(contact.id, true) }, "Заблокирован")
+                }) { Text(if (what == "remove") "Удалить" else "Заблокировать", color = Fusion.colors.danger) }
+            },
+            dismissButton = { TextButton(onClick = { confirm = null }) { Text("Отмена", color = Fusion.colors.textSecondary) } }
+        )
+    }
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Fusion.colors.surface1) {
+        Column(Modifier.padding(bottom = 16.dp)) {
+            TileRow(KiroXIcon.Forward, "Поделиться контактом", plainIcon = true) {
+                val text = listOfNotNull(contact.name, contact.username?.let { "https://t.me/$it" }, contact.phone.takeIf { it.isNotBlank() }?.let { "+$it" }).joinToString("\n")
+                runCatching { context.startActivity(android.content.Intent.createChooser(android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, text), "Поделиться контактом")) }
+                onDismiss()
+            }
+            TileRow(KiroXIcon.Delete, "Удалить контакт", plainIcon = true) { confirm = "remove" }
+            TileRow(KiroXIcon.Shield, "Заблокировать", plainIcon = true) { confirm = "block" }
+            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Отмена", color = Fusion.colors.textSecondary) }
+        }
+    }
+}
+
 @Composable
 private fun AddContactDialog(
     onDismiss: () -> Unit,
@@ -769,39 +848,41 @@ private fun AddContactDialog(
     val scope = rememberCoroutineScope()
     var first by rememberSaveable { mutableStateOf("") }
     var last by rememberSaveable { mutableStateOf("") }
-    var phone by rememberSaveable { mutableStateOf("") }
+    var phone by rememberSaveable { mutableStateOf("+") }
     var busy by remember { mutableStateOf(false) }
     val digits = phone.filter(Char::isDigit)
     val canAdd = first.isNotBlank() && digits.length >= 7 && !busy
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = { if (!busy) onDismiss() },
-        containerColor = Fusion.colors.surface1,
-        title = { Text("Новый контакт", color = Fusion.colors.textPrimary) },
-        text = {
-            val context = androidx.compose.ui.platform.LocalContext.current
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ContactField(first, "Имя") { first = it }
-                ContactField(last, "Фамилия (необязательно)") { last = it }
-                ContactField(phone, "Номер телефона", androidx.compose.ui.text.input.KeyboardType.Phone) { phone = it }
-                // Someone not in Telegram yet: send them an invitation instead.
-                androidx.compose.material3.TextButton(onClick = { inviteFriends(context) }, enabled = !busy) {
-                    Text("Пригласить друзей", color = Fusion.colors.textPrimary)
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val save: () -> Unit = {
+        busy = true
+        scope.launch {
+            val result = runCatching { onAdd(digits, first.trim(), last.trim()) }
+            busy = false
+            result.onSuccess { id -> if (id != null) onAdded(id) else onNotice("Этого номера нет в Telegram") }
+                .onFailure { onNotice("Не удалось добавить контакт") }
+        }
+    }
+    // «Добавление контакта» (approved contacts board): full screen, person mark, pills and a gradient button.
+    androidx.compose.ui.window.Dialog(onDismissRequest = { if (!busy) onDismiss() }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        Column(Modifier.fillMaxSize().background(Fusion.colors.background).statusBarsPadding().navigationBarsPadding().imePadding()) {
+            BackTitle("Новый контакт", { if (!busy) onDismiss() })
+            Column(Modifier.weight(1f).verticalScrollCompat().padding(horizontal = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Spacer(Modifier.height(12.dp))
+                Box(Modifier.size(96.dp).clip(CircleShape).background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Fusion.colors.accent, Fusion.colors.accent.copy(alpha = 0.55f)))), contentAlignment = Alignment.Center) {
+                    IconGlyph(KiroXIcon.Profile, null, Modifier.size(44.dp), Fusion.colors.onAccent)
                 }
+                Spacer(Modifier.height(24.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ContactField(first, "Имя") { first = it }
+                    ContactField(last, "Фамилия (необязательно)") { last = it }
+                    ContactField(phone, "Номер телефона", androidx.compose.ui.text.input.KeyboardType.Phone) { phone = if (it.startsWith("+")) it else "+" + it }
+                }
+                Spacer(Modifier.height(8.dp))
+                TextButton(onClick = { inviteFriends(context) }, enabled = !busy) { Text("Нет в Telegram? Пригласить", color = Fusion.colors.accent) }
             }
-        },
-        confirmButton = {
-            androidx.compose.material3.TextButton(enabled = canAdd, onClick = {
-                busy = true
-                scope.launch {
-                    val result = runCatching { onAdd(digits, first.trim(), last.trim()) }
-                    busy = false
-                    result.onSuccess { id -> if (id != null) onAdded(id) else onNotice("Этого номера нет в Telegram") }
-                        .onFailure { onNotice("Не удалось добавить контакт") }
-                }
-            }) { Text(if (busy) "Добавляю…" else "Добавить", color = if (canAdd) Fusion.colors.textPrimary else Fusion.colors.textTertiary) }
-        },
-        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss, enabled = !busy) { Text("Отмена", color = Fusion.colors.textSecondary) } }
-    )
+            Box(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) { com.kirox.app.ui.auth.AuthGradientButton(if (busy) "Сохраняю…" else "Сохранить", enabled = canAdd, busy = busy, onClick = save) }
+        }
+    }
 }
 
 @Composable
@@ -875,3 +956,6 @@ private fun <T> SectionTabs(tabs: List<Pair<String, T>>, selected: T, onSelect: 
         }
     }
 }
+
+@Composable
+private fun Modifier.verticalScrollCompat(): Modifier = this.then(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()))
