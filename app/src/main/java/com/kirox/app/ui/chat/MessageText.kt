@@ -47,13 +47,13 @@ val LocalLinkOpener = androidx.compose.runtime.staticCompositionLocalOf<((String
 
 /** Message text with Telegram formatting, tappable links and spoilers that open on tap. */
 @Composable
-internal fun MessageText(text: String, entities: List<TelegramTextEntity>, scale: Float, color: Color = Fusion.colors.textPrimary) {
+internal fun MessageText(text: String, entities: List<TelegramTextEntity>, scale: Float, color: Color = Fusion.colors.textPrimary, onTextLayout: (androidx.compose.ui.text.TextLayoutResult) -> Unit = {}) {
     if (text.isEmpty()) return
     var revealed by remember(text) { mutableStateOf(false) }
     val palette = TextPalette(link = color, secondary = Fusion.colors.textSecondary, hidden = Fusion.colors.surface3)
     val opener = LocalLinkOpener.current
     val annotated = remember(text, entities, revealed, palette, opener) { formatMessage(text, entities, revealed, palette, opener) { revealed = true } }
-    Text(annotated, color = color, fontSize = (15f * scale).sp, lineHeight = (20f * scale).sp)
+    Text(annotated, color = color, fontSize = (15f * scale).sp, lineHeight = (20f * scale).sp, onTextLayout = onTextLayout)
 }
 
 /** Fusion keeps links monochrome: the text colour, underlined. */

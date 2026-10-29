@@ -159,6 +159,10 @@ internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAp
             message.forwardedFrom?.let { Text("Переслано от $it", color = Fusion.colors.textPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold); Spacer(Modifier.height(4.dp)) }
             message.quote?.let { quote -> Box(Modifier.clickable(enabled = quote.messageId != 0L) { onQuote(quote.messageId) }) { QuoteBlock(quote) }; Spacer(Modifier.height(6.dp)) }
             val textScale = appearance.textScale
+            @Composable fun Meta() = Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(if (message.edited) "изм. ${message.time}" else message.time, color = ChatSecondary, fontSize = 10.sp)
+                if (outgoing && message.delivery != DeliveryState.None) { Spacer(Modifier.width(4.dp)); Text(deliveryGlyph(message.delivery), color = ChatSecondary, fontSize = 10.sp) }
+            }
             @Composable fun Caption() { if (message.text.isNotBlank()) { Spacer(Modifier.height(6.dp)); MessageText(message.text, message.entities, textScale) } }
             val media = message.media
             if (album.size > 1) {
@@ -181,13 +185,14 @@ internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAp
                 MessageKind.Sticker -> if (media != null) StickerMessage(media, message.thumbnail) else MessageText(message.text, message.entities, textScale)
                 MessageKind.Text -> {
                     val poll = message.poll
-                    if (poll != null) PollView(poll, onVote) else MessageText(message.text, message.entities, textScale)
+                    if (poll != null) PollView(poll, onVote)
+                    // Plain text: the time sits at the end of the last line when it fits, as on the approved board.
+                    else TextWithMeta({ onLayout -> MessageText(message.text, message.entities, textScale, onTextLayout = onLayout) }) { Meta() }
                 }
             }
-            Spacer(Modifier.height(4.dp))
-            Row(Modifier.align(Alignment.End), verticalAlignment = Alignment.CenterVertically) {
-                Text(if (message.edited) "изм. ${message.time}" else message.time, color = ChatSecondary, fontSize = 10.sp)
-                if (outgoing && message.delivery != DeliveryState.None) { Spacer(Modifier.width(4.dp)); Text(deliveryGlyph(message.delivery), color = ChatSecondary, fontSize = 10.sp) }
+            if (!(message.kind == MessageKind.Text && message.poll == null && album.size <= 1)) {
+                Spacer(Modifier.height(4.dp))
+                Box(Modifier.align(Alignment.End)) { Meta() }
             }
             if (message.reactions.isNotEmpty()) {
                 Row(Modifier.padding(top = 5.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) { message.reactions.forEach { reaction -> Text("${reaction.emoji} ${reaction.count}", color = ChatWhite, fontSize = 11.sp, modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(if (reaction.selected) Fusion.colors.textTertiary else Fusion.colors.surface3).padding(horizontal = 8.dp, vertical = 4.dp)) } }
@@ -557,4 +562,30 @@ private fun attachmentTint(title: String): Color = when (title) {
     "Местоположение" -> Color(0xFFFF7A8A)
     "Опрос" -> Color(0xFFFF9F5A)
     else -> Color(0xFFC7B8FF)
+}
+
+/**
+ * Message text with its time and ticks: on the last line when there is room, otherwise on a line of
+ * their own at the bottom right (as in Telegram and the approved Fusion board).
+ */
+@Composable
+private fun TextWithMeta(text: @Composable ((androidx.compose.ui.text.TextLayoutResult) -> Unit) -> Unit, meta: @Composable () -> Unit) {
+    val lastLine = remember { FloatArray(1) }
+    androidx.compose.ui.layout.Layout(content = {
+        text { layout -> lastLine[0] = if (layout.lineCount > 0) layout.getLineRight(layout.lineCount - 1) else 0f }
+        meta()
+    }) { measurables, constraints ->
+        val loose = constraints.copy(minWidth = 0)
+        val textPlaceable = measurables[0].measure(loose)
+        val metaPlaceable = measurables[1].measure(loose)
+        val gap = 8.dp.roundToPx()
+        val inlineWidth = kotlin.math.ceil(lastLine[0]).toInt() + gap + metaPlaceable.width
+        val inline = inlineWidth <= constraints.maxWidth
+        val width = (if (inline) maxOf(textPlaceable.width, inlineWidth) else maxOf(textPlaceable.width, metaPlaceable.width)).coerceAtLeast(constraints.minWidth)
+        val height = if (inline) maxOf(textPlaceable.height, metaPlaceable.height) else textPlaceable.height + 2.dp.roundToPx() + metaPlaceable.height
+        layout(width, height) {
+            textPlaceable.place(0, 0)
+            metaPlaceable.place(width - metaPlaceable.width, height - metaPlaceable.height)
+        }
+    }
 }
