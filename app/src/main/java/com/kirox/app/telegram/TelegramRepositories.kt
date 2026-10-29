@@ -68,7 +68,9 @@ class TelegramAuthRepository(private val client: TelegramClient) {
                     is TdApi.AuthenticationCodeTypeCall -> CodeDestination.Call
                     is TdApi.AuthenticationCodeTypeFragment -> CodeDestination.Fragment
                     else -> CodeDestination.Other
-                }
+                },
+                // A word or a phrase sent by SMS instead of digits.
+                words = state.codeInfo.type is TdApi.AuthenticationCodeTypeSmsWord || state.codeInfo.type is TdApi.AuthenticationCodeTypeSmsPhrase
             )
             is TdApi.AuthorizationStateWaitPassword -> TelegramAuthState.WaitPassword(
                 state.passwordHint.orEmpty(), state.hasRecoveryEmailAddress, state.recoveryEmailAddressPattern.orEmpty()
@@ -124,7 +126,15 @@ class TelegramServices(context: android.content.Context) {
     val files = TelegramFileRepository(client)
     val users = TelegramUserRepository(client)
     val connection = TelegramConnectionRepository(client)
+    /** Reports Wi-Fi / mobile / no network to TDLib so it reconnects right after a network change. */
+    val network = ConnectionMonitor(context, client)
+    /** Telegram's auto-download presets for the current network. */
+    val autoDownload = AutoDownloadPolicy(client, network)
     val messages = TelegramMessageRepository(client, chats, users)
+    /** "печатает…" and other member activity, ours sent with SendChatAction. */
+    val activity = TelegramChatActionRepository(client, chats, users)
+    val stickers = TelegramStickerRepository(client)
+    val groupCalls = TelegramGroupCallRepository(client, chats, users)
     val calls = TelegramCallRepository(client, chats)
     val voip = TelegramVoipRepository(client, users)
     val sessions = TelegramSessionsRepository(client)

@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Only downloaded updates are shared, with the system installer. -->
+<!-- Shared with other apps: downloaded updates (installer) and copies of opened message files. -->
 <paths>
     <cache-path name="updates" path="updates/" />
+    <!-- Copies of message files opened in other apps. -->
+    <cache-path name="shared" path="shared/" />
 </paths>

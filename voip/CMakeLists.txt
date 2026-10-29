@@ -43,7 +43,7 @@ endforeach()
 
 include(${CMAKE_HOME_DIRECTORY}/voip/CMakeLists.txt)
 
-add_library(kiroxvoip SHARED kirox/kirox_voip_jni.cpp)
+add_library(kiroxvoip SHARED kirox/kirox_voip_jni.cpp kirox/kirox_group_jni.cpp)
 target_include_directories(kiroxvoip PRIVATE tgcalls/tgcalls)
 target_link_options(kiroxvoip PRIVATE "-Wl,-z,max-page-size=16384" "-Wl,-z,common-page-size=16384" "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/kirox/exports.map")
 target_link_libraries(kiroxvoip

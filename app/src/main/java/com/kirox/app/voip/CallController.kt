@@ -23,11 +23,15 @@ class CallController(private val app: Application, private val voip: TelegramVoi
 
     fun start() {
         // With the background connection on, TDLib stays connected and is never paused.
-        client.isIdle = { !appVisible && voip.call.value == null && !com.kirox.app.notify.KeepConnectedService.isEnabled(app) }
+        client.isIdle = { !appVisible && voip.call.value == null && (app as com.kirox.app.KiroXApplication).telegram.groupCalls.call.value == null && !com.kirox.app.notify.KeepConnectedService.running }
         CallNotifications.ensureChannels(app)
         app.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) { startedActivities++; com.kirox.app.notify.AppVisibility.visible = true; update() }
-            override fun onActivityStopped(activity: Activity) { startedActivities--; com.kirox.app.notify.AppVisibility.visible = startedActivities > 0; update() }
+            override fun onActivityStopped(activity: Activity) {
+                startedActivities--
+                com.kirox.app.notify.AppVisibility.visible = startedActivities > 0
+                update()
+            }
             override fun onActivityCreated(activity: Activity, state: Bundle?) {}
             override fun onActivityResumed(activity: Activity) {}
             override fun onActivityPaused(activity: Activity) {}
@@ -39,6 +43,7 @@ class CallController(private val app: Application, private val voip: TelegramVoi
 
     private fun update() {
         val call = voip.call.value
+        CallMedia.sync(app, call)
         // Background without a call: close TDLib after a grace period so Telegram sends pushes.
         if (appVisible) { pauseJob?.cancel(); pauseJob = null; client.start(); com.kirox.app.notify.KeepConnectedService.start(app) }
         else if (call == null && pauseJob?.isActive != true) pauseJob = scope.launch { kotlinx.coroutines.delay(BACKGROUND_GRACE_MS); client.pauseIfIdle() }

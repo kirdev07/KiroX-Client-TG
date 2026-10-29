@@ -14,7 +14,9 @@ enum class Screen(val graph: NavGraph) {
     Countries(NavGraph.Auth),
     AuthStep(NavGraph.Auth),
     Chats(NavGraph.Main),
-    Conversation(NavGraph.Main)
+    Conversation(NavGraph.Main),
+    /** Comments of a channel post or a forum topic, opened from a conversation. */
+    Thread(NavGraph.Main)
 }
 
 /** Minimal saveable back stack. Switching graphs replaces the whole stack, so Back never crosses auth ↔ main. */

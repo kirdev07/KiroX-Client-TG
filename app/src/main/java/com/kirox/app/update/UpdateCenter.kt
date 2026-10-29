@@ -1,10 +1,11 @@
 package com.kirox.app.update
 
+import androidx.core.net.toUri
+import androidx.core.content.edit
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.content.FileProvider
@@ -16,7 +17,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -64,13 +64,17 @@ class UpdateCenter(private val context: Context) {
     /** Beta builds include pre-releases; it can be turned off in the updates screen. */
     var betaChannel: Boolean
         get() = prefs.getBoolean(KEY_BETA, BuildConfig.VERSION_NAME.contains('-'))
-        set(value) { prefs.edit().putBoolean(KEY_BETA, value).apply() }
+        set(value) { prefs.edit { putBoolean(KEY_BETA, value) } }
 
     val currentVersion: String get() = BuildConfig.VERSION_NAME
 
     /** At most once a day, silently. */
     fun checkDaily() {
-        if (System.currentTimeMillis() - prefs.getLong(KEY_LAST_CHECK, 0) < DAY_MS) return
+        val now = System.currentTimeMillis()
+        if (now - prefs.getLong(KEY_LAST_CHECK, 0) < DAY_MS) return
+        // A failed check (offline, rate limit) is not retried on every process start, e.g. each push.
+        if (now - prefs.getLong(KEY_LAST_ATTEMPT, 0) < RETRY_MS) return
+        prefs.edit { putLong(KEY_LAST_ATTEMPT, now) }
         check()
     }
 
@@ -98,9 +102,15 @@ class UpdateCenter(private val context: Context) {
 
     /** Opens the system installer; asks for the "install unknown apps" permission first if needed. */
     fun install(file: File) {
+        if (!file.exists()) {
+            // The system may clear the cache between download and install.
+            val release = (_state.value as? UpdateState.Ready)?.release
+            _state.value = if (release != null) UpdateState.Available(release) else UpdateState.Idle
+            return
+        }
         if (!context.packageManager.canRequestPackageInstalls()) {
             context.startActivity(
-                Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, "package:${context.packageName}".toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
             return
         }
@@ -126,12 +136,12 @@ class UpdateCenter(private val context: Context) {
             val body = when (val code = connection.responseCode) {
                 304 -> prefs.getString(KEY_BODY, null) ?: "[]"
                 200 -> connection.inputStream.bufferedReader().use { it.readText() }.also {
-                    prefs.edit().putString(KEY_ETAG, connection.getHeaderField("ETag")).putString(KEY_BODY, it).apply()
+                    prefs.edit { putString(KEY_ETAG, connection.getHeaderField("ETag")).putString(KEY_BODY, it) }
                 }
                 403, 429 -> error("GitHub временно ограничил проверки, попробуйте позже")
                 else -> error("GitHub ответил $code")
             }
-            prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).apply()
+            prefs.edit { putLong(KEY_LAST_CHECK, System.currentTimeMillis()) }
             val list = JSONArray(body)
             // GitHub orders releases by the tagged commit's date, which is wrong when a tag points at an
             // older commit, so pick the highest version rather than the first entry.
@@ -187,7 +197,7 @@ class UpdateCenter(private val context: Context) {
             connection.inputStream.use { input ->
                 file.outputStream().use { output ->
                     val buffer = ByteArray(64 * 1024)
-                    while (scope.isActive) {
+                    while (true) {
                         val read = input.read(buffer)
                         if (read < 0) break
                         output.write(buffer, 0, read)
@@ -245,6 +255,8 @@ class UpdateCenter(private val context: Context) {
         const val RELEASES_URL = "https://github.com/$REPO/releases"
         private const val KEY_BETA = "beta_channel"
         private const val KEY_LAST_CHECK = "last_check"
+        private const val KEY_LAST_ATTEMPT = "last_attempt"
+        private const val RETRY_MS = 3 * 60 * 60 * 1000L
         private const val KEY_ETAG = "etag"
         private const val KEY_BODY = "body"
         private const val DAY_MS = 24 * 60 * 60 * 1000L

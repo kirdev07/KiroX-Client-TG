@@ -27,10 +27,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -50,12 +50,17 @@ import com.kirox.app.ui.icons.KiroXIcon as IconGlyph
 import com.kirox.app.ui.theme.Fusion
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.launch
 
 /** Viewer data source for stories; implemented over the story repository. */
 interface TelegramStoryActions {
     suspend fun story(chatId: Long, storyId: Int): TelegramStory?
     fun open(chatId: Long, storyId: Int)
     fun close(chatId: Long, storyId: Int)
+    suspend fun react(chatId: Long, storyId: Int, emoji: String?) {}
+    suspend fun reply(chatId: Long, storyId: Int, text: String) {}
+    suspend fun delete(chatId: Long, storyId: Int) {}
+    suspend fun viewers(storyId: Int): List<com.kirox.app.telegram.TelegramStoryViewer> = emptyList()
 }
 
 // ---------- Calls ----------
@@ -78,6 +83,11 @@ internal fun CallsList(state: TelegramCallsState, onLoadMore: () -> Unit, onOpen
     val listState = rememberLazyListState()
     LaunchedEffect(Unit) { onLoadMore() }
     PagingEffect(listState, state.complete, onLoadMore)
+    // A page of 50 calls can fold into a few rows, or none for "Пропущенные": keep loading until the
+    // screen is filled or the history ends, without waiting for a scroll that cannot happen.
+    LaunchedEffect(shown.size, state.loading, state.complete) {
+        if (!state.complete && !state.loading && shown.size < 20) onLoadMore()
+    }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CallFilter.entries.forEach { value ->
@@ -106,8 +116,9 @@ private fun PagingEffect(listState: LazyListState, complete: Boolean, loadMore: 
     val latest by rememberUpdatedState(loadMore)
     LaunchedEffect(listState, complete) {
         if (complete) return@LaunchedEffect
-        snapshotFlow { listState.layoutInfo.let { (it.visibleItemsInfo.lastOrNull()?.index ?: 0) >= it.totalItemsCount - 10 } }
-            .distinctUntilChanged().filter { it }.collect { latest() }
+        // The item count is part of the key: near the end after a new page arrived asks again.
+        snapshotFlow { listState.layoutInfo.let { ((it.visibleItemsInfo.lastOrNull()?.index ?: 0) >= it.totalItemsCount - 10) to it.totalItemsCount } }
+            .distinctUntilChanged().filter { it.first }.collect { latest() }
     }
 }
 
@@ -213,7 +224,18 @@ internal fun StoryViewer(chat: TelegramStoryChat, actions: TelegramStoryActions,
     val storyId = chat.storyIds.getOrNull(index)
     var story by remember(storyId) { mutableStateOf<TelegramStory?>(null) }
     var failed by remember(storyId) { mutableStateOf(false) }
-    val progress = remember(storyId) { Animatable(0f) }
+    /** 0–1 of the current story; photos run for STORY_MS, videos follow the player. */
+    var progress by remember(storyId) { mutableFloatStateOf(0f) }
+    var holding by remember { mutableStateOf(false) }
+    var replying by remember { mutableStateOf(false) }
+    var viewersOpen by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    var notice by remember { mutableStateOf<String?>(null) }
+    var inBackground by remember { mutableStateOf(false) }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) { inBackground = true }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_START) { inBackground = false }
+    val paused = holding || replying || viewersOpen || confirmDelete || inBackground
+    val scope = rememberCoroutineScope()
     BackHandler(onBack = onClose)
 
     fun next() { if (index < chat.storyIds.lastIndex) index++ else onClose() }
@@ -230,31 +252,41 @@ internal fun StoryViewer(chat: TelegramStoryChat, actions: TelegramStoryActions,
         if (id != null) actions.open(chat.chatId, id)
         onDispose { if (id != null) actions.close(chat.chatId, id) }
     }
-    LaunchedEffect(storyId, story, failed) {
-        if (story == null && !failed) return@LaunchedEffect
-        progress.animateTo(1f, tween(STORY_MS, easing = LinearEasing))
+    // Photo stories (and failed ones) advance on a timer that stops while held.
+    LaunchedEffect(storyId, story, failed, paused) {
+        val current = story
+        if (current == null && !failed) return@LaunchedEffect
+        if (current?.isVideo == true || paused) return@LaunchedEffect
+        val step = 50L
+        while (progress < 1f) { kotlinx.coroutines.delay(step); progress += step.toFloat() / STORY_MS }
         next()
     }
+    LaunchedEffect(notice) { if (notice != null) { kotlinx.coroutines.delay(2200); notice = null } }
 
     Box(
         Modifier.fillMaxSize().background(Color.Black).pointerInput(storyId) {
-            detectTapGestures { offset -> if (offset.x < size.width / 3f) previous() else next() }
+            detectTapGestures(
+                onPress = { holding = true; tryAwaitRelease(); holding = false },
+                onTap = { offset -> if (offset.x < size.width / 3f) previous() else next() }
+            )
         }
     ) {
         val current = story
-        val widthPx = with(LocalDensity.current) { LocalConfiguration.current.screenWidthDp.dp.roundToPx() }
+        val widthPx = with(LocalDensity.current) { com.kirox.app.ui.chat.windowWidthDp().coerceAtLeast(320).dp.roundToPx() }
         val bitmap = rememberTelegramBitmap(current?.image, widthPx, priority = 24)
+        bitmap?.let { Image(it, contentDescription = "История", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()) }
+        val video = current?.video
+        if (current != null && video != null) StoryVideo(video, current.durationS, paused, onProgress = { progress = it }, onEnd = { next() })
         when {
-            bitmap != null -> Image(bitmap, contentDescription = "История", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
             failed -> Text("История недоступна", color = Color.White, modifier = Modifier.align(Alignment.Center))
-            else -> CircularProgressIndicator(Modifier.align(Alignment.Center).size(28.dp), color = Color.White, strokeWidth = 2.dp)
+            current == null || (bitmap == null && video == null) -> CircularProgressIndicator(Modifier.align(Alignment.Center).size(28.dp), color = Color.White, strokeWidth = 2.dp)
         }
         Column(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 chat.storyIds.indices.forEach { i ->
-                    val fill = when { i < index -> 1f; i == index -> progress.value; else -> 0f }
+                    val fill = when { i < index -> 1f; i == index -> progress; else -> 0f }
                     Box(Modifier.weight(1f).height(2.dp).clip(RoundedCornerShape(1.dp)).background(Color.White.copy(alpha = .3f))) {
-                        Box(Modifier.fillMaxHeight().fillMaxWidth(fill).background(Color.White))
+                        Box(Modifier.fillMaxHeight().fillMaxWidth(fill.coerceIn(0f, 1f)).background(Color.White))
                     }
                 }
             }
@@ -266,17 +298,152 @@ internal fun StoryViewer(chat: TelegramStoryChat, actions: TelegramStoryActions,
                     Text(if (chat.isSelf) "Моя история" else chat.title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     current?.let { Text(TelegramFormat.chatTime(it.date), color = Color.White.copy(alpha = .7f), fontSize = 12.sp) }
                 }
+                if (current?.canDelete == true) Text(
+                    "Удалить", color = Color.White, fontSize = 13.sp,
+                    modifier = Modifier.clip(RoundedCornerShape(16.dp)).clickable { confirmDelete = true }.padding(horizontal = 10.dp, vertical = 8.dp)
+                )
                 Text("×", color = Color.White, fontSize = 28.sp, modifier = Modifier.clip(CircleShape).clickable(onClick = onClose).padding(horizontal = 14.dp))
             }
         }
-        val caption = listOfNotNull(
-            current?.caption?.takeIf { it.isNotBlank() },
-            if (current?.isVideo == true) "Видеоистории пока показываются обложкой" else null
-        ).joinToString("\n")
-        if (caption.isNotEmpty()) Text(
-            caption, color = Color.White, fontSize = 14.sp, lineHeight = 19.sp,
-            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().background(Color.Black.copy(alpha = .45f)).padding(16.dp)
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().imePadding()) {
+            current?.caption?.takeIf { it.isNotBlank() }?.let {
+                Text(it, color = Color.White, fontSize = 14.sp, lineHeight = 19.sp, modifier = Modifier.fillMaxWidth().background(Color.Black.copy(alpha = .45f)).padding(16.dp))
+            }
+            notice?.let { Text(it, color = Color.White, fontSize = 13.sp, modifier = Modifier.align(Alignment.CenterHorizontally).padding(8.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xCC1C1C1E)).padding(horizontal = 14.dp, vertical = 8.dp)) }
+            if (current != null) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (current.canSeeViews) Text(
+                    "👁 ${current.viewCount}", color = Color.White, fontSize = 14.sp,
+                    modifier = Modifier.clip(RoundedCornerShape(18.dp)).background(Color(0x33FFFFFF)).clickable { viewersOpen = true }.padding(horizontal = 14.dp, vertical = 9.dp)
+                )
+                if (current.canReply) StoryReplyField(
+                    onFocus = { replying = it },
+                    onSend = { text ->
+                        scope.launch {
+                            notice = runCatching { actions.reply(current.chatId, current.id, text) }.fold({ "Ответ отправлен" }, { "Не удалось отправить" })
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
+                ) else Spacer(Modifier.weight(1f))
+                if (!current.canSeeViews) {
+                    val liked = current.chosenReaction != null
+                    Text(
+                        if (liked) "❤" else "♡", color = Color.White, fontSize = 26.sp,
+                        modifier = Modifier.padding(start = 10.dp).clip(CircleShape).clickable {
+                            val updated = current.copy(chosenReaction = if (liked) null else "❤")
+                            story = updated
+                            scope.launch { runCatching { actions.react(current.chatId, current.id, updated.chosenReaction) }.onFailure { story = current; notice = "Реакция недоступна" } }
+                        }.padding(8.dp)
+                    )
+                }
+            }
+        }
+    }
+    if (viewersOpen) story?.let { own -> StoryViewersSheet(own.id, actions) { viewersOpen = false } }
+    if (confirmDelete) story?.let { own ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            containerColor = Fusion.colors.surface1,
+            title = { Text("Удалить историю?", color = Fusion.colors.textPrimary) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    confirmDelete = false
+                    scope.launch { runCatching { actions.delete(own.chatId, own.id) }.onSuccess { next() }.onFailure { notice = "Не удалось удалить" } }
+                }) { Text("Удалить", color = Fusion.colors.danger) }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { confirmDelete = false }) { Text("Отмена", color = Fusion.colors.textSecondary) } }
         )
+    }
+}
+
+/** Video story: downloads, then plays with sound; pauses with [paused] and reports its progress. */
+@Composable
+private fun StoryVideo(file: com.kirox.app.telegram.TelegramFileRef, durationS: Double, paused: Boolean, onProgress: (Float) -> Unit, onEnd: () -> Unit) {
+    val files = com.kirox.app.ui.components.LocalTelegramFiles.current
+    val state by remember(file.id, files) { files?.state(file) ?: kotlinx.coroutines.flow.MutableStateFlow(com.kirox.app.telegram.TelegramFileState(path = file.localPath)) }.collectAsState()
+    LaunchedEffect(file.id) { if (state.path == null) files?.download(file, priority = 32) }
+    val path = state.path ?: return
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val player = remember(path) {
+        com.kirox.app.ui.chat.VoicePlayer.stop()
+        androidx.media3.exoplayer.ExoPlayer.Builder(context.applicationContext).build().apply {
+            // Takes audio focus like any video: music pauses, a call interrupts it.
+            setAudioAttributes(
+                androidx.media3.common.AudioAttributes.Builder().setUsage(androidx.media3.common.C.USAGE_MEDIA).setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MOVIE).build(),
+                true
+            )
+            setMediaItem(androidx.media3.common.MediaItem.fromUri(android.net.Uri.fromFile(java.io.File(path))))
+            prepare()
+        }
+    }
+    DisposableEffect(player) {
+        val listener = object : androidx.media3.common.Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) { if (playbackState == androidx.media3.common.Player.STATE_ENDED) onEnd() }
+        }
+        player.addListener(listener)
+        onDispose { player.removeListener(listener); player.release() }
+    }
+    var background by remember { mutableStateOf(false) }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) { background = true }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_START) { background = false }
+    LaunchedEffect(player, paused, background) { player.playWhenReady = !paused && !background }
+    LaunchedEffect(player) {
+        while (true) {
+            val total = player.duration.takeIf { it > 0 } ?: (durationS * 1000).toLong().coerceAtLeast(1)
+            onProgress(player.currentPosition.toFloat() / total)
+            kotlinx.coroutines.delay(50)
+        }
+    }
+    androidx.compose.ui.viewinterop.AndroidView(
+        factory = { ctx -> androidx.media3.ui.PlayerView(ctx).apply { useController = false; this.player = player } },
+        modifier = Modifier.fillMaxSize()
+    )
+}
+
+@Composable
+private fun StoryReplyField(onFocus: (Boolean) -> Unit, onSend: (String) -> Unit, modifier: Modifier) {
+    var text by remember { mutableStateOf("") }
+    Row(modifier.clip(RoundedCornerShape(22.dp)).border(1.dp, Color(0x66FFFFFF), RoundedCornerShape(22.dp)).padding(start = 14.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.foundation.text.BasicTextField(
+            text, { text = it }, singleLine = true,
+            textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 15.sp),
+            cursorBrush = androidx.compose.ui.graphics.SolidColor(Color.White),
+            modifier = Modifier.weight(1f).padding(vertical = 11.dp).onFocusChanged { onFocus(it.isFocused) },
+            decorationBox = { inner -> if (text.isEmpty()) Text("Ответить…", color = Color.White.copy(alpha = .6f), fontSize = 15.sp); inner() }
+        )
+        if (text.isNotBlank()) Text(
+            "➤", color = Color.White, fontSize = 18.sp,
+            modifier = Modifier.clip(CircleShape).clickable { onSend(text.trim()); text = "" }.padding(10.dp)
+        )
+    }
+}
+
+/** Who viewed an own story, with their reactions. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun StoryViewersSheet(storyId: Int, actions: TelegramStoryActions, onDismiss: () -> Unit) {
+    var viewers by remember { mutableStateOf<List<com.kirox.app.telegram.TelegramStoryViewer>?>(null) }
+    LaunchedEffect(storyId) { viewers = runCatching { actions.viewers(storyId) }.getOrDefault(emptyList()) }
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Fusion.colors.surface1) {
+        Text("Просмотры", color = Fusion.colors.textPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+        val list = viewers
+        when {
+            list == null -> Box(Modifier.fillMaxWidth().padding(24.dp), Alignment.Center) { CircularProgressIndicator(Modifier.size(24.dp), color = Fusion.colors.textPrimary, strokeWidth = 2.dp) }
+            list.isEmpty() -> Text("Пока никто не посмотрел", color = Fusion.colors.textSecondary, modifier = Modifier.padding(20.dp))
+            else -> LazyColumn(Modifier.fillMaxWidth().heightIn(max = 480.dp)) {
+                items(list) { viewer ->
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        TelegramAvatar(viewer.name, viewer.photo, 40.dp)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(viewer.name, color = Fusion.colors.textPrimary, fontSize = 15.sp)
+                            Text(TelegramFormat.chatTime(viewer.date), color = Fusion.colors.textSecondary, fontSize = 12.sp)
+                        }
+                        viewer.reaction?.let { Text(it, fontSize = 20.sp) }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.navigationBarsPadding().height(12.dp))
     }
 }
 

@@ -1,5 +1,6 @@
 package com.kirox.app.telegram
 
+import androidx.core.content.edit
 import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,17 +21,27 @@ class TelegramAccounts(context: Context) {
 
     var active: String
         get() = prefs.getString(KEY_ACTIVE, null)?.takeIf { s -> _accounts.value.any { it.session == s } } ?: PRIMARY
-        set(value) { prefs.edit().putString(KEY_ACTIVE, value).apply() }
+        set(value) { prefs.edit { putString(KEY_ACTIVE, value) } }
 
-    /** New empty slot; returns its session name. */
+    /** New empty slot; returns its session name. It stays "pending" until signed in. */
     fun create(): String {
         val session = "session-${System.currentTimeMillis()}"
+        prefs.edit { putBoolean("pending_$session", true) }
         save(_accounts.value + TelegramAccount(session, "", ""))
         return session
     }
 
+    /** True for a slot added with [create] that has never been signed in. */
+    fun isPending(session: String): Boolean = prefs.getBoolean("pending_$session", false)
+
+    /** The slot is signed in: it is a real account now and is never discarded as an abandoned sign-in. */
+    fun confirm(session: String) {
+        if (isPending(session)) prefs.edit { remove("pending_$session") }
+    }
+
     fun remove(session: String) {
         if (session == PRIMARY && _accounts.value.size == 1) return
+        prefs.edit { remove("pending_$session") }
         save(_accounts.value.filterNot { it.session == session })
     }
 
@@ -47,9 +58,10 @@ class TelegramAccounts(context: Context) {
     }
 
     private fun save(list: List<TelegramAccount>) {
-        val editor = prefs.edit().putString(KEY_LIST, list.joinToString(",") { it.session })
-        list.forEach { editor.putString("title_${it.session}", it.title).putString("phone_${it.session}", it.phone) }
-        editor.apply()
+        prefs.edit {
+            putString(KEY_LIST, list.joinToString(",") { it.session })
+            list.forEach { putString("title_${it.session}", it.title).putString("phone_${it.session}", it.phone) }
+        }
         _accounts.value = list
     }
 

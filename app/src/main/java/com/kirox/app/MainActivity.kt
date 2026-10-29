@@ -29,6 +29,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) openAccountFrom(intent)
         enableEdgeToEdge()
         setContent {
             val palette by (application as KiroXApplication).settings.palette.collectAsStateWithLifecycle()
@@ -51,5 +52,26 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        openAccountFrom(intent)
+    }
+
+    /** A notification of another signed-in account opens that account. */
+    private fun openAccountFrom(intent: android.content.Intent?) {
+        intent?.getLongExtra(com.kirox.app.notify.MessageNotifications.EXTRA_OPEN_CHAT, 0L)?.takeIf { it != 0L }?.let { chatId ->
+            intent?.removeExtra(com.kirox.app.notify.MessageNotifications.EXTRA_OPEN_CHAT)
+            com.kirox.app.notify.NotificationTarget.chat.value = chatId
+        }
+        val session = intent?.getStringExtra(com.kirox.app.notify.AccountPeek.EXTRA_SESSION) ?: return
+        intent.removeExtra(com.kirox.app.notify.AccountPeek.EXTRA_SESSION)
+        val key = intent.getStringExtra(com.kirox.app.notify.AccountPeek.EXTRA_KEY)
+        intent.removeExtra(com.kirox.app.notify.AccountPeek.EXTRA_KEY)
+        // Any app can start this activity: only our own notifications carry the secret.
+        if (key != com.kirox.app.notify.AccountPeek.secret(this)) return
+        val client = (application as KiroXApplication).telegram.client
+        if (client.accounts.accounts.value.any { it.session == session }) client.switchTo(session)
     }
 }

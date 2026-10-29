@@ -31,7 +31,8 @@ class TelegramUserRepository(private val client: TelegramClient) {
         when (update) {
             is TdApi.UpdateAuthorizationState -> when (update.authorizationState) {
                 is TdApi.AuthorizationStateReady -> load()
-                is TdApi.AuthorizationStateClosed -> {
+                // A background pause keeps profile and contacts; Ready reloads them.
+                is TdApi.AuthorizationStateClosed -> if (!client.paused) {
                     users.clear(); myId = 0; myBio = ""; myBirthday = ""; contactsLoaded = false
                     _profile.value = null; _contacts.value = emptyList()
                 }

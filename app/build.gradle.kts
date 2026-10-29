@@ -1,4 +1,3 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.Properties
 
 val kiroxProperties = Properties().apply {
@@ -11,7 +10,6 @@ fun secret(vararg names: String): String =
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
 
@@ -99,7 +97,14 @@ android {
     lint {
         // Generated TDLib bindings (5 MB) exceed lint's file size limit; the code is not ours to fix.
         disable += "LintError"
+        // Plain-text report, turned into CI annotations by the workflow.
+        textReport = true
+        textOutput = file("build/reports/lint-results-debug.txt")
+        abortOnError = false
     }
+
+    // Robolectric renders resources (themes, fonts) for the screenshot test.
+    testOptions { unitTests.isIncludeAndroidResources = true }
 
     buildFeatures {
         compose = true
@@ -107,11 +112,6 @@ android {
     }
 }
 
-kotlin {
-    compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_17)
-    }
-}
 
 dependencies {
     val composeBom = platform(libs.androidx.compose.bom)
@@ -126,16 +126,35 @@ dependencies {
     implementation(libs.google.libphonenumber)
     implementation(libs.zxing.core)
     implementation(libs.androidx.datastore.preferences)
-    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
-    implementation("com.google.firebase:firebase-messaging")
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
-    implementation("androidx.annotation:annotation:1.9.1")
+    // Video, GIF, video note and music playback (Apache-2.0).
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.ui)
+    // Background playback of voice notes and music with a media notification.
+    implementation(libs.androidx.media3.session)
+    // Animated TGS stickers (Lottie, Apache-2.0).
+    implementation(libs.lottie.compose)
+    // Video note recording: CameraX capture, Media3 square crop (both Apache-2.0).
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.video)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.androidx.media3.transformer)
+    implementation(libs.androidx.media3.effect)
+    implementation(libs.androidx.annotation)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     androidTestImplementation(composeBom)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     testImplementation(libs.junit)
+    // Screenshots of the main screens on the JVM (ScreenshotTest, run by the screenshots workflow).
+    testImplementation(composeBom)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.core)

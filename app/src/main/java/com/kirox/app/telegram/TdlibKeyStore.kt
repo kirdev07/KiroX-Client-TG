@@ -17,24 +17,66 @@ import javax.crypto.spec.GCMParameterSpec
  */
 class TdlibKeyStore(context: Context, sessionName: String) {
     private val file = File(context.noBackupFilesDir, "tdlib-$sessionName.key")
+    /** A key being switched to (legacy database encryption) until TDLib confirmed the switch. */
+    private val pendingFile = File(context.noBackupFilesDir, "tdlib-$sessionName.key.pending")
     private val alias = "kirox_tdlib_$sessionName"
+
+    /** The stored key can never be unwrapped again (Keystore entry gone or file damaged). */
+    class KeyLostException : Exception("Ключ базы TDLib утерян")
 
     val exists: Boolean get() = file.exists()
 
-    /** Null when no key is stored or the Keystore entry can no longer unwrap it. */
-    fun load(): ByteArray? = if (!file.exists()) null else runCatching { decrypt(file.readBytes()) }.getOrNull()
+    /**
+     * Null when no key is stored. Throws [KeyLostException] when the key is really gone; any other
+     * exception is a temporary Keystore failure, and the caller must not delete anything for it.
+     */
+    fun load(): ByteArray? = if (!file.exists()) null else unwrap(file)
+
+    /** The key of an unfinished re-encryption, if any; never throws. */
+    fun loadPending(): ByteArray? = if (!pendingFile.exists()) null else runCatching { unwrap(pendingFile) }.getOrNull()
 
     fun generate(): ByteArray = ByteArray(KEY_SIZE).also(SecureRandom()::nextBytes)
 
-    fun save(key: ByteArray) {
-        val tmp = File(file.path + ".tmp")
-        tmp.writeBytes(encrypt(key))
-        if (!tmp.renameTo(file)) error("Не удалось сохранить ключ базы TDLib")
+    fun save(key: ByteArray) = write(file, key)
+
+    fun savePending(key: ByteArray) = write(pendingFile, key)
+
+    /** The pending key is now the database key. */
+    fun promotePending() {
+        if (pendingFile.exists() && !pendingFile.renameTo(file)) error("Не удалось сохранить ключ базы TDLib")
     }
+
+    fun dropPending() { pendingFile.delete() }
 
     fun delete() {
         file.delete()
+        pendingFile.delete()
         runCatching { keyStore().deleteEntry(alias) }
+    }
+
+    private fun unwrap(source: File): ByteArray {
+        val data = source.readBytes()
+        if (data.size <= IV_SIZE) throw KeyLostException()
+        return try {
+            decrypt(data)
+        } catch (_: javax.crypto.AEADBadTagException) {
+            throw KeyLostException()
+        } catch (_: java.security.UnrecoverableKeyException) {
+            throw KeyLostException()
+        } catch (_: java.security.InvalidKeyException) {
+            // Includes KeyPermanentlyInvalidatedException.
+            throw KeyLostException()
+        }
+    }
+
+    private fun write(target: File, key: ByteArray) {
+        val tmp = File(target.path + ".tmp")
+        java.io.FileOutputStream(tmp).use { out ->
+            out.write(encrypt(key))
+            // On disk before the rename: a power cut must not leave an empty key file.
+            out.fd.sync()
+        }
+        if (!tmp.renameTo(target)) error("Не удалось сохранить ключ базы TDLib")
     }
 
     private fun encrypt(plain: ByteArray): ByteArray {

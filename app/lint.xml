@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Bundled WebRTC Java sources (BSD, third-party) are checked upstream, not here. -->
 <lint>
+    <!-- Bundled WebRTC Java sources (BSD, third-party) are checked upstream, not here. -->
     <issue id="all">
         <ignore path="src/main/java/org/webrtc/**" />
     </issue>
+    <!-- TDLib is shipped prebuilt for arm64-v8a only, so an x86_64 (ChromeOS) build is not possible. -->
+    <issue id="ChromeOsAbiSupport" severity="ignore" />
 </lint>

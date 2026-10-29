@@ -14,6 +14,8 @@ class TelegramChatRepository(private val client: TelegramClient) {
     private var folders: List<TelegramFolder> = emptyList()
     private val loading = HashSet<TelegramChatListKey>()
     private val complete = HashSet<TelegramChatListKey>()
+    private val wanted = HashSet<TelegramChatListKey>()
+    private val failures = HashMap<TelegramChatListKey, Int>()
     private var publishScheduled = false
     private var myId = 0L
 
@@ -94,19 +96,48 @@ class TelegramChatRepository(private val client: TelegramClient) {
 
     fun clearError() { _error.value = null }
 
-    /** Chats matching [query] among all chats TDLib knows (title and username), main-list style items. */
-    suspend fun search(query: String): List<TelegramChatItem> = kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
-        val sent = client.send(TdApi.SearchChats(query, null, SEARCH_LIMIT)) { result ->
-            // Runs on the TDLib dispatcher, where chatsById may be read.
-            val items = (result as? TdApi.Chats)?.chatIds?.toList()?.mapNotNull { id ->
-                chatsById[id]?.let { chat ->
-                    val position = chat.positions.firstOrNull { it.list is TdApi.ChatListMain } ?: chat.positions.firstOrNull() ?: TdApi.ChatPosition(TdApi.ChatListMain(), 0, false, null)
-                    toChatItem(chat, position, archived = position.list is TdApi.ChatListArchive)
-                }
-            }.orEmpty()
-            continuation.resumeWith(Result.success(items))
+    /** Supergroup ids that are forums (topics). Dispatcher-confined. */
+    private val forumSupergroups = HashSet<Long>()
+
+    /** Whether [chatId] is a forum supergroup; call on the TDLib dispatcher. */
+    internal fun isForum(chatId: Long): Boolean = (chatsById[chatId]?.type as? TdApi.ChatTypeSupergroup)?.supergroupId?.let { it in forumSupergroups } == true
+
+    /**
+     * Chats matching [query]: the user's own chats first (title and username), then chats found on
+     * the server and public channels, groups and bots by username. Each appears once.
+     */
+    suspend fun search(query: String): List<TelegramChatItem> {
+        val local = runCatching { client.query(TdApi.SearchChats(query, null, SEARCH_LIMIT)).chatIds.toList() }.getOrDefault(emptyList())
+        val server = runCatching { client.query(TdApi.SearchChatsOnServer(query, null, SEARCH_LIMIT)).chatIds.toList() }.getOrDefault(emptyList())
+        // Public search needs a few letters; Telegram rejects very short queries.
+        val public = if (query.trim().length >= 4) runCatching { client.query(TdApi.SearchPublicChats(query, null)).chatIds.toList() }.getOrDefault(emptyList()) else emptyList()
+        return items((local + server + public).distinct())
+    }
+
+    /** Messages matching [query] in all chats of the main list, newest first. */
+    suspend fun searchMessages(query: String): List<TelegramFoundMessage> {
+        val found = runCatching { client.query(TdApi.SearchMessages(TdApi.ChatListMain(), query, "", SEARCH_LIMIT, null, null, 0, 0)) }.getOrNull() ?: return emptyList()
+        return onDispatcher {
+            found.messages.filterNotNull().mapNotNull { message ->
+                val chat = chatsById[message.chatId] ?: return@mapNotNull null
+                TelegramFoundMessage(message.chatId, message.id, chat.title, messagePreview(message), message.date, chat.photo?.small?.toRef())
+            }
         }
-        if (!sent) continuation.resumeWith(Result.success(emptyList()))
+    }
+
+    /** Chat list items for [ids], in that order; TDLib reports every chat before returning its id. */
+    private suspend fun items(ids: List<Long>): List<TelegramChatItem> = onDispatcher {
+        ids.mapNotNull { id ->
+            chatsById[id]?.let { chat ->
+                val position = chat.positions.firstOrNull { it.list is TdApi.ChatListMain } ?: chat.positions.firstOrNull() ?: TdApi.ChatPosition(TdApi.ChatListMain(), 0, false, null)
+                toChatItem(chat, position, archived = position.list is TdApi.ChatListArchive)
+            }
+        }
+    }
+
+    /** Runs [block] on the TDLib dispatcher, where chatsById may be read. */
+    private suspend fun <T> onDispatcher(block: () -> T): T = kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+        client.post { continuation.resumeWith(runCatching(block)) }
     }
 
     private fun act(function: TdApi.Function<*>) {
@@ -124,11 +155,15 @@ class TelegramChatRepository(private val client: TelegramClient) {
                     requestPage(TelegramChatListKey.Archive)
                 }
                 is TdApi.AuthorizationStateClosed -> {
-                    chatsById.clear(); folders = emptyList(); loading.clear(); complete.clear()
+                    // A background pause keeps the list on screen; it is refreshed on Ready.
+                    // Logout and account switch start from nothing.
+                    if (!client.paused) { chatsById.clear(); folders = emptyList(); forumSupergroups.clear() }
+                    loading.clear(); complete.clear(); wanted.clear(); failures.clear()
                     schedulePublish()
                 }
             }
             is TdApi.UpdateNewChat -> { chatsById[update.chat.id] = update.chat; schedulePublish() }
+            is TdApi.UpdateSupergroup -> if (update.supergroup.isForum) forumSupergroups += update.supergroup.id else forumSupergroups -= update.supergroup.id
             is TdApi.UpdateOption -> if (update.name == "my_id") { myId = (update.value as? TdApi.OptionValueInteger)?.value ?: 0L; schedulePublish() }
             is TdApi.UpdateChatFolders -> {
                 folders = update.chatFolders.map { TelegramFolder(it.id, it.name?.text?.text.orEmpty()) }
@@ -155,15 +190,37 @@ class TelegramChatRepository(private val client: TelegramClient) {
     }
 
     private fun requestPage(key: TelegramChatListKey) {
-        if (key in loading || key in complete) return
+        if (key in complete) return
+        // Asked again while a page is loading: load the next one right after it.
+        if (key in loading) { wanted += key; return }
         loading += key
         schedulePublish()
-        client.send(TdApi.LoadChats(key.toTd(), PAGE_SIZE)) { result ->
+        val sent = client.send(TdApi.LoadChats(key.toTd(), PAGE_SIZE)) { result ->
             loading -= key
-            // 404: every chat of the list is already known.
-            if (result is TdApi.Error && result.code == 404) complete += key
+            val again = wanted.remove(key)
+            when {
+                // 404: every chat of the list is already known.
+                result is TdApi.Error && result.code == 404 -> complete += key
+                result is TdApi.Error -> {
+                    // Network or flood errors: try again a little later, a few times.
+                    val tries = (failures[key] ?: 0) + 1
+                    failures[key] = tries
+                    if (tries <= 3) client.post(2_000L * tries) { requestPage(key) }
+                }
+                else -> {
+                    failures.remove(key)
+                    // TDLib may answer with a short page (only pinned chats): fill the screen anyway.
+                    if (again || countIn(key) < MIN_FILL) client.post { requestPage(key) }
+                }
+            }
             schedulePublish()
         }
+        if (!sent) loading -= key
+    }
+
+    private fun countIn(key: TelegramChatListKey): Int {
+        val list = key.toTd()
+        return chatsById.values.count { chat -> chat.positions.any { sameChatList(it.list, list) && it.order != 0L } }
     }
 
     private fun mutate(id: Long, block: (TdApi.Chat) -> Unit) {
@@ -198,6 +255,7 @@ class TelegramChatRepository(private val client: TelegramClient) {
     }
 
     private companion object {
+        const val MIN_FILL = 30
         const val PAGE_SIZE = 50
         const val PUBLISH_DELAY_MS = 32L
         const val SEARCH_LIMIT = 50
