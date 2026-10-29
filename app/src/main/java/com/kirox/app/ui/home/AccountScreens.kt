@@ -2,6 +2,7 @@
 
 package com.kirox.app.ui.home
 
+import androidx.core.net.toUri
 import com.kirox.app.ui.components.fusionPanel
 import androidx.compose.material3.MaterialTheme
 import androidx.core.net.toUri
@@ -88,7 +89,7 @@ internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Uni
         "Данные и память" -> onOpenSection("Данные и память")
         "Оформление" -> onOpenCustomization()
         "Язык", "KiroX Настройки" -> onOpenSection("Дополнительно")
-        "Помощь" -> runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, androidx.core.net.toUri("https://telegram.org/faq"))) }
+        "Помощь" -> runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, "https://telegram.org/faq".toUri())) }
             .getOrElse { onNotice("Не удалось открыть telegram.org/faq") }.let { }
         else -> onOpenUpdates()
     }
