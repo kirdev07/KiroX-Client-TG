@@ -3,15 +3,15 @@
 **Read this before touching Android code.**
 
 Repository: https://github.com/kirdev07/KiroX-Client-TG_Kirdev.07
-Branch: \`design/kirox-fusion-expressive-glass\` (do not write to main).
+Branch: `design/kirox-fusion-expressive-glass` (do not write to main).
 Status: owner **approved visual designs**, not a blanket approval to rewrite routing/Telegram integration.
 
 ## Preparation
 
 1. Check out the named branch and examine its current HEAD; confirm the checked-out branch before writing.
-2. Read \`design-reference/fusion-v2/README.md\`, \`DESIGN_SPEC.md\`, \`theme-tokens.json\`, and \`preview.html\`.
+2. Read `design-reference/fusion-v2/README.md`, `DESIGN_SPEC.md`, `theme-tokens.json`, and `preview.html`.
 3. **Also load the exact composite reference image approved by the owner in ChatGPT on 2026-10-29.** It contains two rows of seven Android screenshots: purple Expressive first, blue Glass second. This image is **not stored in this branch**; request it if missing. Do NOT use a new generated concept to override it.
-4. Inspect actual source and route logic before editing: \`app/src/main/java/com/kirox/app/ui/theme/FusionTheme.kt\`, \`ui/components/FusionBottomBar.kt\`, \`ui/home/TelegramMainScreen.kt\`, \`ui/chat/TelegramChatScreen.kt\`, \`ui/home/SettingsScreens.kt\`, \`ui/KiroXApp.kt\`, settings persistence and the TDLib managers. Inspect other sources as needed. Old docs in \`design-reference/\` are a historical baseline, not current owner-approved visual composition.
+4. Inspect actual source and route logic before editing: `app/src/main/java/com/kirox/app/ui/theme/FusionTheme.kt`, `ui/components/FusionBottomBar.kt`, `ui/home/TelegramMainScreen.kt`, `ui/chat/TelegramChatScreen.kt`, `ui/home/SettingsScreens.kt`, `ui/KiroXApp.kt`, settings persistence and the TDLib managers. Inspect other sources as needed. Old docs in `design-reference/` are a historical baseline, not current owner-approved visual composition.
 5. Make an **inventory of what is already implemented**, noting present vs missing capabilities. Current GitHub code already includes theme palettes and a pill dock — avoid reinventing these.
 
 ## Critical functional question before changing routing
@@ -26,7 +26,7 @@ Status: owner **approved visual designs**, not a blanket approval to rewrite rou
 
 - Keep existing Kotlin Compose and Material 3 ecosystem, adopt expressive shapes/typography/motion only where compatible with installed Compose Material3 version.
 - One reusable screen/state layer for all themes; don't duplicate feature state, repositories, navigation or TDLib bindings.
-- Extend existing \`FusionTheme\` with **Fusion Expressive** + **Fusion Glass** style configuration; minimize regressions to any existing palettes.
+- Extend existing `FusionTheme` with **Fusion Expressive** + **Fusion Glass** style configuration; minimize regressions to any existing palettes.
 - Read the proposed theme token JSON as a design guide, not as a runtime parser dependency.
 - Provide opaque fallback to Glass blur on unsupported/low-tier phones and when accessibility/energy settings reduce effects. Full-viewport blur should not duplicate and reprocess all image content every frame.
 - Use stable keys / lazy lists, preserve chat scroll positions, account scoping, drafts, Android Back, keyboard and insets.
@@ -59,7 +59,7 @@ Run Gradle only when Android SDK/NDK and JDK are installed; report NOT TESTED ot
 
 ## Preview disclaimer
 
-\`preview.html\` is a small **standalone visual schematic** for discussing the two skin systems; it is **not a production Compose implementation** and does not prove TDLib feature availability. Compare against actual owner-approved raster for pixel decisions.
+`preview.html` is a small **standalone visual schematic** for discussing the two skin systems; it is **not a production Compose implementation** and does not prove TDLib feature availability. Compare against actual owner-approved raster for pixel decisions.
 
 ## Future design scope
 
