@@ -162,7 +162,7 @@ private fun CallRow(call: TelegramCall, count: Int, onOpen: () -> Unit, onCall: 
             IconGlyph(if (call.isVideo) KiroXIcon.Video else KiroXIcon.Call, "Позвонить", Modifier.size(22.dp), Fusion.colors.textPrimary)
         }
     }
-    HorizontalDivider(Modifier.padding(start = 74.dp), color = Fusion.colors.outline)
+    if (Fusion.colors.backdrop == null) HorizontalDivider(Modifier.padding(start = 74.dp), color = Fusion.colors.outline)
 }
 
 internal fun callSubtitle(call: TelegramCall): String {

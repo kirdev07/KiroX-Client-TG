@@ -82,7 +82,7 @@ interface CallActions {
 
 /** Full-screen call: outgoing, incoming, connected and finished states for voice and video. */
 @Composable
-fun CallScreen(call: TelegramActiveCall, actions: CallActions, onMinimize: (() -> Unit)? = null) {
+fun CallScreen(call: TelegramActiveCall, actions: CallActions, onMinimize: (() -> Unit)? = null, onMessage: (() -> Unit)? = null) {
     val live = call.phase.isLive()
     BackHandler { if (!live) actions.dismiss() else onMinimize?.invoke() }
     IncomingAlert(call.phase == CallPhase.Incoming)
@@ -111,6 +111,16 @@ fun CallScreen(call: TelegramActiveCall, actions: CallActions, onMinimize: (() -
                 Text(call.name, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 StatusLine(call)
                 Spacer(Modifier.weight(1f))
+            } else if (com.kirox.app.ui.theme.Fusion.colors.backdrop != null && call.phase is CallPhase.Active) {
+                // v2 active audio call (approved calls board): name and timer on top, avatar, a voice wave.
+                Spacer(Modifier.height(12.dp))
+                Text(call.name, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                StatusLine(call)
+                Spacer(Modifier.weight(0.5f))
+                PulsingAvatar(call, pulsing = false)
+                Spacer(Modifier.height(20.dp))
+                VoiceWave(active = !call.micMuted || !call.remoteMuted)
+                Spacer(Modifier.weight(1f))
             } else {
                 Spacer(Modifier.weight(0.6f))
                 PulsingAvatar(call, pulsing = call.phase is CallPhase.Calling || call.phase == CallPhase.Incoming || call.phase == CallPhase.Connecting)
@@ -121,7 +131,7 @@ fun CallScreen(call: TelegramActiveCall, actions: CallActions, onMinimize: (() -
                 Spacer(Modifier.weight(1f))
             }
             when {
-                call.phase == CallPhase.Incoming -> IncomingControls(call, actions)
+                call.phase == CallPhase.Incoming -> IncomingControls(call, actions, onMessage)
                 live -> ActiveControls(
                     call.isVideo || call.cameraOn, call.micMuted, route, routes.size > 2, call.cameraOn,
                     { actions.setMuted(!call.micMuted) }, router::toggle, { actions.setCamera(!call.cameraOn) }, actions::switchCamera, actions::hangUp
@@ -280,7 +290,15 @@ private fun StatusLine(call: TelegramActiveCall) {
 }
 
 @Composable
-private fun IncomingControls(call: TelegramActiveCall, actions: CallActions) {
+private fun IncomingControls(call: TelegramActiveCall, actions: CallActions, onMessage: (() -> Unit)?) {
+    // v2 (approved calls board): «Сообщение» above the answer buttons.
+    if (onMessage != null && com.kirox.app.ui.theme.Fusion.colors.backdrop != null) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(bottom = 28.dp).clip(RoundedCornerShape(18.dp)).clickable(onClick = onMessage).padding(horizontal = 18.dp, vertical = 8.dp)) {
+            Box(Modifier.size(52.dp).clip(CircleShape).background(Color(0x29FFFFFF)), contentAlignment = Alignment.Center) { IconGlyph(KiroXIcon.Chat, null, Modifier.size(24.dp), Color.White) }
+            Spacer(Modifier.height(6.dp))
+            Text("Сообщение", color = Color(0xDDFFFFFF), fontSize = 13.sp)
+        }
+    }
     // After a cold start from a push the engine may still be loading: the Accept button appears then.
     val engineReady by com.kirox.app.voip.NativeCall.ready.collectAsState()
     val canAnswer = engineReady || callsEnabled
@@ -422,6 +440,26 @@ fun MiniCallChip(call: TelegramActiveCall, onOpen: () -> Unit, onHangUp: () -> U
         Spacer(Modifier.weight(1f))
         androidx.compose.material3.IconButton(onClick = onHangUp, modifier = Modifier.size(44.dp)) {
             IconGlyph(KiroXIcon.CallEnd, "Завершить звонок", Modifier.size(22.dp), Color.White)
+        }
+    }
+}
+
+/** Soft accent bars under the avatar while a call is live (approved calls board); still when animations are off. */
+@Composable
+private fun VoiceWave(active: Boolean) {
+    val accent = com.kirox.app.ui.theme.Fusion.colors.accent
+    val animate = active && com.kirox.app.ui.theme.LocalMotionFactor.current > 0f
+    val transition = rememberInfiniteTransition(label = "voice_wave")
+    val phase by transition.animateFloat(0f, (2 * Math.PI).toFloat(), infiniteRepeatable(tween(1400, easing = LinearEasing), RepeatMode.Restart), label = "phase")
+    Canvas(Modifier.fillMaxWidth(0.8f).height(44.dp)) {
+        val bars = 36
+        val step = size.width / bars
+        repeat(bars) { i ->
+            val x = step * (i + 0.5f)
+            val edge = 1f - kotlin.math.abs(i - bars / 2f) / (bars / 2f)
+            val swing = if (animate) (0.5f + 0.5f * kotlin.math.sin(phase + i * 0.55f)) else 0.35f
+            val h = size.height * (0.15f + 0.85f * edge * swing)
+            drawLine(accent.copy(alpha = 0.55f + 0.45f * edge), androidx.compose.ui.geometry.Offset(x, (size.height - h) / 2), androidx.compose.ui.geometry.Offset(x, (size.height + h) / 2), step * 0.45f, androidx.compose.ui.graphics.StrokeCap.Round)
         }
     }
 }

@@ -416,7 +416,11 @@ fun KiroXApp() {
             val canMinimize = call.phase is com.kirox.app.telegram.CallPhase.Active || call.phase is com.kirox.app.telegram.CallPhase.Calling || call.phase == com.kirox.app.telegram.CallPhase.Connecting
             if (minimized && canMinimize) com.kirox.app.ui.call.MiniCallChip(call, onOpen = { minimized = false }, onHangUp = permittedCallActions::hangUp, modifier = Modifier.align(androidx.compose.ui.Alignment.TopCenter))
             else CompositionLocalProvider(LocalTelegramFiles provides telegramViewModel.files) {
-                com.kirox.app.ui.call.CallScreen(call, permittedCallActions, onMinimize = if (canMinimize) ({ minimized = true }) else null)
+                com.kirox.app.ui.call.CallScreen(
+                    call, permittedCallActions, onMinimize = if (canMinimize) ({ minimized = true }) else null,
+                    // «Сообщение» on an incoming call: decline and open the chat to write instead.
+                    onMessage = { permittedCallActions.hangUp(); scope.launch { runCatching { telegramViewModel.chats.privateChatId(call.userId) }.onSuccess(::openChat) } }
+                )
             }
         }
     }
