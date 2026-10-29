@@ -31,7 +31,8 @@ class MessageNotifications(
     private val chats: TelegramChatRepository,
     private val users: TelegramUserRepository
 ) {
-    private class Item(val id: Int, val date: Int, val sender: String, val text: String)
+    /** [topic]: forum topic or comment thread of the message; the quick reply goes there. */
+    private class Item(val id: Int, val date: Int, val sender: String, val text: String, val topic: TdApi.MessageTopic? = null)
     private class Group(val chatId: Long, val items: MutableList<Item> = mutableListOf())
 
     // Dispatcher-confined, like the repositories.
@@ -74,7 +75,8 @@ class MessageNotifications(
         for (notification in added) {
             val type = notification.type as? TdApi.NotificationTypeNewMessage ?: continue
             group.items.removeAll { it.id == notification.id }
-            group.items += Item(notification.id, notification.date, senderName(type.message), if (type.showPreview) preview(type.message) else "Новое сообщение")
+            val topic = type.message.topicId?.takeIf { it is TdApi.MessageTopicForum || it is TdApi.MessageTopicThread }
+            group.items += Item(notification.id, notification.date, senderName(type.message), if (type.showPreview) preview(type.message) else "Новое сообщение", topic)
             if (!notification.isSilent) fresh = true
         }
         group.items.sortBy { it.date }
@@ -123,7 +125,8 @@ class MessageNotifications(
                     context, groupId + REPLY_REQUEST_OFFSET,
                     Intent(context, MessageActionReceiver::class.java).setAction(ACTION_REPLY)
                         .putExtra(EXTRA_GROUP, groupId).putExtra(EXTRA_CHAT, group.chatId)
-                        .putExtra(EXTRA_MAX, group.items.maxOf { it.id }),
+                        .putExtra(EXTRA_MAX, group.items.maxOf { it.id })
+                        .apply { putTopic(this, group.items.maxByOrNull { it.date }?.topic) },
                     // The system writes the typed text into the intent, so it must be mutable.
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
                 ))
@@ -156,7 +159,7 @@ class MessageNotifications(
      * Sends [text] to [chatId] from the notification and marks the chat read. Starts TDLib if it was
      * paused in the background and waits for it; returns false when the message could not be sent.
      */
-    suspend fun reply(groupId: Int, chatId: Long, maxNotificationId: Int, text: String): Boolean {
+    suspend fun reply(groupId: Int, chatId: Long, maxNotificationId: Int, text: String, topic: TdApi.MessageTopic? = null): Boolean {
         client.start()
         try {
             if (kotlinx.coroutines.withTimeoutOrNull(REPLY_WAIT_MS) { client.ready.first { it } } == null) return false
@@ -164,7 +167,8 @@ class MessageNotifications(
             // means Telegram has it, so the process is kept until then.
             val done = kotlinx.coroutines.CompletableDeferred<Boolean>()
             val pending = runCatching {
-                client.query(TdApi.SendMessage(chatId, null, null, null, null, TdApi.InputMessageText(TdApi.FormattedText(text, emptyArray()), null, true)))
+                // In a forum topic or a comment thread the answer stays there, not in the general chat.
+                client.query(TdApi.SendMessage(chatId, topic, null, null, null, TdApi.InputMessageText(TdApi.FormattedText(text, emptyArray()), null, true)))
             }.getOrNull() ?: return false
             if (pending.sendingState == null) done.complete(true) else sending[pending.id] = done
             val sent = kotlinx.coroutines.withTimeoutOrNull(SEND_WAIT_MS) { done.await() } ?: false
@@ -232,6 +236,23 @@ class MessageNotifications(
         const val EXTRA_OPEN_CHAT = "kirox.open_chat"
         internal const val EXTRA_MESSAGES = "messages"
         internal const val EXTRA_MAX = "max"
+        private const val EXTRA_FORUM_TOPIC = "forum_topic"
+        private const val EXTRA_THREAD = "thread"
+
+        private fun putTopic(intent: Intent, topic: TdApi.MessageTopic?) {
+            when (topic) {
+                is TdApi.MessageTopicForum -> intent.putExtra(EXTRA_FORUM_TOPIC, topic.forumTopicId)
+                is TdApi.MessageTopicThread -> intent.putExtra(EXTRA_THREAD, topic.messageThreadId)
+                else -> Unit
+            }
+        }
+
+        /** The topic a reply from this notification belongs to, or null for the chat itself. */
+        internal fun topicOf(intent: Intent): TdApi.MessageTopic? = when {
+            intent.hasExtra(EXTRA_FORUM_TOPIC) -> TdApi.MessageTopicForum(intent.getIntExtra(EXTRA_FORUM_TOPIC, 0))
+            intent.hasExtra(EXTRA_THREAD) -> TdApi.MessageTopicThread(intent.getLongExtra(EXTRA_THREAD, 0))
+            else -> null
+        }
 
         private fun ensureChannel(context: Context) {
             val channel = NotificationChannel(CHANNEL, "Сообщения", NotificationManager.IMPORTANCE_HIGH).apply {
@@ -254,7 +275,7 @@ class MessageActionReceiver : BroadcastReceiver() {
             val pending = goAsync()
             kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
                 try {
-                    val ok = notifications.reply(groupId, intent.getLongExtra(MessageNotifications.EXTRA_CHAT, 0), intent.getIntExtra(MessageNotifications.EXTRA_MAX, 0), text)
+                    val ok = notifications.reply(groupId, intent.getLongExtra(MessageNotifications.EXTRA_CHAT, 0), intent.getIntExtra(MessageNotifications.EXTRA_MAX, 0), text, MessageNotifications.topicOf(intent))
                     if (ok) notifications.dismiss(groupId)
                     else android.os.Handler(android.os.Looper.getMainLooper()).post { android.widget.Toast.makeText(context, "Не удалось отправить ответ", android.widget.Toast.LENGTH_SHORT).show() }
                 } finally {
