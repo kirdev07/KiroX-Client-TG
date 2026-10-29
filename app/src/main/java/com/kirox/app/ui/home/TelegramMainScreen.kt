@@ -2,6 +2,7 @@
 
 package com.kirox.app.ui.home
 
+import com.kirox.app.ui.components.fusionPanel
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -307,11 +308,12 @@ private fun ChatsTab(
     }
     Box(Modifier.fillMaxSize().nestedScroll(fabScroll)) {
     Column(Modifier.fillMaxSize()) {
-        ScreenTitle(connectionTitle(connection) ?: "Чаты") {
-            TitleAction(KiroXIcon.Contacts, "Контакты", onClick = onOpenContacts)
-            TitleAction(KiroXIcon.ReadAll, "Отметить всё прочитанным") { confirmReadAll = true }
-            TitleAction(KiroXIcon.Search, "Поиск") { searching = true }
-        }
+        ChatsHeader(
+            status = connectionTitle(connection),
+            onSearch = { searching = true }, onNewMessage = onNewMessage,
+            onOpenContacts = onOpenContacts, onReadAll = { confirmReadAll = true }
+        )
+        SearchPill("Поиск") { searching = true }
         val postStory = rememberStoryPoster { onNotice(UiNotice(it)) }
         StoriesRow(storyChats, profile?.name.orEmpty(), profile?.photo, onOpenStories) { postStory() }
         val archiveUnread = lists.archive.chats.count { it.unreadCount > 0 || it.isMarkedUnread }
@@ -363,8 +365,8 @@ private fun ChatsTab(
             }
         }
     }
-    // New message: Material 3 floating action button.
-    androidx.compose.animation.AnimatedVisibility(
+    // New message: Material 3 floating action button in the classic palettes; Fusion UI v2 has it in the header.
+    if (Fusion.colors.backdrop == null) androidx.compose.animation.AnimatedVisibility(
         fabShown, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
         enter = if (com.kirox.app.ui.theme.LocalMotionFactor.current > 0f) androidx.compose.animation.scaleIn() + androidx.compose.animation.fadeIn() else androidx.compose.animation.EnterTransition.None,
         exit = if (com.kirox.app.ui.theme.LocalMotionFactor.current > 0f) androidx.compose.animation.scaleOut() + androidx.compose.animation.fadeOut() else androidx.compose.animation.ExitTransition.None
@@ -440,11 +442,59 @@ private fun compactCount(count: Int) = if (count > 999) "${count / 1000}K" else 
 
 @Composable
 private fun FolderChip(title: String, selected: Boolean, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
+    val colors = Fusion.colors
+    // Fusion UI v2: plain text filters, the active one on a dark pill (approved PNG); classic: filled chips.
+    val v2 = colors.backdrop != null
+    val background = when {
+        selected && v2 -> colors.selectedPill
+        selected -> colors.accent
+        v2 -> androidx.compose.ui.graphics.Color.Transparent
+        else -> colors.surface2
+    }
     Text(
-        title, color = if (selected) Fusion.colors.onAccent else Fusion.colors.textSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1,
-        modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(if (selected) Fusion.colors.accent else Fusion.colors.surface2)
-            .combinedClickable(onLongClick = onLongClick, onClick = onClick).padding(horizontal = 14.dp, vertical = 8.dp)
+        title, color = if (selected) (if (v2) colors.onSelectedPill else colors.onAccent) else colors.textSecondary,
+        fontSize = 14.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1,
+        modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(background)
+            .combinedClickable(onLongClick = onLongClick, onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp)
     )
+}
+
+/** Chats header from the approved Fusion PNG: menu left, KiroX in the centre, search and new message right. */
+@Composable
+private fun ChatsHeader(status: String?, onSearch: () -> Unit, onNewMessage: () -> Unit, onOpenContacts: () -> Unit, onReadAll: () -> Unit) {
+    var menu by remember { mutableStateOf(false) }
+    Box(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 4.dp)) {
+        Box(Modifier.align(Alignment.CenterStart)) {
+            TitleAction(KiroXIcon.Menu, "Меню") { menu = true }
+            androidx.compose.material3.DropdownMenu(menu, { menu = false }, containerColor = Fusion.colors.surface2) {
+                androidx.compose.material3.DropdownMenuItem(text = { Text("Контакты", color = Fusion.colors.textPrimary) }, onClick = { menu = false; onOpenContacts() })
+                androidx.compose.material3.DropdownMenuItem(text = { Text("Отметить всё прочитанным", color = Fusion.colors.textPrimary) }, onClick = { menu = false; onReadAll() })
+            }
+        }
+        Text(
+            status ?: "KiroX", color = Fusion.colors.textPrimary, maxLines = 1,
+            style = if (status == null) androidx.compose.material3.MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold) else androidx.compose.material3.MaterialTheme.typography.titleMedium,
+            modifier = Modifier.align(Alignment.Center)
+        )
+        Row(Modifier.align(Alignment.CenterEnd)) {
+            TitleAction(KiroXIcon.Search, "Поиск", onClick = onSearch)
+            TitleAction(KiroXIcon.Compose, "Новое сообщение", onClick = onNewMessage)
+        }
+    }
+}
+
+/** Always-visible rounded search bar under the header; opens the chat search. */
+@Composable
+private fun SearchPill(hint: String, onClick: () -> Unit) {
+    Row(
+        Modifier.padding(horizontal = 16.dp, vertical = 4.dp).fillMaxWidth().heightIn(min = 46.dp).clip(CircleShape)
+            .fusionPanel(Fusion.colors, CircleShape, opaque = Fusion.colors.surface2).clickable(onClickLabel = "Открыть поиск", onClick = onClick).padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconGlyph(KiroXIcon.Search, null, Modifier.size(20.dp), Fusion.colors.textSecondary)
+        Spacer(Modifier.width(10.dp))
+        Text(hint, color = Fusion.colors.textTertiary, fontSize = 16.sp)
+    }
 }
 
 private fun connectionTitle(state: TelegramConnection): String? = when (state) {
@@ -459,8 +509,8 @@ private fun connectionTitle(state: TelegramConnection): String? = when (state) {
 
 private val KindFilters = listOf(
     com.kirox.app.telegram.TelegramChatKind.Private to "Личные",
-    com.kirox.app.telegram.TelegramChatKind.Group to "Группы",
-    com.kirox.app.telegram.TelegramChatKind.Channel to "Каналы"
+    com.kirox.app.telegram.TelegramChatKind.Channel to "Каналы",
+    com.kirox.app.telegram.TelegramChatKind.Group to "Группы"
 )
 
 private val noCallsText = "Звонки из KiroX пока недоступны: нужен отдельный VoIP-модуль"

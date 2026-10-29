@@ -91,16 +91,19 @@ data class FusionColors(
             danger = Color(0xFFFF6961), avatar = Color(0xFF55443A), iconContainer = Color(0xFF1F1915)
         )
 
-        /** Fusion Expressive: purple Material 3 Expressive on an AMOLED violet base (theme-tokens.json). */
+        /**
+         * Fusion Expressive: near-black base with violet accents, colours sampled from the approved
+         * PNG (design-reference/fusion-v2/assets); violet only in accents, pills and the chat wallpaper.
+         */
         val Expressive = FusionColors(
-            background = Color(0xFF080710), surface1 = Color(0xFF141121), surface2 = Color(0xFF211B31), surface3 = Color(0xFF2D2641),
-            outline = Color(0xFF241D34), outlineStrong = Color(0xFF4A3A6D), textPrimary = Color(0xFFF8F5FF), textSecondary = Color(0xFFB5AACD),
-            textTertiary = Color(0xFF8C82A6), accent = Color(0xFFA276FF), onAccent = Color(0xFFFFFFFF),
-            danger = Color(0xFFFF5D75), avatar = Color(0xFF3A2F55), iconContainer = Color(0xFF241D38),
-            incomingBubble = Color(0xFF211B32), outgoingBubble = Color(0xFF7354D8), inputBar = Color(0xFF141121),
-            selectedPill = Color(0xFF6749CE), onSelectedPill = Color(0xFFFFFFFF),
-            backdrop = listOf(Color(0xFF10091D), Color(0xFF160C2B), Color(0xFF080710)),
-            glow = listOf(Color(0x557354D8), Color(0x333B1F7A)),
+            background = Color(0xFF05070D), surface1 = Color(0xFF12131B), surface2 = Color(0xFF1C1D29), surface3 = Color(0xFF272838),
+            outline = Color(0xFF161722), outlineStrong = Color(0xFF3A3550), textPrimary = Color(0xFFF6F4FF), textSecondary = Color(0xFFA9A7B9),
+            textTertiary = Color(0xFF7F7D92), accent = Color(0xFFA276FF), onAccent = Color(0xFFFFFFFF),
+            danger = Color(0xFFFF5D75), avatar = Color(0xFF2E2A45), iconContainer = Color(0xFF1C1D29),
+            incomingBubble = Color(0xFF211B32), outgoingBubble = Color(0xFF7354D8), inputBar = Color(0xFF141521),
+            selectedPill = Color(0xFF2A2142), onSelectedPill = Color(0xFFEDE6FF),
+            backdrop = listOf(Color(0xFF05070E), Color(0xFF080B14), Color(0xFF05060B)),
+            glow = listOf(Color(0x147354D8)),
             chatWallpaper = listOf(Color(0xFF140B26), Color(0xFF1E1138), Color(0xFF0A0814))
         )
 

@@ -20,7 +20,7 @@ enum class KiroXIcon {
     Edit, More, Stories, Media, Bookmark, Check, Pin, CallIncoming, CallOutgoing, CallMissed,
     Camera, At, Phone, Cake, File, Link, Music, Voice, Verified, Photo,
     Back, Video, Attach, Send, Emoji, Copy, Forward, Delete, Location, Reply,
-    Chats, Tune, ProfileCircle, Qr, Speaker, CallEnd, FlipCamera
+    Chats, Tune, ProfileCircle, Qr, Speaker, CallEnd, FlipCamera, Menu
 }
 
 @Composable
@@ -61,6 +61,7 @@ fun KiroXIcon(
             KiroXIcon.Sliders -> { line(p(4f,7f),p(20f,7f)); line(p(4f,17f),p(20f,17f)); circle(9f,7f,1.8f); circle(15f,17f,1.8f) }
             KiroXIcon.Refresh -> { path(p(19f,8f),p(19f,4f),p(15f,4f)); path(p(19f,5f),p(16f,3.5f),p(12f,3f),p(7f,5f),p(4f,9f)); path(p(5f,16f),p(5f,20f),p(9f,20f)); path(p(5f,19f),p(8f,21f),p(13f,21f),p(18f,18f),p(20f,14f)) }
             KiroXIcon.Info -> { circle(12f,12f,9f); line(p(12f,11f),p(12f,17f)); circle(12f,7.5f,.5f) }
+            KiroXIcon.Menu -> { line(p(4f,7f),p(20f,7f)); line(p(4f,12f),p(20f,12f)); line(p(4f,17f),p(20f,17f)) }
             KiroXIcon.More -> { circle(12f,5f,.8f); circle(12f,12f,.8f); circle(12f,19f,.8f) }
             KiroXIcon.Stories -> { circle(12f,12f,8f); circle(12f,12f,3f) }
             KiroXIcon.Media -> { rect(3f,4f,21f,20f); circle(8f,9f,1.5f); path(p(4f,18f),p(9f,13f),p(13f,16f),p(16f,12f),p(21f,17f)) }

@@ -38,12 +38,13 @@ fun FusionBottomBar(items: List<FusionNavItem>, selected: Int, onSelect: (Int) -
     val colors = Fusion.colors
     if (colors.backdrop != null) {
         // Fusion UI v2: a floating dock over the backdrop with labels, the active tab on a coloured pill.
+        // Expressive: a full-width dark bar; Glass: a floating translucent dock (approved PNG).
         val shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp)
         NavigationBar(
-            containerColor = androidx.compose.ui.graphics.Color.Transparent, tonalElevation = 0.dp,
-            windowInsets = androidx.compose.foundation.layout.WindowInsets(0),
-            modifier = modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp)
-                .clip(shape).fusionPanel(colors, shape, opaque = colors.surface1)
+            containerColor = if (colors.glass) androidx.compose.ui.graphics.Color.Transparent else colors.background, tonalElevation = 0.dp,
+            windowInsets = if (colors.glass) androidx.compose.foundation.layout.WindowInsets(0) else androidx.compose.foundation.layout.WindowInsets.navigationBars,
+            modifier = if (colors.glass) modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp).clip(shape).fusionPanel(colors, shape)
+                else modifier.fillMaxWidth()
         ) {
             items.forEachIndexed { index, item ->
                 NavigationBarItem(
