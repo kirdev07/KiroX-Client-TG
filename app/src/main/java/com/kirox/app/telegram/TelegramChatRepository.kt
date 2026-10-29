@@ -55,6 +55,18 @@ class TelegramChatRepository(private val client: TelegramClient) {
     /** Removes the folder only; its chats stay in the main list. */
     suspend fun deleteFolder(id: Int) { client.query(TdApi.DeleteChatFolder(id, LongArray(0))) }
 
+    /** Chats added to folder [id] by hand (not the ones it takes by type). */
+    suspend fun folderChatIds(id: Int): List<Long> = client.query(TdApi.GetChatFolder(id)).includedChatIds.toList()
+
+    /** Renames folder [id] and sets its hand-picked chats; type rules and pinned chats stay as they are. */
+    suspend fun editFolder(id: Int, name: String, chatIds: List<Long>) {
+        val folder = client.query(TdApi.GetChatFolder(id))
+        folder.name = TdApi.ChatFolderName(TdApi.FormattedText(name, emptyArray()), false)
+        folder.includedChatIds = chatIds.toLongArray()
+        folder.pinnedChatIds = folder.pinnedChatIds.filter { it in chatIds }.toLongArray()
+        client.query(TdApi.EditChatFolder(id, folder))
+    }
+
     /** New basic group with [userIds]; returns its chat id. */
     suspend fun createGroup(title: String, userIds: List<Long>, description: String = ""): Long {
         val id = client.query(TdApi.CreateNewBasicGroupChat(userIds.toLongArray(), title, 0)).chatId

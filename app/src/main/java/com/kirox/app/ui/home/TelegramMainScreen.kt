@@ -322,10 +322,10 @@ private fun ChatsTab(
         // The owner's Архив / Сообщения tabs stay exactly as they were.
         val archiveUnread = lists.archive.chats.count { it.unreadCount > 0 || it.isMarkedUnread }
         SectionTabs(listOf((if (archiveUnread > 0) "Архив · $archiveUnread" else "Архив") to RealChatSection.Archive, "Сообщения" to RealChatSection.Messages), section) { section = it }
-        var creatingFolder by remember { mutableStateOf(false) }
-        var deletingFolder by remember { mutableStateOf<com.kirox.app.telegram.TelegramFolder?>(null) }
-        if (creatingFolder) CreateFolderDialog(lists.main.chats, onDismiss = { creatingFolder = false }) { onNotice(UiNotice(it)) }
-        deletingFolder?.let { folder -> DeleteFolderDialog(folder, onDismiss = { deletingFolder = null }) { onNotice(UiNotice(it)) } }
+        // «Папки чатов» board: «+ Папка» opens the folders screen, a long press edits that folder.
+        var foldersOpen by remember { mutableStateOf(false) }
+        var editFolder by remember { mutableStateOf<Int?>(null) }
+        if (foldersOpen || editFolder != null) FoldersScreen(lists, startWith = editFolder, onNotice = { onNotice(UiNotice(it)) }) { foldersOpen = false; editFolder = null }
         if (section == RealChatSection.Messages) {
             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // Unread chats per folder, like Telegram's folder tabs.
@@ -336,9 +336,9 @@ private fun ChatsTab(
                     FolderChip(title, folderId == null && kindFilter == kind) { folderId = null; kindFilter = if (kindFilter == kind) null else kind }
                 }
                 items(lists.folders, key = { it.id }) { folder ->
-                    FolderChip(withCount(folder.title.ifBlank { "Папка" }, unreadIn(lists[TelegramChatListKey.Folder(folder.id)])), folderId == folder.id, onLongClick = { deletingFolder = folder }) { folderId = folder.id; kindFilter = null }
+                    FolderChip(withCount(folder.title.ifBlank { "Папка" }, unreadIn(lists[TelegramChatListKey.Folder(folder.id)])), folderId == folder.id, onLongClick = { editFolder = folder.id }) { folderId = folder.id; kindFilter = null }
                 }
-                item { FolderChip("+ Папка", false) { creatingFolder = true } }
+                item { FolderChip("+ Папка", false) { foldersOpen = true } }
             }
             HorizontalDivider(color = Fusion.colors.outline)
         }
