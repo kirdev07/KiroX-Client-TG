@@ -99,6 +99,10 @@ android {
     lint {
         // Generated TDLib bindings (5 MB) exceed lint's file size limit; the code is not ours to fix.
         disable += "LintError"
+        // Plain-text report, turned into CI annotations by the workflow.
+        textReport = true
+        textOutput = file("build/reports/lint-results-debug.txt")
+        abortOnError = false
     }
 
     buildFeatures {

@@ -325,6 +325,14 @@ internal fun AdvancedScreen(onBack: () -> Unit, onLogOut: () -> Unit, onNotice: 
                     .onFailure { onNotice("Пока доступен только русский язык") }
             }
         }
+        item { SmallCaption("Тестирование") }
+        item {
+            var crashes by remember { mutableStateOf(com.kirox.app.CrashLog.count(context)) }
+            LinkRow("Журнал ошибок", if (crashes == 0) "Ошибок не записано" else "Записей: $crashes · нажмите, чтобы отправить разработчику") {
+                if (crashes > 0) com.kirox.app.CrashLog.share(context) else onNotice("Журнал пуст")
+            }
+            if (crashes > 0) LinkRow("Очистить журнал", null, Fusion.colors.textSecondary) { com.kirox.app.CrashLog.clear(context); crashes = 0; onNotice("Журнал очищен") }
+        }
         item { SmallCaption("Сброс") }
         item { LinkRow("Сбросить настройки KiroX", "Тема, анимации, чаты — к значениям по умолчанию. Telegram не затрагивается", Fusion.colors.danger) { confirmReset = true } }
         item { LinkRow("Выйти из аккаунта", null, Fusion.colors.danger) { confirmLogout = true } }

@@ -14,6 +14,7 @@ class KiroXApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        CrashLog.install(this)
         removeLegacyDemoData()
         // The call engine is large: load it off the main thread, calls check NativeCall.available.
         Thread { com.kirox.app.voip.NativeCall.load(this) }.start()

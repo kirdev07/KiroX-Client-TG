@@ -49,9 +49,26 @@ jobs:
             done
           done
 
+      # R8 build as in release (signed with the debug key): catches what breaks only when minified.
+      - name: Release (R8) build
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon :app:assembleReleaseCheck 2>&1 | tee -a build.log
+
       - name: Lint
+        if: always()
         run: ./gradlew --no-daemon :app:lintDebug
         continue-on-error: true
+
+      # Lint errors as annotations; warnings stay in the uploaded report.
+      - name: Report lint errors
+        if: always()
+        run: |
+          f=app/build/reports/lint-results-debug.txt
+          [ -f "$f" ] || exit 0
+          grep -E ': Error: ' "$f" | head -40 | while IFS= read -r line; do echo "::error title=lint::${line//%/%25}"; done
+          grep -cE ': Warning: ' "$f" | xargs -I{} echo "::notice title=lint::{} warnings, see lint-results-debug in the artifact"
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -59,6 +76,8 @@ jobs:
           name: kirox-debug
           path: |
             app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/releaseCheck/*.apk
+            app/build/outputs/mapping/releaseCheck/mapping.txt
             app/build/reports/
           if-no-files-found: ignore
           retention-days: 14
