@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -336,8 +337,38 @@ internal fun FullscreenPhoto(file: TelegramFileRef, onClose: () -> Unit) {
                     .graphicsLayer { scaleX = scale; scaleY = scale; translationX = offset.x; translationY = offset.y }
             ) else CircularProgressIndicator(Modifier.align(Alignment.Center).size(28.dp), color = Color.White, strokeWidth = 2.dp)
             CloseButton(onClose, Modifier.align(Alignment.TopEnd))
+            // Approved media board: round actions at the bottom — save to Downloads and open in another app.
+            val files = com.kirox.app.ui.components.LocalTelegramFiles.current
+            val path by remember(file.id, files) {
+                if (files != null) files.observe(file, 32) else kotlinx.coroutines.flow.MutableStateFlow(file.localPath)
+            }.collectAsState()
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val scope = rememberCoroutineScope()
+            var status by remember { mutableStateOf<String?>(null) }
+            path?.let { local ->
+                Row(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 20.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    ViewerAction(com.kirox.app.ui.icons.KiroXIcon.Storage, "Сохранить") {
+                        scope.launch { status = if (saveToDownloads(context, local, "photo.jpg", "image/jpeg")) "Сохранено в Загрузки/KiroX" else "Не удалось сохранить" }
+                    }
+                    ViewerAction(com.kirox.app.ui.icons.KiroXIcon.Forward, "Открыть в…") {
+                        scope.launch { if (!openFile(context, local, "photo.jpg", "image/jpeg")) status = "Нет приложения для открытия" }
+                    }
+                }
+            }
+            status?.let { text ->
+                Text(text, color = Color.White, fontSize = 13.sp, modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 96.dp).clip(RoundedCornerShape(12.dp)).background(Color(0x99000000)).padding(horizontal = 14.dp, vertical = 8.dp))
+                LaunchedEffect(text) { kotlinx.coroutines.delay(2200); status = null }
+            }
         }
     }
+}
+
+@Composable
+private fun ViewerAction(icon: com.kirox.app.ui.icons.KiroXIcon, label: String, onClick: () -> Unit) {
+    Box(
+        Modifier.size(52.dp).clip(CircleShape).background(Color(0x40FFFFFF)).border(1.dp, Color(0x33FFFFFF), CircleShape).clickable(onClickLabel = label, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) { com.kirox.app.ui.icons.KiroXIcon(icon, label, Modifier.size(22.dp), Color.White) }
 }
 
 @Composable

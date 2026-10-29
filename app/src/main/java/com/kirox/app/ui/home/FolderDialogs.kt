@@ -5,7 +5,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -39,9 +41,20 @@ internal fun CreateFolderDialog(chats: List<TelegramChatItem>, onDismiss: () -> 
                 LazyColumn(Modifier.heightIn(max = 320.dp)) {
                     items(chats, key = { it.id }) { chat ->
                         val checked = chat.id in picked
-                        Row(Modifier.fillMaxWidth().clickable { picked = if (checked) picked - chat.id else if (picked.size < 100) picked + chat.id else picked }, verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked, null)
-                            Text(chat.title, color = Fusion.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        // Approved folders board: avatar, name and a round check on the right.
+                        Row(
+                            Modifier.fillMaxWidth().clickable { picked = if (checked) picked - chat.id else if (picked.size < 100) picked + chat.id else picked }.padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            com.kirox.app.ui.components.TelegramAvatar(chat.title, chat.photo, 36.dp)
+                            Spacer(Modifier.width(10.dp))
+                            Text(chat.title, color = Fusion.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            Box(
+                                Modifier.size(22.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                                    .background(if (checked) Fusion.colors.accent else androidx.compose.ui.graphics.Color.Transparent)
+                                    .border(1.5.dp, if (checked) Fusion.colors.accent else Fusion.colors.outlineStrong, androidx.compose.foundation.shape.CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) { if (checked) com.kirox.app.ui.icons.KiroXIcon(com.kirox.app.ui.icons.KiroXIcon.Check, "Выбран", Modifier.size(14.dp), Fusion.colors.onAccent) }
                         }
                     }
                 }
