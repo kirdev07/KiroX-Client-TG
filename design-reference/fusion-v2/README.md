@@ -10,9 +10,11 @@
 
 ## Главный визуальный эталон — читать ПЕРВЫМ
 
+![Точно утверждённые 6 экранов KiroX Fusion Expressive и Glass](assets/KiroX_Fusion_Expressive_Glass_APPROVED_ORIGINAL.png)
+
 **[APPROVED_CORE_VISUAL_EXACT.md](APPROVED_CORE_VISUAL_EXACT.md)** — точное описание пользовательского оригинала 1536×620, два стиля по три экрана, координаты, SHA-256 и обязательный чеклист для Claude. Это **главный эталон компоновки** вместо `preview.html`.
 
-**Исходный PNG пока отсутствует в GitHub** (инструмент записи поддерживает текстовые файлы, но не загрузку PNG напрямую). Файл подготовлен отдельно в полном исходном качестве. До физического появления `assets/KiroX_Fusion_Expressive_Glass_APPROVED_ORIGINAL.png` с проверенным SHA-256 не заявлять pixel-perfect и не превращать обе темы в обычные градиенты.
+**Оригинальный PNG уже загружен в GitHub** и проверен по Git blob SHA-1. <br>Полная картинка: [KiroX Fusion Expressive + Glass — утверждённый оригинал](assets/KiroX_Fusion_Expressive_Glass_APPROVED_ORIGINAL.png). Проверка SHA-256: `python3 design-reference/fusion-v2/check_approved_reference.py`. Оба стиля сверять с ним, а не с упрощённым предпросмотром.
 
 ## С чего начинать Claude Code
 
