@@ -15,4 +15,10 @@ class DraftTextTest {
         }
         assertEquals("привет ", draftText(chat))
     }
+
+    @Test fun threadDraftIsReadFromItsOwnDraftMessage() {
+        assertEquals("", draftText(null as TdApi.DraftMessage?))
+        val draft = TdApi.DraftMessage(null, 0, TdApi.DraftMessageContentText(TdApi.FormattedText("в теме", emptyArray()), null), 0, null)
+        assertEquals("в теме", draftText(draft))
+    }
 }

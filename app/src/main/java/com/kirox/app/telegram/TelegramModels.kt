@@ -201,6 +201,10 @@ data class TelegramChatHistory(
     val jumpTo: Long = 0,
     /** Set for a comment thread or forum topic: shown as the header title instead of the chat. */
     val threadTitle: String? = null,
+    /** Comment thread shown (its id in the discussion group); 0 otherwise. */
+    val threadId: Long = 0,
+    /** Forum topic shown; 0 otherwise. */
+    val forumTopicId: Int = 0,
     /** Forum supergroup opened as a whole: the screen shows its topics. */
     val isForum: Boolean = false,
     /** Custom keyboard a bot sent (rows of button texts); empty when none. */

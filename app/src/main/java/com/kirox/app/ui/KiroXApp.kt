@@ -280,7 +280,8 @@ fun KiroXApp() {
                             val activityLines by telegramViewModel.activity.lines.collectAsStateWithLifecycle()
                             val stickerSource = remember { TelegramStickerSource(telegramViewModel.stickers) }
                             TelegramChatScreen(
-                                history = if (history.chatId == chatId) history else TelegramChatHistory(chatId = chatId),
+                                // A topic of this forum has the same chat id but belongs to the Thread screen.
+                                history = if (history.chatId == chatId && history.threadTitle == null) history else TelegramChatHistory(chatId = chatId),
                                 error = messageError,
                                 onErrorShown = telegramViewModel.messages::clearError,
                                 forwardTargets = chatLists.main.chats,
@@ -368,7 +369,7 @@ private class TelegramMessageActions(
     override fun edit(messageId: Long, text: String) = repository.edit(messageId, text)
     override fun delete(messageIds: List<Long>, forEveryone: Boolean) = repository.delete(messageIds, forEveryone)
     override fun forward(toChatId: Long, messageIds: List<Long>) = repository.forward(toChatId, messageIds)
-    override fun saveDraft(chatId: Long, text: String) = repository.saveDraft(chatId, text)
+    override fun saveDraft(chatId: Long, text: String, threadId: Long, forumTopicId: Int) = repository.saveDraft(chatId, text, threadId, forumTopicId)
     override fun setActivity(chatId: Long, activity: com.kirox.app.telegram.ChatActivity?) = activityRepository.send(chatId, activity)
     override fun sendAlbum(items: List<Pair<String, com.kirox.app.telegram.VideoMeta?>>, caption: String) = repository.sendAlbum(items, caption)
     override fun sendPanelItem(item: com.kirox.app.telegram.TelegramPanelItem, replyToMessageId: Long?) = repository.sendPanelItem(item, replyToMessageId)

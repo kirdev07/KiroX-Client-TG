@@ -73,7 +73,7 @@ interface TelegramChatActions {
     fun delete(messageIds: List<Long>, forEveryone: Boolean)
     fun forward(toChatId: Long, messageIds: List<Long>)
     /** Stores the unsent text as the chat's Telegram draft; blank text clears it. */
-    fun saveDraft(chatId: Long, text: String) {}
+    fun saveDraft(chatId: Long, text: String, threadId: Long = 0, forumTopicId: Int = 0) {}
     /** Our activity in the chat (typing, recording); null cancels it. */
     fun setActivity(chatId: Long, activity: com.kirox.app.telegram.ChatActivity?) {}
     /** 2–10 photos and videos as one album; a null meta marks a photo. */
@@ -187,6 +187,8 @@ fun TelegramChatScreen(
     val pendingDraft = remember { DraftHolder() }
     SideEffect {
         pendingDraft.chatId = history.chatId
+        pendingDraft.threadId = history.threadId
+        pendingDraft.forumTopicId = history.forumTopicId
         pendingDraft.text = if (editing == null && draftLoaded) input.text else null
     }
     // Another chat or the background: a voice note does not keep playing, an unsent recording is dropped.
@@ -874,11 +876,14 @@ private const val ALBUM_LIMIT = 10
 /** Unsent text of the chat on screen, as of the last composition; not state, so writes cause no recomposition. */
 private class DraftHolder {
     var chatId = 0L
+    /** Comment thread or forum topic the text was typed in; the draft is saved there, not in the chat. */
+    var threadId = 0L
+    var forumTopicId = 0
     var text: String? = null
 
     fun save(actions: TelegramChatActions) {
         val value = text ?: return
-        if (chatId != 0L) actions.saveDraft(chatId, value)
+        if (chatId != 0L) actions.saveDraft(chatId, value, threadId, forumTopicId)
     }
 }
 

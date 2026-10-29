@@ -46,10 +46,15 @@ class TelegramMessageRepository(
     init { client.addUpdateHandler(::handle) }
 
     private var resumeChatId = 0L
+    /** Draft of the open thread or topic (the chat's own draft is in Chat.draftMessage). */
+    private var threadDraft = ""
+    /** Bumped on every open/close, so a late GetMessageThread/GetForumTopic answer is ignored. */
+    private var threadRequest = 0
 
     fun open(id: Long) = client.post {
         if (chatId == id && topic == null) return@post
-        topic = null; threadTitle = null; threadRoot = 0
+        threadRequest++
+        topic = null; threadTitle = null; threadRoot = 0; threadDraft = ""
         openLoaded(id)
     }
 
@@ -58,13 +63,17 @@ class TelegramMessageRepository(
      * thread, which TDLib resolves with GetMessageThread. Errors (comments off) go to [error].
      */
     fun openComments(channelChatId: Long, postId: Long) = client.post {
-        _history.value = TelegramChatHistory(chatId = channelChatId, threadTitle = "Комментарии")
+        // No chat id until the thread is resolved, so nothing (a draft, a read mark) lands in the channel.
+        _history.value = TelegramChatHistory(threadTitle = "Комментарии")
+        val request = ++threadRequest
         client.send(TdApi.GetMessageThread(channelChatId, postId)) { result ->
+            if (request != threadRequest) return@send
             when (result) {
                 is TdApi.MessageThreadInfo -> {
                     topic = TdApi.MessageTopicThread(result.messageThreadId)
                     threadTitle = "Комментарии"
                     threadRoot = result.messageThreadId
+                    threadDraft = draftText(result.draftMessage)
                     openLoaded(result.chatId)
                 }
                 is TdApi.Error -> _error.value = humanError(result)
@@ -74,10 +83,17 @@ class TelegramMessageRepository(
 
     /** Opens one topic of a forum supergroup as its own conversation. */
     fun openTopic(chatId: Long, topicId: Int, title: String) = client.post {
-        topic = TdApi.MessageTopicForum(topicId)
-        threadTitle = title
-        threadRoot = 0
-        openLoaded(chatId)
+        _history.value = TelegramChatHistory(threadTitle = title)
+        val request = ++threadRequest
+        // The topic's own draft comes with the topic; load it before the history is shown.
+        client.send(TdApi.GetForumTopic(chatId, topicId)) { result ->
+            if (request != threadRequest) return@send
+            topic = TdApi.MessageTopicForum(topicId)
+            threadTitle = title
+            threadRoot = 0
+            threadDraft = draftText((result as? TdApi.ForumTopic)?.draftMessage)
+            openLoaded(chatId)
+        }
     }
 
     /** Votes for options at [indices] (empty retracts the vote). */
@@ -199,7 +215,9 @@ class TelegramMessageRepository(
 
     fun close(id: Long) = client.post {
         if (resumeChatId == id) { resumeChatId = 0; _history.value = TelegramChatHistory() }
-        if (chatId != id) return@post
+        // A thread or topic of this chat belongs to its own screen, which leaves it with closeThread;
+        // the chat screen going away during the transition must not close it.
+        if (chatId != id || topic != null) return@post
         client.send(TdApi.CloseChat(id))
         chatId = 0; messages.clear(); viewed.clear()
         _history.value = TelegramChatHistory()
@@ -207,6 +225,7 @@ class TelegramMessageRepository(
 
     /** Leaves a comment thread or forum topic (its screen closed); a plain open chat is left alone. */
     fun closeThread() = client.post {
+        threadRequest++
         if (topic == null || chatId == 0L) return@post
         client.send(TdApi.CloseChat(chatId))
         chatId = 0; topic = null; threadTitle = null; threadRoot = 0
@@ -300,14 +319,35 @@ class TelegramMessageRepository(
      * Saves [text] as the Telegram draft of [chatId] (any chat, not only the open one), or clears it
      * when blank. Skipped when the draft already holds this text, so leaving a chat is not a request.
      */
-    fun saveDraft(chatId: Long, text: String) = client.post {
+    fun saveDraft(chatId: Long, text: String, threadId: Long = 0, forumTopicId: Int = 0) = client.post {
+        val target: TdApi.MessageTopic? = when {
+            threadId != 0L -> TdApi.MessageTopicThread(threadId)
+            forumTopicId != 0 -> TdApi.MessageTopicForum(forumTopicId)
+            else -> null
+        }
+        if (target != null) {
+            // The thread may already be closed (screen order on leaving): then its draft is not known
+            // here, and the text is sent as is.
+            val open = chatId == this.chatId && sameTopic(topic, target)
+            if (open && threadDraft == text) return@post
+            if (open) threadDraft = text
+            client.send(TdApi.SetChatDraftMessage(chatId, target, draftOf(text))) { result -> if (result is TdApi.Error) _error.value = humanError(result) }
+            return@post
+        }
         val chat = chats.chat(chatId) ?: return@post
         if (text.isBlank() && chat.draftMessage == null) return@post
         if (draftText(chat) == text) return@post
-        val draft = text.takeIf { it.isNotBlank() }?.let {
-            TdApi.DraftMessage(null, (System.currentTimeMillis() / 1000).toInt(), TdApi.DraftMessageContentText(TdApi.FormattedText(it, emptyArray()), null), 0, null)
-        }
-        client.send(TdApi.SetChatDraftMessage(chatId, null, draft)) { result -> if (result is TdApi.Error) _error.value = humanError(result) }
+        client.send(TdApi.SetChatDraftMessage(chatId, null, draftOf(text))) { result -> if (result is TdApi.Error) _error.value = humanError(result) }
+    }
+
+    private fun draftOf(text: String): TdApi.DraftMessage? = text.takeIf { it.isNotBlank() }?.let {
+        TdApi.DraftMessage(null, (System.currentTimeMillis() / 1000).toInt(), TdApi.DraftMessageContentText(TdApi.FormattedText(it, emptyArray()), null), 0, null)
+    }
+
+    private fun sameTopic(a: TdApi.MessageTopic?, b: TdApi.MessageTopic): Boolean = when (a) {
+        is TdApi.MessageTopicThread -> b is TdApi.MessageTopicThread && a.messageThreadId == b.messageThreadId
+        is TdApi.MessageTopicForum -> b is TdApi.MessageTopicForum && a.forumTopicId == b.forumTopicId
+        else -> false
     }
 
     fun clearError() { _error.value = null }
@@ -368,6 +408,10 @@ class TelegramMessageRepository(
                 update.messageIds.forEach { messages.remove(it) }; schedulePublish()
             }
             is TdApi.UpdateChatReadOutbox -> if (update.chatId == chatId) { lastReadOutbox = update.lastReadOutboxMessageId; schedulePublish() }
+            // Keeps the open topic's draft current when it changes on another device.
+            is TdApi.UpdateForumTopic -> if (update.chatId == chatId && (topic as? TdApi.MessageTopicForum)?.forumTopicId == update.forumTopicId) {
+                threadDraft = draftText(update.draftMessage)
+            }
             is TdApi.UpdateMessageIsPinned -> if (update.chatId == chatId) {
                 if (update.isPinned) {
                     pinnedIds += update.messageId
@@ -428,7 +472,9 @@ class TelegramMessageRepository(
             loadingOlder = loadingOlder,
             reachedStart = reachedStart,
             isSecret = type is TdApi.ChatTypeSecret,
-            draft = chat?.let(::draftText).orEmpty(),
+            draft = if (topic != null) threadDraft else chat?.let(::draftText).orEmpty(),
+            threadId = (topic as? TdApi.MessageTopicThread)?.messageThreadId ?: 0L,
+            forumTopicId = (topic as? TdApi.MessageTopicForum)?.forumTopicId ?: 0,
             pinned = pinnedIds.lastOrNull()?.let { messages[it] ?: pinnedCache[it] }?.toModel(),
             pinnedIds = pinnedIds.toSet(),
             jumpTo = jumpTarget.takeIf { it in messages } ?: 0L,
@@ -529,8 +575,10 @@ class TelegramMessageRepository(
 data class VideoMeta(val durationSeconds: Int, val width: Int, val height: Int)
 
 /** Text of the chat's draft, empty when there is none. */
-internal fun draftText(chat: TdApi.Chat): String =
-    (chat.draftMessage?.content as? TdApi.DraftMessageContentText)?.text?.text.orEmpty()
+internal fun draftText(chat: TdApi.Chat): String = draftText(chat.draftMessage)
+
+internal fun draftText(draft: TdApi.DraftMessage?): String =
+    (draft?.content as? TdApi.DraftMessageContentText)?.text?.text.orEmpty()
 
 /** Largest photo size not wider than ~1280 px, falling back to the smallest available. */
 internal fun bestPhoto(photo: TdApi.Photo): TdApi.PhotoSize? =
