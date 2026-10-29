@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "project": "KiroX Fusion UI v2",
+  "status": "proposed color/motion measurements for owner-approved appearance, refine against image",
+  "themeModes": {
+    "expressive": {
+      "name": "Fusion Expressive",
+      "materialFamily": "Material 3 Expressive",
+      "background": "#080710",
+      "surface": "#141121",
+      "surfaceHigh": "#211B31",
+      "surfaceHighest": "#2D2641",
+      "primary": "#A276FF",
+      "primaryContainer": "#47347B",
+      "secondary": "#6E62F5",
+      "text": "#F8F5FF",
+      "textSecondary": "#B5AACD",
+      "outline": "#4A3A6D",
+      "incomingBubble": "#211B32",
+      "outgoingBubble": "#7354D8",
+      "onOutgoing": "#FFFFFF",
+      "dock": "#110F1D",
+      "pills": {
+        "selected": "#6749CE",
+        "unselected": "#241D34"
+      },
+      "blurEnabled": false,
+      "gradientBackground": [
+        "#10091D",
+        "#21113E",
+        "#080710"
+      ],
+      "wallpaperStyle": "purple flower abstract texture with content scrim"
+    },
+    "glass": {
+      "name": "Fusion Glass",
+      "materialFamily": "Material 3 with custom glass surfaces",
+      "background": "#071424",
+      "surface": "#142A46",
+      "surfaceHigh": "#1C3E64",
+      "surfaceHighest": "#30547C",
+      "primary": "#6B91FF",
+      "primaryContainer": "#2A4B85",
+      "secondary": "#9A83FF",
+      "text": "#F4F8FF",
+      "textSecondary": "#AEC1D8",
+      "outline": "#6382A9",
+      "incomingBubble": "#223A5E",
+      "outgoingBubble": "#426CF2",
+      "onOutgoing": "#FFFFFF",
+      "dock": "#193858",
+      "glassTint": "#223B5C",
+      "glassAlpha": 0.52,
+      "glassStrokeAlpha": 0.28,
+      "defaultBlurRadiusDp": 16,
+      "blurEnabled": true,
+      "pills": {
+        "selected": "#396FDB",
+        "unselected": "#244060"
+      },
+      "gradientBackground": [
+        "#091B34",
+        "#173863",
+        "#071424"
+      ],
+      "wallpaperStyle": "mountain/lake image with tinted text scrim"
+    }
+  },
+  "common": {
+    "error": "#FF5D75",
+    "success": "#59D8A0",
+    "onPrimary": "#FFFFFF",
+    "spacingDp": [
+      4,
+      8,
+      12,
+      16,
+      20,
+      24,
+      32
+    ],
+    "radiusDp": {
+      "small": 10,
+      "medium": 16,
+      "large": 24,
+      "extraLarge": 28,
+      "pill": 1000
+    },
+    "touchTargetDp": 48,
+    "chatRowHeightDp": {
+      "min": 64,
+      "max": 76
+    },
+    "avatarDp": {
+      "list": 48,
+      "story": 52,
+      "profile": 92
+    },
+    "bottomBar": {
+      "proposedContentHeightDp": 64,
+      "items": [
+        "Чаты",
+        "Звонки",
+        "Истории",
+        "Настройки"
+      ],
+      "navigationConflictRequiresApproval": true
+    },
+    "fontSp": {
+      "header": 22,
+      "title": 16,
+      "body": 14,
+      "metadata": 12
+    },
+    "motionMs": {
+      "fast": 120,
+      "normal": 200,
+      "slow": 300
+    },
+    "fallbacks": {
+      "disableBlurOnLowTier": true,
+      "disableDecorativeAnimationsOnReducedMotion": true,
+      "renderTranslucentNonBlurOnUnsupportedDevices": true
+    }
+  },
+  "disclaimer": "Tokens are illustrative, not pixel sampled; follow the owner-approved screenshot for final visuals. Fake Premium/verification/call data never permitted in live UI."
+}
