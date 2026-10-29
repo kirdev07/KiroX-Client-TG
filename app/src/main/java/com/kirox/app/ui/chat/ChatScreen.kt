@@ -34,8 +34,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.TextFieldValue
@@ -274,7 +272,7 @@ private fun deliveryGlyph(state: DeliveryState) = when (state) { DeliveryState.S
 internal fun ChatComposer(value: TextFieldValue, reply: MessageUi?, editing: MessageUi?, onValueChange: (TextFieldValue) -> Unit, onCancelContext: () -> Unit, onAttach: () -> Unit, onEmoji: () -> Unit, onSend: () -> Unit, onMic: () -> Unit, appearance: ChatAppearance) {
     Surface(color = Fusion.colors.background) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
-            AnimatedVisibility(reply != null || editing != null) { (editing ?: reply)?.let { context -> Row(Modifier.fillMaxWidth().background(Fusion.colors.surface1).padding(horizontal = 14.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.width(2.dp).height(34.dp).background(ChatWhite)); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(if (editing != null) "Редактирование сообщения" else "Ответ: ${context.author}", color = ChatWhite, fontSize = 11.sp); Text(context.text, color = ChatSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }; Text("×", color = ChatSecondary, fontSize = 22.sp, modifier = Modifier.clickable(onClick = onCancelContext).padding(8.dp)) } } }
+            AnimatedVisibility(reply != null || editing != null) { (editing ?: reply)?.let { context -> Row(Modifier.fillMaxWidth().background(Fusion.colors.surface1).padding(horizontal = 14.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.width(2.dp).height(34.dp).background(ChatWhite)); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(if (editing != null) "Редактирование сообщения" else "Ответ: ${context.author}", color = ChatWhite, fontSize = 11.sp); Text(context.text, color = ChatSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }; androidx.compose.material3.IconButton(onClick = onCancelContext) { Text("×", color = ChatSecondary, fontSize = 22.sp) } } } }
             Surface(
                 color = Color(appearance.inputColor), shape = RoundedCornerShape(26.dp),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp).border(1.dp, Fusion.colors.outline, RoundedCornerShape(26.dp))
@@ -282,7 +280,7 @@ internal fun ChatComposer(value: TextFieldValue, reply: MessageUi?, editing: Mes
                 Row(verticalAlignment = Alignment.Bottom) {
                     ChatIconButton(KiroXIcon.Add, "Вложения", onAttach)
                     TextField(value, onValueChange, modifier = Modifier.weight(1f).heightIn(min = 48.dp, max = 140.dp), placeholder = { Text("Сообщение", color = ChatSecondary, fontSize = 16.sp) }, colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent, focusedTextColor = ChatWhite, unfocusedTextColor = ChatWhite, cursorColor = ChatWhite), maxLines = 5)
-                    AnimatedContent(value.text.isNotBlank(), transitionSpec = { (fadeIn() + scaleIn()).togetherWith(fadeOut() + scaleOut()) }, label = "send_mic") { hasText -> ChatIconButton(if (hasText) KiroXIcon.Send else KiroXIcon.Voice, if (hasText) "Отправить" else "Голосовое сообщение", if (hasText) onSend else onMic) }
+                    AnimatedContent(value.text.isNotBlank(), transitionSpec = { (fadeIn() + scaleIn()).togetherWith(fadeOut() + scaleOut()) }, label = "send_mic") { hasText -> if (hasText) SendButton(onSend) else ChatIconButton(KiroXIcon.Voice, "Голосовое сообщение", onMic) }
                 }
             }
         }
@@ -423,7 +421,16 @@ private fun AlbumGrid(items: List<MessageUi>) {
 /** Reactions offered before the chat's own list loads. */
 internal val DEFAULT_REACTIONS = listOf("❤", "👍", "🔥", "😁", "👏")
 
-@Composable internal fun ChatIconButton(icon: KiroXIcon, description: String, onClick: () -> Unit) { Box(Modifier.size(48.dp).semantics { contentDescription = description }.clip(CircleShape).clickable(onClick = onClick), contentAlignment = Alignment.Center) { IconGlyph(icon, null, Modifier.size(23.dp), ChatWhite) } }
+@Composable internal fun ChatIconButton(icon: KiroXIcon, description: String, onClick: () -> Unit) {
+    androidx.compose.material3.IconButton(onClick = onClick, modifier = Modifier.size(48.dp)) { IconGlyph(icon, description, Modifier.size(23.dp), ChatWhite) }
+}
+
+/** Send: Material 3 filled icon button, so it stands out from the other composer buttons. */
+@Composable private fun SendButton(onClick: () -> Unit) {
+    androidx.compose.material3.FilledIconButton(onClick = onClick, modifier = Modifier.padding(4.dp).size(40.dp)) {
+        IconGlyph(KiroXIcon.Send, "Отправить", Modifier.size(20.dp), Fusion.colors.onAccent)
+    }
+}
 
 @Preview(name = "Incoming message", widthDp = 320, backgroundColor = 0xFF000000, showBackground = true)
 @Composable private fun IncomingMessagePreview() { MessageRow(MessageUi(1, "Кирилл", MessageDirection.Incoming, text = "Короткое сообщение для проверки узкого экрана", time = "12:40"), false, ChatAppearance(), onLongClick = {}, onReply = {}) }
