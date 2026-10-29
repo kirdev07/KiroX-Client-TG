@@ -36,6 +36,20 @@ public:
 
 using VideoSink = rtc::VideoSinkInterface<webrtc::VideoFrame>;
 
+/**
+ * Global reference to the Java NativeGroupCall, shared by every engine callback. Engine tasks can
+ * still run after stop() completes, so the reference lives until the last callback is destroyed.
+ */
+struct JavaRef {
+    jobject ref = nullptr;
+    explicit JavaRef(JNIEnv *env, jobject object) : ref(env->NewGlobalRef(object)) {}
+    ~JavaRef() {
+        if (ref) webrtc::AttachCurrentThreadIfNeeded()->DeleteGlobalRef(ref);
+    }
+    JavaRef(const JavaRef &) = delete;
+    JavaRef &operator=(const JavaRef &) = delete;
+};
+
 struct GroupCall {
     std::unique_ptr<GroupInstanceCustomImpl> instance;
     std::shared_ptr<PlatformContext> context;
@@ -44,7 +58,7 @@ struct GroupCall {
     /** Renderers of other participants by endpoint; the engine only keeps weak references. */
     std::map<std::string, std::shared_ptr<VideoSink>> remoteSinks;
     std::string cameraId = "front";
-    jobject javaCall = nullptr;
+    std::shared_ptr<JavaRef> java;
 };
 
 /** "SIM:1,2,3;FID:1,4" → source groups, as TDLib's GroupCallVideoSourceGroup lists them. */
@@ -93,19 +107,19 @@ extern "C" {
 
 JNIEXPORT jlong JNICALL Java_com_kirox_app_voip_NativeGroupCall_nativeStart(JNIEnv *env, jobject thiz) {
     auto *call = new GroupCall();
-    call->javaCall = env->NewGlobalRef(thiz);
+    call->java = std::make_shared<JavaRef>(env, thiz);
     call->context = std::make_shared<AndroidContext>(env, nullptr, thiz, false);
-    jobject javaCall = call->javaCall;
+    std::shared_ptr<JavaRef> java = call->java;
 
     GroupInstanceDescriptor descriptor;
     descriptor.threads = StaticThreads::getThreads();
     descriptor.config.need_log = false;
     // Announces video in the join payload, so the camera can be turned on later without rejoining.
     descriptor.videoContentType = VideoContentType::Generic;
-    descriptor.networkStateUpdated = [javaCall](GroupNetworkState state) {
-        callJava(javaCall, "onNetwork", "(Z)V", [&](JNIEnv *e, jmethodID m) { e->CallVoidMethod(javaCall, m, static_cast<jboolean>(state.isConnected)); });
+    descriptor.networkStateUpdated = [java](GroupNetworkState state) {
+        callJava(java->ref, "onNetwork", "(Z)V", [&](JNIEnv *e, jmethodID m) { e->CallVoidMethod(java->ref, m, static_cast<jboolean>(state.isConnected)); });
     };
-    descriptor.audioLevelsUpdated = [javaCall](GroupLevelsUpdate const &update) {
+    descriptor.audioLevelsUpdated = [java](GroupLevelsUpdate const &update) {
         // SSRC 0 is this device; levels are reported only while someone speaks.
         std::vector<jint> ssrcs;
         std::vector<jfloat> levels;
@@ -113,13 +127,13 @@ JNIEXPORT jlong JNICALL Java_com_kirox_app_voip_NativeGroupCall_nativeStart(JNIE
             ssrcs.push_back(static_cast<jint>(item.ssrc));
             levels.push_back(item.value.voice ? item.value.level : 0.0f);
         }
-        callJava(javaCall, "onLevels", "([I[F)V", [&](JNIEnv *e, jmethodID m) {
+        callJava(java->ref, "onLevels", "([I[F)V", [&](JNIEnv *e, jmethodID m) {
             auto size = static_cast<jsize>(ssrcs.size());
             jintArray ssrcArray = e->NewIntArray(size);
             jfloatArray levelArray = e->NewFloatArray(size);
             e->SetIntArrayRegion(ssrcArray, 0, size, ssrcs.data());
             e->SetFloatArrayRegion(levelArray, 0, size, levels.data());
-            e->CallVoidMethod(javaCall, m, ssrcArray, levelArray);
+            e->CallVoidMethod(java->ref, m, ssrcArray, levelArray);
             e->DeleteLocalRef(ssrcArray);
             e->DeleteLocalRef(levelArray);
         });
@@ -137,10 +151,10 @@ JNIEXPORT jlong JNICALL Java_com_kirox_app_voip_NativeGroupCall_nativeStart(JNIE
     };
 
     call->instance = std::make_unique<GroupInstanceCustomImpl>(std::move(descriptor));
-    call->instance->emitJoinPayload([javaCall](GroupJoinPayload const &payload) {
-        callJava(javaCall, "onJoinPayload", "(ILjava/lang/String;)V", [&](JNIEnv *e, jmethodID m) {
+    call->instance->emitJoinPayload([java](GroupJoinPayload const &payload) {
+        callJava(java->ref, "onJoinPayload", "(ILjava/lang/String;)V", [&](JNIEnv *e, jmethodID m) {
             jstring json = e->NewStringUTF(payload.json.c_str());
-            e->CallVoidMethod(javaCall, m, static_cast<jint>(payload.audioSsrc), json);
+            e->CallVoidMethod(java->ref, m, static_cast<jint>(payload.audioSsrc), json);
             e->DeleteLocalRef(json);
         });
     });
@@ -229,24 +243,23 @@ JNIEXPORT void JNICALL Java_com_kirox_app_voip_NativeGroupCall_nativeRemoveSsrcs
     call->instance->removeSsrcs(result);
 }
 
-JNIEXPORT void JNICALL Java_com_kirox_app_voip_NativeGroupCall_nativeStop(JNIEnv *env, jobject, jlong handle) {
+JNIEXPORT void JNICALL Java_com_kirox_app_voip_NativeGroupCall_nativeStop(JNIEnv *, jobject, jlong handle) {
     GroupCall *call = fromHandle(handle);
     if (!call) return;
     if (call->capture) call->capture->setState(VideoState::Inactive);
     std::shared_ptr<GroupInstanceCustomImpl> instance(std::move(call->instance));
-    jobject javaCall = call->javaCall;
     if (instance) {
-        instance->stop([instance, javaCall, call]() {
-            JNIEnv *e = webrtc::AttachCurrentThreadIfNeeded();
-            callJava(javaCall, "onStopped", "()V", [&](JNIEnv *ee, jmethodID m) { ee->CallVoidMethod(javaCall, m); });
+        // The completion runs on an engine thread; Kotlin has already dropped the handle, so nothing
+        // else touches `call` any more. The Java reference outlives it inside the engine's callbacks.
+        instance->stop([instance, call]() {
+            std::shared_ptr<JavaRef> java = call->java;
+            callJava(java->ref, "onStopped", "()V", [&](JNIEnv *e, jmethodID m) { e->CallVoidMethod(java->ref, m); });
             call->remoteSinks.clear();
             call->capture.reset();
             call->context.reset();
-            e->DeleteGlobalRef(javaCall);
             delete call;
         });
     } else {
-        env->DeleteGlobalRef(javaCall);
         delete call;
     }
 }

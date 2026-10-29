@@ -13,6 +13,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -29,20 +31,36 @@ class GroupCallService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val calls = (application as KiroXApplication).telegram.groupCalls
-        val call = calls.call.value
-        if (call == null || call.phase is GroupCallPhase.Failed) { stopSelf(); return START_NOT_STICKY }
-        foreground(call)
+        // startForeground must follow startForegroundService within seconds, even before the join
+        // is published; a placeholder notification covers that moment.
+        if (!enterForeground(calls.call.value)) {
+            calls.leave()
+            stopSelf()
+            return START_NOT_STICKY
+        }
         if (!started) {
             started = true
             scope.launch {
-                calls.call.collect { current ->
-                    if (current == null || current.phase is GroupCallPhase.Failed) {
-                        ServiceCompat.stopForeground(this@GroupCallService, ServiceCompat.STOP_FOREGROUND_REMOVE)
-                        stopSelf()
-                    } else if (current.cameraOn != withCamera) {
-                        foreground(current)
-                    } else {
-                        CallNotifications.manager(this@GroupCallService).notify(CallNotifications.GROUP_ID, CallNotifications.groupOngoing(this@GroupCallService, current))
+                var seen = calls.call.value != null
+                launch {
+                    // A join that never shows up (failed before it was published) must not keep the service.
+                    kotlinx.coroutines.delay(NO_CALL_GRACE_MS)
+                    if (!seen) finish()
+                }
+                // Only what the notification shows: speaking levels change many times a second.
+                calls.call.map { it?.let { c -> Shown(c.title, c.phase, c.muted, c.cameraOn) } }.distinctUntilChanged().collect { shown ->
+                    val current = calls.call.value
+                    when {
+                        shown == null || current == null -> if (seen) finish()
+                        shown.phase is GroupCallPhase.Failed -> finish()
+                        else -> {
+                            seen = true
+                            if (current.cameraOn != withCamera) {
+                                if (!enterForeground(current)) { calls.setCamera(false) }
+                            } else {
+                                CallNotifications.manager(this@GroupCallService).notify(CallNotifications.GROUP_ID, CallNotifications.groupOngoing(this@GroupCallService, current))
+                            }
+                        }
                     }
                 }
             }
@@ -50,18 +68,26 @@ class GroupCallService : Service() {
         return START_NOT_STICKY
     }
 
+    private data class Shown(val title: String, val phase: GroupCallPhase, val muted: Boolean, val camera: Boolean)
+
+    private fun finish() {
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
     /**
      * Enters (or updates) the foreground state; the camera type is added while the camera is on.
-     * Turning the camera on happens with KiroX on screen, when Android allows the camera type.
+     * Returns false when Android refuses (e.g. started from the background).
      */
-    private fun foreground(call: com.kirox.app.telegram.TelegramGroupCall) {
-        withCamera = call.cameraOn
+    private fun enterForeground(call: com.kirox.app.telegram.TelegramGroupCall?): Boolean {
+        withCamera = call?.cameraOn == true
         var type = 0
         if (Build.VERSION.SDK_INT >= 30) {
             type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             if (withCamera) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
         }
-        runCatching { ServiceCompat.startForeground(this, CallNotifications.GROUP_ID, CallNotifications.groupOngoing(this, call), type) }
+        val notification = if (call != null) CallNotifications.groupOngoing(this, call) else CallNotifications.groupConnecting(this)
+        return runCatching { ServiceCompat.startForeground(this, CallNotifications.GROUP_ID, notification, type) }.isSuccess
     }
 
     override fun onDestroy() {
@@ -70,6 +96,8 @@ class GroupCallService : Service() {
     }
 
     companion object {
+        private const val NO_CALL_GRACE_MS = 10_000L
+
         fun start(context: Context) {
             runCatching { androidx.core.content.ContextCompat.startForegroundService(context, Intent(context, GroupCallService::class.java)) }
         }

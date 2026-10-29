@@ -66,9 +66,18 @@ fun GroupCallScreen(call: TelegramGroupCall, actions: GroupCallActions) {
     BackHandler { if (failed != null) actions.dismiss() else actions.leave() }
     val context = LocalContext.current
     val router = androidx.compose.runtime.remember(call.groupCallId) { CallAudioRouter(context) }
+    // Bluetooth headsets need BLUETOOTH_CONNECT on Android 12+; the router restarts to see them.
+    val bluetooth = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted && failed == null) { router.stop(); router.start(isVideo = true) }
+    }
     androidx.compose.runtime.DisposableEffect(router, failed == null) {
         // Voice chats start on the speaker, like a conference.
-        if (failed == null) { router.start(isVideo = true) }
+        if (failed == null) {
+            router.start(isVideo = true)
+            if (android.os.Build.VERSION.SDK_INT >= 31 && context.checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                runCatching { bluetooth.launch(android.Manifest.permission.BLUETOOTH_CONNECT) }
+            }
+        }
         onDispose { router.stop() }
     }
     val route by router.route.collectAsState()

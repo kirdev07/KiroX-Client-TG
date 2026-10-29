@@ -135,7 +135,18 @@ object CallNotifications {
             .build()
     }
 
-    /** Ongoing video chat (voice) with a "Leave" button. */
+    /** Placeholder while a video chat is being joined. */
+    fun groupConnecting(context: Context): Notification =
+        NotificationCompat.Builder(context, CHANNEL_ONGOING)
+            .setSmallIcon(android.R.drawable.sym_call_outgoing)
+            .setContentTitle("Видеочат")
+            .setContentText("Подключение…")
+            .setOngoing(true)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setContentIntent(openApp(context))
+            .build()
+
+    /** Ongoing video chat with a "Leave" button. */
     fun groupOngoing(context: Context, call: com.kirox.app.telegram.TelegramGroupCall): Notification =
         NotificationCompat.Builder(context, CHANNEL_ONGOING)
             .setSmallIcon(android.R.drawable.sym_call_outgoing)

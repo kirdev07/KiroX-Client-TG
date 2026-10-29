@@ -136,7 +136,7 @@ fun KiroXApp() {
         object : com.kirox.app.ui.call.CallActions by callActions {
             override fun accept() {
                 val video = telegramViewModel.voip.call.value?.isVideo == true
-                withCallPermissions(video) { callActions.accept() }
+                withCallPermissions(video) { telegramViewModel.groupCalls.leave(); callActions.accept() }
             }
             override fun setCamera(on: Boolean) {
                 if (on) withCallPermissions(video = true) { callActions.setCamera(true) } else callActions.setCamera(false)
@@ -272,7 +272,7 @@ fun KiroXApp() {
                                 weakDevice = weakDevice,
                                 onOpenSavedMessages = { scope.launch { runCatching { telegramViewModel.users.savedMessagesChatId() }.onSuccess(::openChat) } },
                                 onLogOut = telegramViewModel.auth::logOut,
-                                onStartCall = { userId, video -> withCallPermissions(video) { telegramViewModel.voip.start(userId, video) } },
+                                onStartCall = { userId, video -> withCallPermissions(video) { telegramViewModel.groupCalls.leave(); telegramViewModel.voip.start(userId, video) } },
                                 onAddContact = telegramViewModel.users::addContact
                             )
                         }
@@ -301,15 +301,15 @@ fun KiroXApp() {
                                 onOpenComments = { postId -> openThread = ThreadSpec.Comments(chatId, postId); stack.push(Screen.Thread) },
                                 onOpenTopic = { topic -> openThread = ThreadSpec.Topic(chatId, topic.id, topic.title); stack.push(Screen.Thread) },
                                 onCall = if (com.kirox.app.ui.call.callsEnabled) { video ->
-                                    withCallPermissions(video) { telegramViewModel.voip.start(chatId, video) }
+                                    withCallPermissions(video) { telegramViewModel.groupCalls.leave(); telegramViewModel.voip.start(chatId, video) }
                                 } else null,
                                 onGroupCall = if (com.kirox.app.ui.call.callsEnabled) ({
-                                    withCallPermissions(false) {
-                                        scope.launch {
-                                            runCatching { telegramViewModel.groupCalls.join(chatId) }
-                                                .onSuccess { com.kirox.app.voip.GroupCallService.start(context) }
-                                                .onFailure { groupCallNotice = it.message ?: "Не удалось войти в видеочат" }
-                                        }
+                                    // One call at a time: both would fight over the microphone and the audio route.
+                                    if (activeCall != null) groupCallNotice = "Сначала завершите текущий звонок"
+                                    else withCallPermissions(false) {
+                                        telegramViewModel.groupCalls.join(chatId)
+                                        // Started now, while KiroX is on screen: Android refuses it from the background.
+                                        com.kirox.app.voip.GroupCallService.start(context)
                                     }
                                 }) else null
                             )
