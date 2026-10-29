@@ -299,6 +299,7 @@ fun KiroXApp() {
                                     withCallPermissions(false) {
                                         scope.launch {
                                             runCatching { telegramViewModel.groupCalls.join(chatId) }
+                                                .onSuccess { com.kirox.app.voip.GroupCallService.start(context) }
                                                 .onFailure { groupCallNotice = it.message ?: "Не удалось войти в видеочат" }
                                         }
                                     }

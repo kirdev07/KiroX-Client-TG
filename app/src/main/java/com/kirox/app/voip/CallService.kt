@@ -82,15 +82,23 @@ class CallService : Service() {
 /** "Decline" and "Hang up" buttons in call notifications. */
 class CallActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == ACTION_HANG_UP) (context.applicationContext as KiroXApplication).telegram.voip.hangUp()
+        val telegram = (context.applicationContext as KiroXApplication).telegram
+        when (intent.action) {
+            ACTION_HANG_UP -> telegram.voip.hangUp()
+            ACTION_LEAVE_GROUP -> telegram.groupCalls.leave()
+        }
     }
 
-    companion object { const val ACTION_HANG_UP = "com.kirox.app.voip.HANG_UP" }
+    companion object {
+        const val ACTION_HANG_UP = "com.kirox.app.voip.HANG_UP"
+        const val ACTION_LEAVE_GROUP = "com.kirox.app.voip.LEAVE_GROUP"
+    }
 }
 
 object CallNotifications {
     const val ONGOING_ID = 7001
     const val INCOMING_ID = 7002
+    const val GROUP_ID = 7003
     private const val CHANNEL_INCOMING = "calls_incoming"
     private const val CHANNEL_ONGOING = "calls_ongoing"
 
@@ -126,6 +134,24 @@ object CallNotifications {
             .addAction(0, "Завершить", hangUp(context))
             .build()
     }
+
+    /** Ongoing video chat (voice) with a "Leave" button. */
+    fun groupOngoing(context: Context, call: com.kirox.app.telegram.TelegramGroupCall): Notification =
+        NotificationCompat.Builder(context, CHANNEL_ONGOING)
+            .setSmallIcon(android.R.drawable.sym_call_outgoing)
+            .setContentTitle(call.title.ifBlank { "Видеочат" })
+            .setContentText(when (call.phase) {
+                com.kirox.app.telegram.GroupCallPhase.Connected -> if (call.muted) "Видеочат · микрофон выключен" else "Видеочат · вы в эфире"
+                else -> "Подключение к видеочату…"
+            })
+            .setOngoing(true)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setContentIntent(openApp(context))
+            .addAction(0, "Выйти", PendingIntent.getBroadcast(
+                context, 2, Intent(context, CallActionReceiver::class.java).setAction(CallActionReceiver.ACTION_LEAVE_GROUP),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            ))
+            .build()
 
     /** Full-screen incoming call when the app is not on screen. */
     fun incoming(context: Context, call: TelegramActiveCall): Notification =

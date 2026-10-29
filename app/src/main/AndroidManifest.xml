@@ -64,6 +64,10 @@
             android:exported="false"
             android:foregroundServiceType="phoneCall|microphone|camera" />
         <service
+            android:name=".voip.GroupCallService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+        <service
             android:name=".notify.KeepConnectedService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
