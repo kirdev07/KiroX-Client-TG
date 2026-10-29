@@ -464,8 +464,13 @@ fun TelegramChatScreen(
                     // reverseLayout: the visually previous row is index + 1.
                     val previous = rows.getOrNull(index + 1)?.message
                     val grouped = previous != null && previous.direction == row.message.direction && previous.author == row.message.author && row.message.direction != MessageDirection.System
+                    val next = rows.getOrNull(index - 1)?.message
+                    val groupedBelow = next != null && next.direction == row.message.direction && next.author == row.message.author && row.message.direction != MessageDirection.System
+                    // New messages slide in and the rest move smoothly instead of jumping.
+                    Box(Modifier.animateItem()) {
                     MessageRow(
                         row.message, grouped, appearance,
+                        groupedBelow = groupedBelow,
                         album = row.album,
                         pinned = row.message.id in history.pinnedIds,
                         showAuthor = isGroup,
@@ -492,6 +497,7 @@ fun TelegramChatScreen(
                         },
                         onComments = if (history.peerKind == TelegramPeerKind.Channel && history.threadTitle == null && onOpenComments != null) ({ onOpenComments(row.message.id) }) else null
                     )
+                    }
                 }
                 if (history.loadingOlder) item(key = "loading") {
                     Box(Modifier.fillMaxWidth().padding(12.dp), Alignment.Center) { CircularProgressIndicator(Modifier.size(20.dp), color = Fusion.colors.textSecondary, strokeWidth = 2.dp) }

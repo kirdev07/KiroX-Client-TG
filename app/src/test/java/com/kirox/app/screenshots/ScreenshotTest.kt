@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -13,6 +12,7 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kirox.app.phone.PhoneEntryState
@@ -107,7 +107,13 @@ class ScreenshotTest {
             folders = listOf(TelegramFolder(1, "Работа"), TelegramFolder(2, "Семья"))
         ),
         chatActions = chatActions, chatError = null, onChatErrorShown = {},
-        contacts = emptyList(), contactsLoading = false, profile = profile, connection = TelegramConnection.Ready,
+        contacts = listOf(
+            com.kirox.app.telegram.TelegramContact(2, "Анна", "anna", com.kirox.app.telegram.TelegramUserStatus.Online, null),
+            com.kirox.app.telegram.TelegramContact(4, "Мама", null, com.kirox.app.telegram.TelegramUserStatus.Recently, null),
+            com.kirox.app.telegram.TelegramContact(7, "Илья", "ilya", com.kirox.app.telegram.TelegramUserStatus.Offline(now - 3600), null),
+            com.kirox.app.telegram.TelegramContact(9, "Максим", "max", com.kirox.app.telegram.TelegramUserStatus.LastWeek, null),
+            com.kirox.app.telegram.TelegramContact(10, "Света", null, com.kirox.app.telegram.TelegramUserStatus.Online, null)
+        ), contactsLoading = false, profile = profile, connection = TelegramConnection.Ready,
         onOpenChat = {}, onOpenContact = {}, calls = TelegramCallsState(complete = true), onLoadCalls = {},
         storyChats = listOf(TelegramStoryChat(2, "Анна", null, listOf(1), hasUnread = true, isSelf = false)),
         storyActions = storyActions, palette = FusionPalette.AmoledBlack, onPalette = {}, onOpenSavedMessages = {},
@@ -148,12 +154,22 @@ class ScreenshotTest {
             MessageUi(2, "Вы", MessageDirection.Outgoing, text = "Да, Material 3 выглядит отлично 🔥", time = "18:41"),
             MessageUi(3, "Вы", MessageDirection.Outgoing, text = "Навигация с пилюлей и новые кнопки", time = "18:41"),
             MessageUi(4, "Анна", MessageDirection.Incoming, text = "А звонки работают?", time = "18:43"),
+            MessageUi(6, "Анна", MessageDirection.Incoming, text = "И видеочаты с показом экрана?", time = "18:43"),
             MessageUi(5, "Вы", MessageDirection.Outgoing, text = "Да, и видео тоже. Вечером созвонимся", time = "18:44")
         )
         Column(Modifier.fillMaxSize().background(Fusion.colors.background)) {
             com.kirox.app.ui.home.BackTitle("Анна") {}
-            LazyColumn(Modifier.weight(1f)) {
-                items(messages) { MessageRow(it, grouped = false, appearance = appearance, onLongClick = {}, onReply = {}) }
+            LazyColumn(Modifier.weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 10.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(appearance.messageSpacingDp.dp)) {
+                item { MessageRow(MessageUi(0, "", MessageDirection.System, text = "Сегодня", time = ""), grouped = false, appearance = appearance, onLongClick = {}, onReply = {}) }
+                items(messages.size) { i ->
+                    val m = messages[i]
+                    val before = messages.getOrNull(i - 1)
+                    val after = messages.getOrNull(i + 1)
+                    MessageRow(
+                        m, grouped = before?.direction == m.direction, appearance = appearance, onLongClick = {}, onReply = {},
+                        groupedBelow = after?.direction == m.direction
+                    )
+                }
             }
             ChatComposer(TextFieldValue(""), null, null, {}, {}, {}, {}, {}, {}, appearance)
         }

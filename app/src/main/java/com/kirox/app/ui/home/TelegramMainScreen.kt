@@ -29,6 +29,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -285,7 +286,17 @@ private fun ChatsTab(
             dismissButton = { TextButton(onClick = { confirmReadAll = false }) { Text("Отмена", color = Fusion.colors.textSecondary) } }
         )
     }
-    Box(Modifier.fillMaxSize()) {
+    // The new-message button hides while scrolling down the list and comes back when scrolling up.
+    var fabShown by remember { mutableStateOf(true) }
+    val fabScroll = remember {
+        object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+            override fun onPreScroll(available: androidx.compose.ui.geometry.Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): androidx.compose.ui.geometry.Offset {
+                if (available.y < -4f) fabShown = false else if (available.y > 4f) fabShown = true
+                return androidx.compose.ui.geometry.Offset.Zero
+            }
+        }
+    }
+    Box(Modifier.fillMaxSize().nestedScroll(fabScroll)) {
     Column(Modifier.fillMaxSize()) {
         ScreenTitle(connectionTitle(connection) ?: "Чаты") {
             TitleAction(KiroXIcon.ReadAll, "Отметить всё прочитанным") { confirmReadAll = true }
@@ -301,8 +312,13 @@ private fun ChatsTab(
         deletingFolder?.let { folder -> DeleteFolderDialog(folder, onDismiss = { deletingFolder = null }) { onNotice(UiNotice(it)) } }
         if (section == RealChatSection.Messages) {
             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                item { FolderChip("Все", folderId == null) { folderId = null } }
-                items(lists.folders, key = { it.id }) { folder -> FolderChip(folder.title.ifBlank { "Папка" }, folderId == folder.id, onLongClick = { deletingFolder = folder }) { folderId = folder.id } }
+                // Unread chats per folder, like Telegram's folder tabs.
+                fun unreadIn(state: com.kirox.app.telegram.TelegramChatListState) = state.chats.count { it.unreadCount > 0 || it.isMarkedUnread }
+                fun withCount(title: String, count: Int) = if (count > 0) "$title · $count" else title
+                item { FolderChip(withCount("Все", unreadIn(lists.main)), folderId == null) { folderId = null } }
+                items(lists.folders, key = { it.id }) { folder ->
+                    FolderChip(withCount(folder.title.ifBlank { "Папка" }, unreadIn(lists[TelegramChatListKey.Folder(folder.id)])), folderId == folder.id, onLongClick = { deletingFolder = folder }) { folderId = folder.id }
+                }
                 item { FolderChip("+ Папка", false) { creatingFolder = true } }
             }
             HorizontalDivider(color = Fusion.colors.outline)
@@ -333,12 +349,17 @@ private fun ChatsTab(
         }
     }
     // New message: Material 3 floating action button.
-    androidx.compose.material3.FloatingActionButton(
-        onClick = onNewMessage,
-        modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-        containerColor = Fusion.colors.accent,
-        contentColor = Fusion.colors.onAccent
-    ) { IconGlyph(KiroXIcon.Compose, "Новое сообщение", Modifier.size(24.dp), Fusion.colors.onAccent) }
+    androidx.compose.animation.AnimatedVisibility(
+        fabShown, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+        enter = androidx.compose.animation.scaleIn() + androidx.compose.animation.fadeIn(),
+        exit = androidx.compose.animation.scaleOut() + androidx.compose.animation.fadeOut()
+    ) {
+        androidx.compose.material3.FloatingActionButton(
+            onClick = onNewMessage,
+            containerColor = Fusion.colors.accent,
+            contentColor = Fusion.colors.onAccent
+        ) { IconGlyph(KiroXIcon.Compose, "Новое сообщение", Modifier.size(24.dp), Fusion.colors.onAccent) }
+    }
     }
 }
 

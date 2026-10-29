@@ -6,6 +6,8 @@ import androidx.compose.runtime.ReadOnlyComposable
 import com.kirox.app.ui.theme.Fusion
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -86,27 +88,59 @@ internal fun ChatSearchField(value: String, onChange: (String) -> Unit, onClose:
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAppearance, album: List<MessageUi> = emptyList(), pinned: Boolean = false, showAuthor: Boolean = false, onLongClick: () -> Unit, onReply: () -> Unit, onNotice: (String) -> Unit = {}, selected: Boolean = false, onClick: (() -> Unit)? = null, onQuote: (Long) -> Unit = {}, highlighted: Boolean = false, onComments: (() -> Unit)? = null, onVote: (List<Int>) -> Unit = {}, onButton: (com.kirox.app.telegram.TelegramButton) -> Unit = {}) {
+internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAppearance, album: List<MessageUi> = emptyList(), pinned: Boolean = false, showAuthor: Boolean = false, onLongClick: () -> Unit, onReply: () -> Unit, onNotice: (String) -> Unit = {}, selected: Boolean = false, onClick: (() -> Unit)? = null, onQuote: (Long) -> Unit = {}, highlighted: Boolean = false, onComments: (() -> Unit)? = null, onVote: (List<Int>) -> Unit = {}, onButton: (com.kirox.app.telegram.TelegramButton) -> Unit = {}, groupedBelow: Boolean = false) {
     if (message.direction == MessageDirection.System) {
-        Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
-            Text(message.text, color = ChatSecondary, fontSize = 11.sp, modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Fusion.colors.surface2).padding(horizontal = 12.dp, vertical = 5.dp))
+        // Day separator: a small translucent pill, readable over any wallpaper.
+        Box(Modifier.fillMaxWidth().padding(vertical = 10.dp), contentAlignment = Alignment.Center) {
+            Text(
+                message.text, color = ChatWhite, fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                modifier = Modifier.clip(CircleShape).background(Fusion.colors.surface2.copy(alpha = 0.85f)).padding(horizontal = 12.dp, vertical = 5.dp)
+            )
         }
         return
     }
     val outgoing = message.direction == MessageDirection.Outgoing
     var drag by remember(message.id) { mutableFloatStateOf(0f) }
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val replyAt = with(density) { 64.dp.toPx() }
+    val maxDrag = with(density) { 96.dp.toPx() }
+    // The bubble follows the finger a little and springs back; past the threshold it buzzes once.
+    val shown by androidx.compose.animation.core.animateFloatAsState(drag, label = "swipe_reply")
+    // Bubbles of one sender in a row share their inner corners, like a single block (Material 3 chat style).
+    val big = appearance.bubbleRadiusDp.dp
+    val small = (appearance.bubbleRadiusDp / 3f).coerceAtLeast(4f).dp
+    val shape = if (outgoing) RoundedCornerShape(topStart = big, topEnd = if (grouped) small else big, bottomEnd = if (groupedBelow) small else big, bottomStart = big)
+    else RoundedCornerShape(topStart = if (grouped) small else big, topEnd = big, bottomEnd = big, bottomStart = if (groupedBelow) small else big)
+    Box(Modifier.fillMaxWidth()) {
+    if (shown > 1f) Box(
+        Modifier.align(Alignment.CenterStart).padding(start = 8.dp).graphicsLayer { alpha = (shown / replyAt).coerceIn(0f, 1f); scaleX = alpha; scaleY = alpha }
+            .size(32.dp).clip(CircleShape).background(Fusion.colors.surface3),
+        contentAlignment = Alignment.Center
+    ) { IconGlyph(KiroXIcon.Reply, null, Modifier.size(18.dp), ChatWhite) }
     Row(
         Modifier.fillMaxWidth()
             .background(if (selected || highlighted) Fusion.colors.surface2 else Color.Transparent)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(top = if (grouped) 0.dp else 5.dp).pointerInput(message.id) {
-            detectHorizontalDragGestures(onDragStart = { drag = 0f }, onHorizontalDrag = { _, delta -> if (delta > 0) drag += delta }, onDragEnd = { if (drag > 72f) onReply(); drag = 0f }, onDragCancel = { drag = 0f })
+            .padding(top = if (grouped) 0.dp else 5.dp)
+            .graphicsLayer { translationX = shown }
+            .pointerInput(message.id) {
+            detectHorizontalDragGestures(
+                onDragStart = { drag = 0f },
+                onHorizontalDrag = { _, delta ->
+                    val before = drag
+                    drag = (drag + delta).coerceIn(0f, maxDrag)
+                    if (before < replyAt && drag >= replyAt) haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                },
+                onDragEnd = { if (drag >= replyAt) onReply(); drag = 0f },
+                onDragCancel = { drag = 0f }
+            )
         },
         horizontalArrangement = if (outgoing) Arrangement.End else Arrangement.Start
     ) {
         Column(
             Modifier.widthIn(max = windowWidthDp().coerceAtLeast(320).dp * .84f)
-                .clip(RoundedCornerShape(appearance.bubbleRadiusDp.dp))
+                .clip(shape)
                 .background(Color(if (outgoing) appearance.outgoingColor else appearance.incomingColor))
                 .combinedClickable(onClick = { onClick?.invoke() }, onLongClick = onLongClick)
                 .padding(horizontal = 12.dp, vertical = appearance.bubblePaddingDp.dp)
@@ -178,6 +212,7 @@ internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAp
                 }
             }
         }
+    }
     }
 }
 
@@ -277,9 +312,11 @@ internal fun ChatComposer(value: TextFieldValue, reply: MessageUi?, editing: Mes
                 color = Color(appearance.inputColor), shape = RoundedCornerShape(26.dp),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp).border(1.dp, Fusion.colors.outline, RoundedCornerShape(26.dp))
             ) {
+                // Emoji and stickers on the left, attachments and send/voice on the right, as in Telegram.
                 Row(verticalAlignment = Alignment.Bottom) {
-                    ChatIconButton(KiroXIcon.Add, "Вложения", onAttach)
+                    ChatIconButton(KiroXIcon.Emoji, "Эмодзи и стикеры", onEmoji)
                     TextField(value, onValueChange, modifier = Modifier.weight(1f).heightIn(min = 48.dp, max = 140.dp), placeholder = { Text("Сообщение", color = ChatSecondary, fontSize = 16.sp) }, colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent, focusedTextColor = ChatWhite, unfocusedTextColor = ChatWhite, cursorColor = ChatWhite), maxLines = 5)
+                    AnimatedVisibility(value.text.isBlank(), enter = fadeIn() + expandHorizontally(), exit = fadeOut() + shrinkHorizontally()) { ChatIconButton(KiroXIcon.Attach, "Вложения", onAttach) }
                     AnimatedContent(value.text.isNotBlank(), transitionSpec = { (fadeIn() + scaleIn()).togetherWith(fadeOut() + scaleOut()) }, label = "send_mic") { hasText -> if (hasText) SendButton(onSend) else ChatIconButton(KiroXIcon.Voice, "Голосовое сообщение", onMic) }
                 }
             }
