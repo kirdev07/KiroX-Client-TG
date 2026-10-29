@@ -123,6 +123,36 @@ internal fun NotificationSettingsScreen(onBack: () -> Unit, onNotice: (String) -
             }
         }
         item {
+            // Re-read when coming back from the system screens below.
+            var resumes by remember { mutableIntStateOf(0) }
+            androidx.lifecycle.compose.LifecycleResumeEffect(Unit) { resumes++; onPauseOrDispose { } }
+            val power = remember { context.getSystemService(android.os.PowerManager::class.java) }
+            val unrestricted = remember(resumes) { power?.isIgnoringBatteryOptimizations(context.packageName) == true }
+            LinkRow(
+                "Без ограничений батареи",
+                if (unrestricted) "Включено: система не усыпляет KiroX" else "Чтобы звонки и сообщения не задерживались в режиме экономии"
+            ) {
+                if (!unrestricted) runCatching {
+                    @android.annotation.SuppressLint("BatteryLife")
+                    val request = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, "package:${context.packageName}".toUri())
+                    context.startActivity(request.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
+            }
+            // Android 14+: full-screen incoming calls need a separate permission the user may have turned off.
+            if (android.os.Build.VERSION.SDK_INT >= 34) {
+                val notifications = remember { context.getSystemService(android.app.NotificationManager::class.java) }
+                val fullScreen = remember(resumes) { notifications?.canUseFullScreenIntent() == true }
+                LinkRow(
+                    "Звонки на весь экран",
+                    if (fullScreen) "Разрешено: входящий звонок открывается поверх блокировки" else "Выключено: входящий звонок будет только уведомлением"
+                ) {
+                    runCatching {
+                        context.startActivity(Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, "package:${context.packageName}".toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                }
+            }
+        }
+        item {
             LinkRow("Работа в фоне", "Чтобы уведомления и звонки приходили, когда KiroX свёрнут") {
                 runCatching {
                     context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:${context.packageName}".toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

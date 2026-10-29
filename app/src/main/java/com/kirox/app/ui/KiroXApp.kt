@@ -131,7 +131,11 @@ fun KiroXApp() {
             android.Manifest.permission.RECORD_AUDIO,
             if (video) android.Manifest.permission.CAMERA else null,
             // The "call in progress" notification; the call works without it.
-            if (android.os.Build.VERSION.SDK_INT >= 33) android.Manifest.permission.POST_NOTIFICATIONS else null
+            if (android.os.Build.VERSION.SDK_INT >= 33) android.Manifest.permission.POST_NOTIFICATIONS else null,
+            // Bluetooth headsets (12+) and, on Android 17, direct calls over the local Wi-Fi. Both are
+            // "nearby devices": one prompt. The call works without them, over Telegram's servers.
+            if (android.os.Build.VERSION.SDK_INT >= 31) android.Manifest.permission.BLUETOOTH_CONNECT else null,
+            if (android.os.Build.VERSION.SDK_INT >= 37) "android.permission.ACCESS_LOCAL_NETWORK" else null
         )
             .filter { androidx.core.content.ContextCompat.checkSelfPermission(context, it) != android.content.pm.PackageManager.PERMISSION_GRANTED }
         if (needed.isEmpty()) action() else {
