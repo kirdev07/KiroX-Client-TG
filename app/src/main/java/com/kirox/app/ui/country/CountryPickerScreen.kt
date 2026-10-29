@@ -32,11 +32,13 @@ import java.util.Locale
 @Composable
 fun CountryPickerScreen(state: PhoneEntryState, onBack: () -> Unit) {
     var query by remember { mutableStateOf("") }
-    val normalized = query.trim().lowercase(Locale.getDefault()).removePrefix("+")
-    val filtered by remember(query) {
+    // Locale from the configuration, so a language change recomposes.
+    val locale = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]
+    val normalized = query.trim().lowercase(locale).removePrefix("+")
+    val filtered by remember(query, locale) {
         derivedStateOf {
             if (normalized.isBlank()) state.resolver.countries else state.resolver.countries.filter { country ->
-                country.name.lowercase(Locale.getDefault()).contains(normalized) ||
+                country.name.lowercase(locale).contains(normalized) ||
                     country.regionCode.lowercase(Locale.ROOT).contains(normalized) ||
                     country.callingCode.toString().startsWith(normalized)
             }
@@ -134,7 +136,7 @@ private fun AutoDetectRow(detected: Country?, onClick: () -> Unit) {
 
 @Composable
 private fun SectionTitle(text: String) {
-    Text(text.uppercase(Locale.getDefault()), color = KiroXSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp, modifier = Modifier.padding(start = 24.dp, top = 20.dp, bottom = 8.dp))
+    Text(text.uppercase(androidx.compose.ui.platform.LocalConfiguration.current.locales[0]), color = KiroXSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp, modifier = Modifier.padding(start = 24.dp, top = 20.dp, bottom = 8.dp))
 }
 
 @Composable

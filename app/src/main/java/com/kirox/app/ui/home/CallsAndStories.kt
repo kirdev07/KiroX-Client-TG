@@ -31,7 +31,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -273,7 +272,7 @@ internal fun StoryViewer(chat: TelegramStoryChat, actions: TelegramStoryActions,
         }
     ) {
         val current = story
-        val widthPx = with(LocalDensity.current) { LocalConfiguration.current.screenWidthDp.dp.roundToPx() }
+        val widthPx = with(LocalDensity.current) { com.kirox.app.ui.chat.windowWidthDp().coerceAtLeast(320).dp.roundToPx() }
         val bitmap = rememberTelegramBitmap(current?.image, widthPx, priority = 24)
         bitmap?.let { Image(it, contentDescription = "История", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()) }
         val video = current?.video
