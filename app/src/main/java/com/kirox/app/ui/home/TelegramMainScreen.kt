@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.kirox.app.ui.home
 
 import androidx.compose.animation.AnimatedContent
@@ -284,10 +286,10 @@ private fun ChatsTab(
             dismissButton = { TextButton(onClick = { confirmReadAll = false }) { Text("Отмена", color = Fusion.colors.textSecondary) } }
         )
     }
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
         ScreenTitle(connectionTitle(connection) ?: "Чаты") {
             TitleAction(KiroXIcon.ReadAll, "Отметить всё прочитанным") { confirmReadAll = true }
-            TitleAction(KiroXIcon.Compose, "Новое сообщение", onClick = onNewMessage)
             TitleAction(KiroXIcon.Search, "Поиск") { searching = true }
         }
         val postStory = rememberStoryPoster { onNotice(UiNotice(it)) }
@@ -325,9 +327,19 @@ private fun ChatsTab(
                         }
                     }
                     if (state.loading) item { Box(Modifier.fillMaxWidth().padding(16.dp), Alignment.Center) { CircularProgressIndicator(Modifier.size(22.dp), color = Fusion.colors.textSecondary, strokeWidth = 2.dp) } }
+                    // Room under the last chat so the button never covers it.
+                    item { Spacer(Modifier.height(88.dp)) }
                 }
             }
         }
+    }
+    // New message: Material 3 floating action button.
+    androidx.compose.material3.FloatingActionButton(
+        onClick = onNewMessage,
+        modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+        containerColor = Fusion.colors.accent,
+        contentColor = Fusion.colors.onAccent
+    ) { IconGlyph(KiroXIcon.Compose, "Новое сообщение", Modifier.size(24.dp), Fusion.colors.onAccent) }
     }
 }
 
@@ -634,17 +646,24 @@ private fun HeaderAction(icon: KiroXIcon, description: String, onClick: () -> Un
 
 @Composable
 private fun <T> SectionTabs(tabs: List<Pair<String, T>>, selected: T, onSelect: (T) -> Unit) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(horizontal = 6.dp), verticalAlignment = Alignment.Bottom) {
+    // Material 3 tabs, left-aligned like before, with the rounded primary indicator.
+    androidx.compose.material3.PrimaryScrollableTabRow(
+        selectedTabIndex = tabs.indexOfFirst { it.second == selected }.coerceAtLeast(0),
+        edgePadding = 6.dp,
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
+        contentColor = Fusion.colors.textPrimary,
+        divider = {}
+    ) {
         tabs.forEach { (label, value) ->
-            val active = value == selected
-            Column(Modifier.width(IntrinsicSize.Max).clip(RoundedCornerShape(8.dp)).clickable { onSelect(value) }.padding(horizontal = 12.dp), verticalArrangement = Arrangement.Bottom) {
-                Text(label, color = if (active) Fusion.colors.textPrimary else Fusion.colors.textTertiary, fontSize = 16.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1)
-                Spacer(Modifier.height(6.dp))
-                Box(Modifier.fillMaxWidth().height(2.dp).clip(RoundedCornerShape(2.dp)).background(if (active) Fusion.colors.textPrimary else Fusion.colors.background))
-            }
+            androidx.compose.material3.Tab(
+                selected = value == selected,
+                onClick = { onSelect(value) },
+                text = { Text(label, style = androidx.compose.material3.MaterialTheme.typography.titleMedium, maxLines = 1) },
+                selectedContentColor = Fusion.colors.textPrimary,
+                unselectedContentColor = Fusion.colors.textTertiary
+            )
         }
     }
-    Spacer(Modifier.height(4.dp))
 }
 
 @Composable

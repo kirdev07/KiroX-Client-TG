@@ -871,7 +871,7 @@ private fun VoiceRecordingBar(elapsedMs: Long, level: Float, paused: Boolean, on
                 modifier = Modifier.clip(RoundedCornerShape(16.dp)).clickable(onClickLabel = if (paused) "Продолжить запись" else "Пауза", onClick = onPause).padding(horizontal = 14.dp, vertical = 12.dp)
             )
             Text("Отмена", color = Fusion.colors.textSecondary, fontSize = 15.sp, modifier = Modifier.clip(RoundedCornerShape(16.dp)).clickable(onClick = onCancel).padding(horizontal = 14.dp, vertical = 12.dp))
-            Box(Modifier.size(44.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Fusion.colors.accent).clickable(onClick = onSend), contentAlignment = Alignment.Center) {
+            androidx.compose.material3.FilledIconButton(onClick = onSend, modifier = Modifier.size(44.dp)) {
                 com.kirox.app.ui.icons.KiroXIcon(com.kirox.app.ui.icons.KiroXIcon.Send, "Отправить голосовое", Modifier.size(22.dp), Fusion.colors.onAccent)
             }
         }

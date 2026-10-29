@@ -484,17 +484,7 @@ internal fun SmallCaption(text: String) {
 private fun <T> CompactSegment(title: String, options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
         Text(title, color = Fusion.colors.textPrimary, fontSize = 15.sp, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
-        Row(Modifier.fillMaxWidth().clip(CircleShape).background(Fusion.colors.surface1).padding(3.dp)) {
-            options.forEach { option ->
-                val active = option == selected
-                Text(
-                    label(option), color = if (active) Fusion.colors.textPrimary else Fusion.colors.textSecondary,
-                    fontSize = 13.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium, textAlign = TextAlign.Center, maxLines = 1,
-                    modifier = Modifier.weight(1f).clip(CircleShape).background(if (active) Fusion.colors.surface3 else Fusion.colors.surface1)
-                        .clickable { onSelect(option) }.padding(vertical = 7.dp)
-                )
-            }
-        }
+        com.kirox.app.ui.components.FusionSegmented(options, selected, label, onSelect)
     }
 }
 
@@ -514,17 +504,7 @@ private fun <T> SegmentRow(icon: KiroXIcon, title: String, options: List<T>, sel
             Text(title, color = Fusion.colors.textPrimary, fontSize = 16.sp)
         }
         Spacer(Modifier.height(10.dp))
-        Row(Modifier.fillMaxWidth().clip(CircleShape).background(Fusion.colors.surface1).padding(3.dp)) {
-            options.forEach { option ->
-                val active = option == selected
-                Text(
-                    label(option), color = if (active) Fusion.colors.textPrimary else Fusion.colors.textSecondary,
-                    fontSize = 14.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium, textAlign = TextAlign.Center, maxLines = 1,
-                    modifier = Modifier.weight(1f).clip(CircleShape).background(if (active) Fusion.colors.surface3 else Fusion.colors.surface1)
-                        .clickable { onSelect(option) }.padding(vertical = 8.dp)
-                )
-            }
-        }
+        com.kirox.app.ui.components.FusionSegmented(options, selected, label, onSelect)
     }
 }
 
@@ -737,9 +717,7 @@ internal fun NewMessageScreen(
                 }
                 val picking = mode == NewChatMode.GroupMembers
                 if (picking && members.isNotEmpty()) item {
-                    Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(24.dp)).background(Fusion.colors.accent).clickable { mode = NewChatMode.GroupTitle }, contentAlignment = Alignment.Center) {
-                        Text("Далее", color = Fusion.colors.onAccent, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                    }
+                    com.kirox.app.ui.components.FusionButton("Далее", onClick = { mode = NewChatMode.GroupTitle }, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 }
                 if (contacts.isEmpty()) item { Text("Контактов пока нет", color = Fusion.colors.textSecondary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp)) }
                 items(contacts, key = { it.id }) { contact ->
@@ -786,14 +764,10 @@ internal fun NewMessageScreen(
                 }
                 item {
                     val canCreate = title.isNotBlank() && !busy
-                    Box(
-                        Modifier.padding(16.dp).fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(26.dp))
-                            .background(if (canCreate) Fusion.colors.accent else Fusion.colors.surface2).clickable(enabled = canCreate) { create(group) },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (busy) androidx.compose.material3.CircularProgressIndicator(Modifier.size(22.dp), color = Fusion.colors.onAccent, strokeWidth = 2.dp)
-                        else Text(if (group) "Создать группу" else "Создать канал", color = if (canCreate) Fusion.colors.onAccent else Fusion.colors.textTertiary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    }
+                    com.kirox.app.ui.components.FusionButton(
+                        if (group) "Создать группу" else "Создать канал", onClick = { create(group) },
+                        modifier = Modifier.padding(16.dp), enabled = canCreate, busy = busy
+                    )
                 }
             }
         }
@@ -888,11 +862,10 @@ internal fun UpdatesScreen(updates: com.kirox.app.update.UpdateCenter, onBack: (
                 is com.kirox.app.update.UpdateState.Checking, is com.kirox.app.update.UpdateState.Downloading -> "Подождите…" to {}
                 else -> "Проверить обновления" to { updates.check() }
             }
-            Box(
-                Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(16.dp))
-                    .background(Fusion.colors.accent).clickable(enabled = s !is com.kirox.app.update.UpdateState.Checking && s !is com.kirox.app.update.UpdateState.Downloading, onClick = action),
-                contentAlignment = Alignment.Center
-            ) { Text(label, color = Fusion.colors.onAccent, fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
+            com.kirox.app.ui.components.FusionButton(
+                label, onClick = action, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                enabled = s !is com.kirox.app.update.UpdateState.Checking && s !is com.kirox.app.update.UpdateState.Downloading
+            )
             if (s is com.kirox.app.update.UpdateState.Downloading) androidx.compose.material3.LinearProgressIndicator(
                 progress = { s.progress }, modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(), color = Fusion.colors.accent, trackColor = Fusion.colors.surface2
             )
@@ -1099,23 +1072,18 @@ internal fun ProfileEditScreen(profile: TelegramUserProfile?, onBack: () -> Unit
         error?.let { message -> item { Text(message, color = Fusion.colors.danger, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) } }
         item {
             val canSave = first.isNotBlank() && !busy && (username.isEmpty() || username.length >= 5)
-            Box(
-                Modifier.padding(16.dp).fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(26.dp))
-                    .background(if (canSave) Fusion.colors.accent else Fusion.colors.surface2)
-                    .clickable(enabled = canSave) {
-                        busy = true; error = null
-                        scope.launch {
-                            runCatching { users.updateProfile(first.trim(), last.trim(), bio.trim(), username.trim(), base) }
-                                .onSuccess { onNotice("Профиль сохранён"); onBack() }
-                                .onFailure { error = (it as? com.kirox.app.telegram.TdException)?.let { e -> profileError(e.message.orEmpty()) } ?: "Не удалось сохранить профиль" }
-                            busy = false
-                        }
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                if (busy) androidx.compose.material3.CircularProgressIndicator(Modifier.size(22.dp), color = Fusion.colors.onAccent, strokeWidth = 2.dp)
-                else Text("Сохранить", color = if (canSave) Fusion.colors.onAccent else Fusion.colors.textTertiary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            }
+            com.kirox.app.ui.components.FusionButton(
+                "Сохранить", modifier = Modifier.padding(16.dp), enabled = canSave, busy = busy,
+                onClick = {
+                    busy = true; error = null
+                    scope.launch {
+                        runCatching { users.updateProfile(first.trim(), last.trim(), bio.trim(), username.trim(), base) }
+                            .onSuccess { onNotice("Профиль сохранён"); onBack() }
+                            .onFailure { error = (it as? com.kirox.app.telegram.TdException)?.let { e -> profileError(e.message.orEmpty()) } ?: "Не удалось сохранить профиль" }
+                        busy = false
+                    }
+                }
+            )
         }
     }
 }

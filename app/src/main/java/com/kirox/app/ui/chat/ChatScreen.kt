@@ -365,10 +365,10 @@ private fun PollView(poll: com.kirox.app.telegram.TelegramPoll, onVote: (List<In
                 }
             }
         }
-        if (poll.multipleAnswers && poll.canVote && picked.isNotEmpty()) Text(
-            "Голосовать", color = ChatWhite, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(top = 6.dp).clip(RoundedCornerShape(12.dp)).background(Fusion.colors.surface3).clickable { onVote(picked.sorted()); picked = emptySet() }.padding(horizontal = 14.dp, vertical = 7.dp)
-        )
+        if (poll.multipleAnswers && poll.canVote && picked.isNotEmpty()) androidx.compose.material3.FilledTonalButton(
+            onClick = { onVote(picked.sorted()); picked = emptySet() },
+            modifier = Modifier.padding(top = 6.dp)
+        ) { Text("Голосовать") }
         Spacer(Modifier.height(4.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(pollVotersLabel(poll.totalVoters), color = ChatSecondary, fontSize = 11.sp, modifier = Modifier.weight(1f))
