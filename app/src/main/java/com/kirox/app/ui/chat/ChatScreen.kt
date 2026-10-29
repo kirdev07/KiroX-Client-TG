@@ -64,8 +64,8 @@ private val ChatDivider: Color @Composable @ReadOnlyComposable get() = Fusion.co
 @Composable
 internal fun ChatHeader(peer: ChatPeerUi, onBack: () -> Unit, onProfile: () -> Unit, onOverflow: () -> Unit, onCall: (isVideo: Boolean) -> Unit = {}) {
     val narrow = windowWidthDp() < 360
-    // Glass: the header is a translucent panel over the artwork (approved PNG).
-    Surface(color = if (Fusion.colors.glass) Fusion.colors.background.copy(alpha = 0.55f) else Fusion.colors.background, tonalElevation = 0.dp, modifier = Modifier.statusBarsPadding()) {
+    // v2: the header is a translucent panel over the artwork (approved PNG); classic palettes stay solid.
+    Surface(color = when { Fusion.colors.glass -> Fusion.colors.background.copy(alpha = 0.55f); Fusion.colors.backdrop != null -> Fusion.colors.background.copy(alpha = 0.68f); else -> Fusion.colors.background }, tonalElevation = 0.dp, modifier = Modifier.statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             ChatIconButton(KiroXIcon.Back, "Назад", onBack)
             Row(Modifier.weight(1f).height(56.dp).clickable(onClick = onProfile).padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -543,7 +543,7 @@ internal fun windowWidthDp(): Int {
 private fun bubbleBrush(outgoing: Boolean, appearance: ChatAppearance): androidx.compose.ui.graphics.Brush {
     val base = Color(if (outgoing) appearance.outgoingColor else appearance.incomingColor)
     if (Fusion.colors.backdrop == null) return androidx.compose.ui.graphics.SolidColor(base)
-    return if (outgoing) androidx.compose.ui.graphics.Brush.linearGradient(listOf(androidx.compose.ui.graphics.lerp(base, Color.White, 0.16f), base))
+    return if (outgoing) androidx.compose.ui.graphics.Brush.linearGradient(listOf(androidx.compose.ui.graphics.lerp(base, Color.White, 0.26f), androidx.compose.ui.graphics.lerp(base, Color.Black, 0.08f)))
     else androidx.compose.ui.graphics.SolidColor(base.copy(alpha = minOf(base.alpha, 0.86f)))
 }
 

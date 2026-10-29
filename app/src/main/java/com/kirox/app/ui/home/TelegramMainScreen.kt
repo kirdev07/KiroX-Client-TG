@@ -429,7 +429,8 @@ private fun ChatRow(chat: TelegramChatItem, onLongClick: (() -> Unit)? = null, o
             }
         }
     }
-    HorizontalDivider(Modifier.padding(start = 82.dp), color = Fusion.colors.outline)
+    // v2 rows are separated by spacing only, as on the approved board.
+    if (Fusion.colors.backdrop == null) HorizontalDivider(Modifier.padding(start = 82.dp), color = Fusion.colors.outline)
 }
 
 @Composable
