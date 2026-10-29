@@ -193,12 +193,12 @@ fun TelegramChatScreen(
         pendingDraft.forumTopicId = history.forumTopicId
         pendingDraft.text = if (editing == null && draftLoaded) input.text else null
     }
-    // Another chat or the background: a voice note does not keep playing, an unsent recording is dropped.
+    // Another chat: the voice note of this one stops and the draft is saved.
     DisposableEffect(history.chatId) {
         onDispose { VoicePlayer.stop(); pendingDraft.save(actions) }
     }
+    // Leaving the screen keeps a voice note playing (media notification); a recording is dropped.
     androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) {
-        VoicePlayer.stop()
         if (recording) { recorder.stop(discard = true); recording = false; recordPaused = false }
         pendingDraft.save(actions)
     }

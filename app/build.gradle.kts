@@ -133,6 +133,8 @@ dependencies {
     // Video, GIF, video note and music playback (Apache-2.0).
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
+    // Background playback of voice notes and music with a media notification.
+    implementation(libs.androidx.media3.session)
     // Animated TGS stickers (Lottie, Apache-2.0).
     implementation(libs.lottie.compose)
     // Video note recording: CameraX capture, Media3 square crop (both Apache-2.0).

@@ -205,13 +205,15 @@ internal fun AudioMessage(media: TelegramMedia) {
     val state = rememberFileState(media.file)
     val playingPath by VoicePlayer.playingPath.collectAsState()
     var wantPlay by remember(media.file.id) { mutableStateOf(false) }
-    LaunchedEffect(state.path, wantPlay) { val path = state.path; if (wantPlay && path != null) { VoicePlayer.toggle(context, path); wantPlay = false } }
+    val title = media.title.ifBlank { "Аудио" }
+    val artist = media.performer.ifBlank { "KiroX" }
+    LaunchedEffect(state.path, wantPlay) { val path = state.path; if (wantPlay && path != null) { VoicePlayer.toggle(context, path, title, artist); wantPlay = false } }
     val playing = state.path != null && playingPath == state.path
     Row(
         Modifier.clip(RoundedCornerShape(12.dp)).clickable {
             val path = state.path
             when {
-                path != null -> VoicePlayer.toggle(context, path)
+                path != null -> VoicePlayer.toggle(context, path, title, artist)
                 state.downloading -> { files?.cancel(media.file); wantPlay = false }
                 else -> { files?.download(media.file); wantPlay = true }
             }

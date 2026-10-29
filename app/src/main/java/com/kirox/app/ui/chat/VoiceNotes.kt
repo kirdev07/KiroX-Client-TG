@@ -1,10 +1,6 @@
 package com.kirox.app.ui.chat
 
 import android.content.Context
-import android.media.AudioAttributes
-import android.media.AudioFocusRequest
-import android.media.AudioManager
-import android.media.MediaPlayer
 import android.media.MediaRecorder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -132,14 +128,15 @@ class VoiceRecorder(private val context: Context) {
 }
 
 /**
- * Plays one voice note at a time, on the main thread. Holds transient audio focus while playing, so
- * music pauses and resumes, and stops when another app takes focus (a call, a video).
+ * Plays one voice note or music file at a time (main thread). Media3 ExoPlayer handles audio focus
+ * (music pauses, a call pauses us) and headphones being unplugged; [PlaybackService] puts the player in a
+ * media session with a notification, so playback goes on when KiroX leaves the screen, on Android 10–17.
  * Every row observes [playingPath]: starting one note shows the previous one as stopped.
  */
 object VoicePlayer {
-    private var player: MediaPlayer? = null
-    private var audio: AudioManager? = null
-    private var focus: AudioFocusRequest? = null
+    private var player: androidx.media3.exoplayer.ExoPlayer? = null
+    private var appContext: Context? = null
+    private var currentPath: String? = null
 
     private val _playingPath = MutableStateFlow<String?>(null)
     val playingPath: StateFlow<String?> = _playingPath.asStateFlow()
@@ -149,66 +146,85 @@ object VoicePlayer {
     val speed: StateFlow<Float> = _speed.asStateFlow()
     private val speeds = listOf(1f, 1.5f, 2f)
 
+    /** The player for [PlaybackService]'s media session; null when nothing was played yet. */
+    internal val sessionPlayer: androidx.media3.common.Player? get() = player
+
     /** 0–1 position of the playing file; 0 when nothing plays. */
-    val progress: Float get() = player?.let { p -> runCatching { if (p.duration > 0) p.currentPosition.toFloat() / p.duration else 0f }.getOrDefault(0f) } ?: 0f
+    val progress: Float get() = player?.let { p -> if (p.duration > 0) p.currentPosition.toFloat() / p.duration else 0f } ?: 0f
 
     /** Milliseconds played of the current file. */
-    val positionMs: Int get() = player?.let { runCatching { it.currentPosition }.getOrDefault(0) } ?: 0
+    val positionMs: Int get() = player?.currentPosition?.toInt() ?: 0
 
     fun cycleSpeed() {
         _speed.value = speeds[(speeds.indexOf(_speed.value) + 1) % speeds.size]
-        player?.let { applySpeed(it) }
+        player?.setPlaybackSpeed(_speed.value)
     }
 
     /** Jumps to [fraction] of [path] if it is the file playing now. */
     fun seek(path: String, fraction: Float) {
         val p = player ?: return
-        if (_playingPath.value != path) return
-        runCatching { p.seekTo((p.duration * fraction.coerceIn(0f, 1f)).toInt()) }
+        if (currentPath != path || p.duration <= 0) return
+        p.seekTo((p.duration * fraction.coerceIn(0f, 1f)).toLong())
     }
 
-    private fun applySpeed(p: MediaPlayer) {
-        runCatching { p.playbackParams = p.playbackParams.setSpeed(_speed.value) }
-    }
-
-    private val attributes = AudioAttributes.Builder()
-        .setUsage(AudioAttributes.USAGE_MEDIA)
-        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-        .build()
-
-    fun toggle(context: Context, path: String) {
-        if (_playingPath.value == path) { stop(); return }
-        stop()
-        val manager = context.applicationContext.getSystemService(AudioManager::class.java)
-        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
-            .setAudioAttributes(attributes)
-            .setOnAudioFocusChangeListener { change -> if (change < 0) stop() }
+    private fun player(context: Context): androidx.media3.exoplayer.ExoPlayer {
+        player?.let { return it }
+        val app = context.applicationContext
+        appContext = app
+        val attributes = androidx.media3.common.AudioAttributes.Builder()
+            .setUsage(androidx.media3.common.C.USAGE_MEDIA)
+            .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_SPEECH)
             .build()
-        if (manager?.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_FAILED) return
-        audio = manager
-        focus = request
-        val created = MediaPlayer()
-        player = runCatching {
-            created.apply {
-                setAudioAttributes(attributes)
-                setDataSource(path)
-                setOnCompletionListener { stop() }
-                setOnErrorListener { _, _, _ -> stop(); true }
-                prepare()
-                start()
-                applySpeed(this)
+        return androidx.media3.exoplayer.ExoPlayer.Builder(app)
+            .setAudioAttributes(attributes, /* handleAudioFocus = */ true)
+            .setHandleAudioBecomingNoisy(true)
+            .build().also { created ->
+                created.addListener(object : androidx.media3.common.Player.Listener {
+                    override fun onIsPlayingChanged(isPlaying: Boolean) = publish()
+                    override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) = publish()
+                    override fun onPlaybackStateChanged(state: Int) {
+                        if (state == androidx.media3.common.Player.STATE_ENDED) stop() else publish()
+                    }
+                    override fun onPlayerError(error: androidx.media3.common.PlaybackException) = stop()
+                })
+                player = created
             }
-        }.getOrElse { created.release(); null }
-        if (player == null) stop() else _playingPath.value = path
+    }
+
+    /** Shown as playing while it plays or is about to (buffering); paused (focus lost, notification) shows as stopped. */
+    private fun publish() {
+        val p = player
+        _playingPath.value = if (p != null && p.playWhenReady && p.playbackState != androidx.media3.common.Player.STATE_IDLE) currentPath else null
+    }
+
+    /**
+     * Plays [path], or pauses it when it is the one playing; a paused file resumes where it was.
+     * [title] and [artist] are shown in the media notification.
+     */
+    fun toggle(context: Context, path: String, title: String = "Голосовое сообщение", artist: String = "KiroX") {
+        val p = player(context)
+        if (currentPath == path) {
+            if (p.playWhenReady) p.pause() else { if (p.playbackState == androidx.media3.common.Player.STATE_ENDED) p.seekTo(0); p.play() }
+            return
+        }
+        currentPath = path
+        val item = androidx.media3.common.MediaItem.Builder()
+            .setUri(android.net.Uri.fromFile(java.io.File(path)))
+            .setMediaMetadata(androidx.media3.common.MediaMetadata.Builder().setTitle(title).setArtist(artist).build())
+            .build()
+        p.setMediaItem(item)
+        p.setPlaybackSpeed(_speed.value)
+        p.prepare()
+        p.play()
+        // Started while KiroX is on screen, so the media service may go to the foreground and keep playing.
+        PlaybackService.start(context)
+        publish()
     }
 
     fun stop() {
-        player?.runCatching { stop() }
-        player?.release()
-        player = null
-        focus?.let { request -> audio?.abandonAudioFocusRequest(request) }
-        focus = null
-        audio = null
+        player?.let { it.stop(); it.clearMediaItems() }
+        currentPath = null
         _playingPath.value = null
+        appContext?.let(PlaybackService::stop)
     }
 }
