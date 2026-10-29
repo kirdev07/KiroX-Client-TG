@@ -500,7 +500,6 @@ internal fun filterContacts(contacts: List<TelegramContact>, query: String): Lis
 
 @Composable
 private fun ContactsList(contacts: List<TelegramContact>, loading: Boolean, focusSearch: Int, onOpen: (Long) -> Unit, onCall: (Long, Boolean) -> Unit) {
-    val context = androidx.compose.ui.platform.LocalContext.current
     var query by rememberSaveable { mutableStateOf("") }
     val shown = remember(contacts, query) { filterContacts(contacts, query) }
     Column(Modifier.fillMaxSize()) {
@@ -522,16 +521,15 @@ private fun ContactsList(contacts: List<TelegramContact>, loading: Boolean, focu
                 }
             }
         }
-        Text(
-            "Пригласить друзей", color = Fusion.colors.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().clickable {
-                val share = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                    type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, "Давай общаться в Telegram! Я пользуюсь kiroX.")
-                }
-                context.startActivity(android.content.Intent.createChooser(share, "Пригласить друзей"))
-            }.heightIn(min = 52.dp).wrapContentHeight()
-        )
     }
+}
+
+/** Share sheet with an invitation to Telegram. */
+private fun inviteFriends(context: android.content.Context) {
+    val share = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, "Давай общаться в Telegram! Я пользуюсь kiroX.")
+    }
+    runCatching { context.startActivity(android.content.Intent.createChooser(share, "Пригласить друзей")) }
 }
 
 @Composable
@@ -617,10 +615,15 @@ private fun AddContactDialog(
         containerColor = Fusion.colors.surface1,
         title = { Text("Новый контакт", color = Fusion.colors.textPrimary) },
         text = {
+            val context = androidx.compose.ui.platform.LocalContext.current
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 ContactField(first, "Имя") { first = it }
                 ContactField(last, "Фамилия (необязательно)") { last = it }
                 ContactField(phone, "Номер телефона", androidx.compose.ui.text.input.KeyboardType.Phone) { phone = it }
+                // Someone not in Telegram yet: send them an invitation instead.
+                androidx.compose.material3.TextButton(onClick = { inviteFriends(context) }, enabled = !busy) {
+                    Text("Пригласить друзей", color = Fusion.colors.textPrimary)
+                }
             }
         },
         confirmButton = {
