@@ -43,7 +43,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -316,7 +315,8 @@ private fun LottieSticker(path: String, modifier: Modifier) {
 @Composable
 internal fun FullscreenPhoto(file: TelegramFileRef, onClose: () -> Unit) {
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        val width = LocalConfiguration.current.screenWidthDp
+        // The dialog window may report 0 before its first layout.
+        val width = windowWidthDp().coerceAtLeast(320)
         val bitmap = rememberTelegramBitmap(file, with(LocalDensity.current) { (width * 2).dp.roundToPx() }, priority = 32)
         var scale by remember { mutableFloatStateOf(1f) }
         var offset by remember { mutableStateOf(Offset.Zero) }

@@ -1,5 +1,6 @@
 package com.kirox.app.notify
 
+import androidx.core.content.edit
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -137,7 +138,7 @@ class AccountPeek(context: Context) {
         /** Random per-install secret; MainActivity is exported, so the session extra alone is not trusted. */
         fun secret(context: Context): String {
             val prefs = context.getSharedPreferences("kirox_peek", Context.MODE_PRIVATE)
-            return prefs.getString("secret", null) ?: java.util.UUID.randomUUID().toString().also { prefs.edit().putString("secret", it).apply() }
+            return prefs.getString("secret", null) ?: java.util.UUID.randomUUID().toString().also { prefs.edit { putString("secret", it) } }
         }
         private const val GROUPS = 10
         private const val GROUP_SIZE = 5

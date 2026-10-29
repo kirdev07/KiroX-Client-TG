@@ -1,5 +1,6 @@
 package com.kirox.app.ui.home
 
+import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import androidx.activity.compose.BackHandler
@@ -885,7 +886,7 @@ internal fun UpdatesScreen(updates: com.kirox.app.update.UpdateCenter, onBack: (
             Text(
                 "Все версии на GitHub", color = Fusion.colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp).clickable {
-                    context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(com.kirox.app.update.UpdateCenter.RELEASES_URL)))
+                    context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, com.kirox.app.update.UpdateCenter.RELEASES_URL.toUri()))
                 }
             )
         }

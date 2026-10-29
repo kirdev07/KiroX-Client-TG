@@ -1,5 +1,6 @@
 package com.kirox.app.push
 
+import androidx.core.content.edit
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -47,20 +48,20 @@ class KiroxPush(private val context: Context, private val client: TelegramClient
         client.send(TdApi.RegisterDevice(TdApi.DeviceTokenFirebaseCloudMessaging(token, false), LongArray(0))) { result ->
             log("FCM register: $result")
             if (result is TdApi.Error && result.message.contains("APIKEY", ignoreCase = true)) {
-                prefs.edit().putInt(KEY_FCM_REJECTED, com.kirox.app.BuildConfig.VERSION_CODE).apply()
+                prefs.edit { putInt(KEY_FCM_REJECTED, com.kirox.app.BuildConfig.VERSION_CODE) }
             }
         }
     }
 
     fun onUnifiedEndpoint(endpoint: String) {
         if (prefs.getString(KEY_ENDPOINT, null) == endpoint) return
-        prefs.edit().putString(KEY_ENDPOINT, endpoint).apply()
+        prefs.edit { putString(KEY_ENDPOINT, endpoint) }
         registerWebPush(endpoint)
     }
 
     /** The distributor dropped us (uninstalled, user action): forget the endpoint so it is not re-registered. */
     fun onUnifiedUnregistered() {
-        prefs.edit().remove(KEY_ENDPOINT).apply()
+        prefs.edit { remove(KEY_ENDPOINT) }
     }
 
     /**
@@ -85,7 +86,7 @@ class KiroxPush(private val context: Context, private val client: TelegramClient
         val auth = ByteArray(16).also { java.security.SecureRandom().nextBytes(it) }
         val flags = android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING or android.util.Base64.NO_WRAP
         val keys = android.util.Base64.encodeToString(uncompressed, flags) to android.util.Base64.encodeToString(auth, flags)
-        prefs.edit().putString(KEY_WEBPUSH_KEY, keys.first).putString(KEY_WEBPUSH_AUTH, keys.second).apply()
+        prefs.edit { putString(KEY_WEBPUSH_KEY, keys.first).putString(KEY_WEBPUSH_AUTH, keys.second) }
         return keys
     }
 
@@ -104,7 +105,7 @@ class KiroxPush(private val context: Context, private val client: TelegramClient
         client.post(SYNC_WINDOW_MS) { client.pauseIfIdle(); done() }
     }
 
-    fun unifiedToken(): String = prefs.getString(KEY_TOKEN, null) ?: UUID.randomUUID().toString().also { prefs.edit().putString(KEY_TOKEN, it).apply() }
+    fun unifiedToken(): String = prefs.getString(KEY_TOKEN, null) ?: UUID.randomUUID().toString().also { prefs.edit { putString(KEY_TOKEN, it) } }
 
     private fun log(message: String) { if (com.kirox.app.BuildConfig.DEBUG) android.util.Log.d("KiroxPush", message) }
 

@@ -1,7 +1,7 @@
 package com.kirox.app.ui.home
 
+import androidx.core.net.toUri
 import android.content.Intent
-import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
@@ -125,7 +125,7 @@ internal fun NotificationSettingsScreen(onBack: () -> Unit, onNotice: (String) -
         item {
             LinkRow("Работа в фоне", "Чтобы уведомления и звонки приходили, когда KiroX свёрнут") {
                 runCatching {
-                    context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:${context.packageName}".toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 }
             }
         }
@@ -295,7 +295,7 @@ internal fun PremiumScreen(profile: TelegramUserProfile?, onBack: () -> Unit) {
         }
         item {
             LinkRow("Открыть Telegram Premium", "telegram.org/premium") {
-                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://telegram.org/faq_premium")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                context.startActivity(Intent(Intent.ACTION_VIEW, "https://telegram.org/faq_premium".toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
         }
     }
@@ -316,12 +316,14 @@ internal fun AdvancedScreen(onBack: () -> Unit, onLogOut: () -> Unit, onNotice: 
         item { LinkRow("KiroX ${BuildConfig.VERSION_NAME}", "Независимый клиент Telegram на TDLib") {} }
         item {
             LinkRow("Исходный код и лицензии", "github.com/kirdev07/KiroX-Client-TG") {
-                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/kirdev07/KiroX-Client-TG")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                context.startActivity(Intent(Intent.ACTION_VIEW, "https://github.com/kirdev07/KiroX-Client-TG".toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
         }
         item {
             LinkRow("Язык", "Русский · системные настройки языка") {
-                runCatching { context.startActivity(Intent(Settings.ACTION_APP_LOCALE_SETTINGS, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                // Per-app language settings exist from Android 13.
+                if (android.os.Build.VERSION.SDK_INT < 33) onNotice("Пока доступен только русский язык")
+                else runCatching { context.startActivity(Intent(Settings.ACTION_APP_LOCALE_SETTINGS, "package:${context.packageName}".toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                     .onFailure { onNotice("Пока доступен только русский язык") }
             }
         }

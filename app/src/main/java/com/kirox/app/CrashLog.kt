@@ -1,5 +1,6 @@
 package com.kirox.app
 
+import androidx.core.content.edit
 import android.app.ActivityManager
 import android.app.ApplicationExitInfo
 import android.content.Context
@@ -40,12 +41,16 @@ object CrashLog {
     /** Native crashes, ANRs and low-memory kills since the last start, as Android reports them. */
     private fun recordExitReasons(context: Context) {
         if (Build.VERSION.SDK_INT < 30) return
+        val reported = setOf(
+            ApplicationExitInfo.REASON_CRASH_NATIVE, ApplicationExitInfo.REASON_ANR,
+            ApplicationExitInfo.REASON_LOW_MEMORY, ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE
+        )
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val last = prefs.getLong(KEY_LAST_EXIT, 0)
         val reasons = context.getSystemService(ActivityManager::class.java)
             ?.getHistoricalProcessExitReasons(context.packageName, 0, 10).orEmpty()
             .filter { it.timestamp > last }
-        reasons.filter { it.reason in REPORTED }.forEach { exit ->
+        reasons.filter { it.reason in reported }.forEach { exit ->
             val title = when (exit.reason) {
                 ApplicationExitInfo.REASON_CRASH_NATIVE -> "Падение в нативном коде"
                 ApplicationExitInfo.REASON_ANR -> "Приложение не отвечало (ANR)"
@@ -59,13 +64,8 @@ object CrashLog {
             }.getOrNull() else null
             write(context, title, listOfNotNull("Описание: ${exit.description.orEmpty()}", "Время: ${format(exit.timestamp)}", trace).joinToString("\n"), exit.timestamp)
         }
-        reasons.maxOfOrNull { it.timestamp }?.let { prefs.edit().putLong(KEY_LAST_EXIT, it).apply() }
+        reasons.maxOfOrNull { it.timestamp }?.let { prefs.edit { putLong(KEY_LAST_EXIT, it) } }
     }
-
-    private val REPORTED = setOf(
-        ApplicationExitInfo.REASON_CRASH_NATIVE, ApplicationExitInfo.REASON_ANR,
-        ApplicationExitInfo.REASON_LOW_MEMORY, ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE
-    )
 
     private fun dir(context: Context) = File(context.filesDir, "crashes").apply { mkdirs() }
 

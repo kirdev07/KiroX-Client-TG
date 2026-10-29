@@ -1,5 +1,6 @@
 package com.kirox.app.phone
 
+import androidx.core.content.edit
 import android.content.Context
 import android.telephony.TelephonyManager
 import com.google.i18n.phonenumbers.PhoneNumberUtil
@@ -32,10 +33,10 @@ class CountryResolver(private val context: Context) {
 
     fun save(country: Country) {
         val recent = listOf(country.regionCode) + recentCountries().map { it.regionCode }
-        preferences.edit()
-            .putString(KEY_LAST_COUNTRY, country.regionCode)
-            .putString(KEY_RECENT_COUNTRIES, recent.distinct().take(5).joinToString(","))
-            .apply()
+        preferences.edit {
+            putString(KEY_LAST_COUNTRY, country.regionCode)
+            putString(KEY_RECENT_COUNTRIES, recent.distinct().take(5).joinToString(","))
+        }
     }
 
     fun recentCountries(): List<Country> = preferences.getString(KEY_RECENT_COUNTRIES, "")

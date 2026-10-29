@@ -1,5 +1,6 @@
 package com.kirox.app.notify
 
+import androidx.core.content.edit
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -77,7 +78,7 @@ class KeepConnectedService : Service() {
         fun isEnabled(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY, false)
 
         fun setEnabled(context: Context, enabled: Boolean) {
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY, enabled).apply()
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit { putBoolean(KEY, enabled) }
             if (enabled) start(context) else context.stopService(Intent(context, KeepConnectedService::class.java))
         }
 

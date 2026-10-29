@@ -94,7 +94,8 @@ private object AvatarCache {
 
     fun peek(path: String?, sizePx: Int): ImageBitmap? = path?.let { cache.get("$it@$sizePx") }
 
-    fun load(path: String, sizePx: Int): ImageBitmap? = runCatching {
+    fun load(path: String, requestedPx: Int): ImageBitmap? = runCatching {
+        val sizePx = requestedPx.coerceAtLeast(16)
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(path, bounds)
         var sample = 1
@@ -102,5 +103,5 @@ private object AvatarCache {
         // Very long or tall pictures: the long side is limited too, so one image cannot take tens of MB.
         while (maxOf(bounds.outWidth, bounds.outHeight) / sample > sizePx * 4) sample *= 2
         BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()
-    }.getOrNull()?.also { cache.put("$path@$sizePx", it) }
+    }.getOrNull()?.also { cache.put("$path@$requestedPx", it) }
 }

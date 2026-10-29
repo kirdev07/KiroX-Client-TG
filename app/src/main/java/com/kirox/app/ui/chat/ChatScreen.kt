@@ -33,7 +33,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -58,7 +57,7 @@ private val ChatDivider: Color @Composable @ReadOnlyComposable get() = Fusion.co
 
 @Composable
 internal fun ChatHeader(peer: ChatPeerUi, onBack: () -> Unit, onProfile: () -> Unit, onOverflow: () -> Unit, onCall: (isVideo: Boolean) -> Unit = {}) {
-    val narrow = LocalConfiguration.current.screenWidthDp < 360
+    val narrow = windowWidthDp() < 360
     Surface(color = Fusion.colors.background, tonalElevation = 0.dp, modifier = Modifier.statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             ChatIconButton(KiroXIcon.Back, "Назад", onBack)
@@ -108,7 +107,7 @@ internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAp
         horizontalArrangement = if (outgoing) Arrangement.End else Arrangement.Start
     ) {
         Column(
-            Modifier.widthIn(max = LocalConfiguration.current.screenWidthDp.dp * .84f)
+            Modifier.widthIn(max = windowWidthDp().coerceAtLeast(320).dp * .84f)
                 .clip(RoundedCornerShape(appearance.bubbleRadiusDp.dp))
                 .background(Color(if (outgoing) appearance.outgoingColor else appearance.incomingColor))
                 .combinedClickable(onClick = { onClick?.invoke() }, onLongClick = onLongClick)
@@ -431,3 +430,10 @@ internal val DEFAULT_REACTIONS = listOf("❤", "👍", "🔥", "😁", "👏")
 
 @Preview(name = "Outgoing long message", widthDp = 480, fontScale = 1.5f, backgroundColor = 0xFF000000, showBackground = true)
 @Composable private fun OutgoingMessagePreview() { MessageRow(MessageUi(2, "Вы", MessageDirection.Outgoing, text = "Длинное сообщение проверяет переносы, системный масштаб текста и положение времени.", time = "12:41"), false, ChatAppearance(), onLongClick = {}, onReply = {}) }
+
+/** Width of the app window in dp (split screen and freeform included). */
+@Composable
+internal fun windowWidthDp(): Int {
+    val px = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize.width
+    return with(androidx.compose.ui.platform.LocalDensity.current) { px.toDp().value.toInt() }
+}
