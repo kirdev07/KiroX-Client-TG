@@ -212,9 +212,9 @@ class TelegramGroupCallRepository(private val client: TelegramClient, private va
         }
         // Receive at most MAX_VIDEOS cameras: each stream costs bandwidth and a decoder.
         val video = participants.values.asSequence()
-            .filter { !it.isCurrentUser && it.videoInfo != null && !it.videoInfo.isPaused }
+            .filter { !it.isCurrentUser }
+            .mapNotNull { p -> p.videoInfo?.takeIf { !it.isPaused }?.let { info -> NativeGroupCall.VideoChannel(p.audioSourceId, info.endpointId, encodeSourceGroups(info.sourceGroups)) } }
             .take(MAX_VIDEOS)
-            .map { NativeGroupCall.VideoChannel(it.audioSourceId, it.videoInfo.endpointId, encodeSourceGroups(it.videoInfo.sourceGroups)) }
             .toList()
         if (video != requestedVideo) {
             requestedVideo = video
