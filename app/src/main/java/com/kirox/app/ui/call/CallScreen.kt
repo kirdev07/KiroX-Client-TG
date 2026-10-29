@@ -321,10 +321,17 @@ private fun ToggleButton(icon: KiroXIcon, description: String, on: Boolean, onCl
 
 @Composable
 private fun RoundButton(icon: KiroXIcon, description: String, background: Color, tint: Color, size: Dp, crossed: Boolean = false, onClick: () -> Unit) {
-    Box(Modifier.size(size).clip(CircleShape).background(background).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
-        IconGlyph(icon, description, Modifier.size(size * 0.42f), tint)
-        if (crossed) Canvas(Modifier.size(size * 0.5f)) {
-            drawLine(tint, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(this.size.width, this.size.height), 2.dp.toPx())
+    // Material 3 filled icon button in the call screen's own colours.
+    androidx.compose.material3.FilledIconButton(
+        onClick = onClick,
+        modifier = Modifier.size(size),
+        colors = androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(containerColor = background, contentColor = tint)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            IconGlyph(icon, description, Modifier.size(size * 0.42f), tint)
+            if (crossed) Canvas(Modifier.size(size * 0.5f)) {
+                drawLine(tint, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(this.size.width, this.size.height), 2.dp.toPx())
+            }
         }
     }
 }

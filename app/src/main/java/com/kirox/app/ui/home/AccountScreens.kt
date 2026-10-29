@@ -1130,18 +1130,14 @@ private fun AccountsSheet(onDismiss: () -> Unit) {
         Text("Аккаунты", color = Fusion.colors.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
         accounts.forEach { account ->
             val current = account.session == active
-            Row(
-                Modifier.fillMaxWidth().clickable { onDismiss(); if (!current) client.switchTo(account.session) }.heightIn(min = 60.dp).padding(horizontal = 20.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TelegramAvatar(account.title.ifBlank { "?" }, null, 40.dp)
-                Spacer(Modifier.width(14.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(account.title.ifBlank { "Вход не завершён" }, color = Fusion.colors.textPrimary, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (account.phone.isNotBlank()) Text("+" + account.phone.trimStart('+'), color = Fusion.colors.textSecondary, fontSize = 13.sp)
-                }
-                if (current) IconGlyph(KiroXIcon.Check, null, Modifier.size(22.dp), Fusion.colors.accent)
-            }
+            androidx.compose.material3.ListItem(
+                headlineContent = { Text(account.title.ifBlank { "Вход не завершён" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                supportingContent = if (account.phone.isNotBlank()) ({ Text("+" + account.phone.trimStart('+')) }) else null,
+                leadingContent = { TelegramAvatar(account.title.ifBlank { "?" }, null, 40.dp) },
+                trailingContent = if (current) ({ IconGlyph(KiroXIcon.Check, "Выбран", Modifier.size(22.dp), Fusion.colors.accent) }) else null,
+                colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Fusion.colors.surface1, headlineColor = Fusion.colors.textPrimary, supportingColor = Fusion.colors.textSecondary),
+                modifier = Modifier.clickable { onDismiss(); if (!current) client.switchTo(account.session) }
+            )
         }
         if (accounts.size < MAX_ACCOUNTS) TileRow(KiroXIcon.Add, "Добавить аккаунт") { onDismiss(); client.addAccount() }
         Text(
