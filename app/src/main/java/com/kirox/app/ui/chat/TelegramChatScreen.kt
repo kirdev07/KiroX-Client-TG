@@ -353,8 +353,11 @@ fun TelegramChatScreen(
         canVideoCall = onCall != null && history.peerKind == TelegramPeerKind.User && !history.isSecret
     )
 
+    // The wallpaper spans the whole screen, so a translucent Glass header and the floating composer sit over it.
+    Box(Modifier.fillMaxSize()) {
+    com.kirox.app.ui.components.ChatWallpaperLayer(style.wallpaper, Modifier.matchParentSize())
     Scaffold(
-        containerColor = Fusion.colors.background,
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         contentWindowInsets = WindowInsets.statusBars,
         topBar = {
             if (selectedIds.isNotEmpty()) SelectionBar(
@@ -432,7 +435,6 @@ fun TelegramChatScreen(
         }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            com.kirox.app.ui.components.ChatWallpaperLayer(style.wallpaper, Modifier.matchParentSize())
             val results = searchResults
             if (history.isForum) ForumTopicsList(history.chatId, actions, onOpen = { topic -> onOpenTopic?.invoke(topic) })
             else if (searching && results != null) SearchResults(
@@ -516,6 +518,7 @@ fun TelegramChatScreen(
                 LaunchedEffect(message) { kotlinx.coroutines.delay(2200); notice = null }
             }
         }
+    }
     }
 
     if (attachments) AttachmentSheet(

@@ -71,15 +71,16 @@ private fun DrawScope.drawMountains(scrim: Boolean = true) {
     val h = size.height
     val horizon = h * 0.46f
     // Evening sky: deep blue down to a warm glow at the horizon.
-    drawRect(Brush.verticalGradient(0f to Color(0xFF1A2A55), 0.5f * horizon / h to Color(0xFF4F5C9A), 0.85f * horizon / h to Color(0xFFB07A93), horizon / h to Color(0xFFE6A07C), 1f to Color(0xFF0A1428)))
+    // Glow sits at the height of the ridge tops, so it shows between the peaks.
+    drawRect(Brush.verticalGradient(0f to Color(0xFF16244C), 0.12f to Color(0xFF3A4884), 0.22f to Color(0xFF9A6F98), 0.3f to Color(0xFFE09A80), horizon / h to Color(0xFFB98A8E), 1f to Color(0xFF0A1428)))
     fun ridge(points: List<Pair<Float, Float>>, base: Float): Path = Path().apply {
         moveTo(0f, base)
         points.forEach { (x, y) -> lineTo(x * w, y * h) }
         lineTo(w, base); close()
     }
-    val far = listOf(0f to 0.36f, 0.12f to 0.30f, 0.24f to 0.34f, 0.38f to 0.24f, 0.5f to 0.31f, 0.63f to 0.20f, 0.76f to 0.29f, 0.9f to 0.25f, 1f to 0.31f)
-    val near = listOf(0f to 0.42f, 0.1f to 0.37f, 0.22f to 0.43f, 0.35f to 0.33f, 0.47f to 0.41f, 0.6f to 0.30f, 0.72f to 0.40f, 0.86f to 0.35f, 1f to 0.42f)
-    drawPath(ridge(far, horizon), Brush.verticalGradient(listOf(Color(0xFF7C86B8), Color(0xFF3A4576)), startY = 0.2f * h, endY = horizon))
+    val far = listOf(0f to 0.38f, 0.12f to 0.33f, 0.24f to 0.36f, 0.4f to 0.25f, 0.52f to 0.18f, 0.64f to 0.27f, 0.78f to 0.31f, 0.9f to 0.28f, 1f to 0.33f)
+    val near = listOf(0f to 0.43f, 0.1f to 0.39f, 0.22f to 0.44f, 0.34f to 0.37f, 0.47f to 0.42f, 0.6f to 0.35f, 0.72f to 0.41f, 0.86f to 0.38f, 1f to 0.43f)
+    drawPath(ridge(far, horizon), Brush.verticalGradient(listOf(Color(0xFF5A5F8E), Color(0xFF2C3563)), startY = 0.18f * h, endY = horizon))
     // Snow on the far peaks: small light caps under each summit.
     far.zipWithNext().zipWithNext().forEach { (a, b) ->
         val peak = a.second

@@ -88,7 +88,7 @@ internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Uni
         "Данные и память" -> onOpenSection("Данные и память")
         "Оформление" -> onOpenCustomization()
         "Язык", "KiroX Настройки" -> onOpenSection("Дополнительно")
-        "Помощь" -> runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://telegram.org/faq"))) }
+        "Помощь" -> runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, androidx.core.net.toUri("https://telegram.org/faq"))) }
             .getOrElse { onNotice("Не удалось открыть telegram.org/faq") }.let { }
         else -> onOpenUpdates()
     }
