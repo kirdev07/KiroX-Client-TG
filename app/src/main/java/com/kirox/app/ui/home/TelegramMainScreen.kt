@@ -113,9 +113,11 @@ fun TelegramMainScreen(
     weakDevice: Boolean,
     onLogOut: () -> Unit,
     onStartCall: (userId: Long, isVideo: Boolean) -> Unit = { _, _ -> },
-    onAddContact: suspend (phone: String, firstName: String, lastName: String) -> Long? = { _, _, _ -> null }
+    onAddContact: suspend (phone: String, firstName: String, lastName: String) -> Long? = { _, _, _ -> null },
+    /** Tab shown first: 0 contacts, 1 chats, 2 settings, 3 profile (screenshots open other tabs). */
+    initialTab: Int = 1
 ) = androidx.compose.runtime.CompositionLocalProvider(com.kirox.app.ui.components.LocalSeasonalEffects provides seasonal) {
-    var tab by rememberSaveable { mutableStateOf(MainTab.Chats) }
+    var tab by rememberSaveable { mutableStateOf(MainTab.entries.getOrElse(initialTab) { MainTab.Chats }) }
     var sub by rememberSaveable { mutableStateOf(SubScreen.None) }
     var notice by remember { mutableStateOf<UiNotice?>(null) }
     var viewingStoriesOf by rememberSaveable { mutableStateOf<Long?>(null) }

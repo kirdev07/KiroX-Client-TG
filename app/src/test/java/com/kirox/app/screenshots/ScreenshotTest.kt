@@ -11,9 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -102,7 +100,7 @@ class ScreenshotTest {
     }
 
     @Composable
-    private fun Main() = TelegramMainScreen(
+    private fun Main(tab: Int = 1) = TelegramMainScreen(
         lists = TelegramChatLists(
             main = TelegramChatListState(chats, complete = true),
             archive = TelegramChatListState(complete = true),
@@ -117,7 +115,8 @@ class ScreenshotTest {
         bubbleShape = BubbleShape.entries.first(), onBubbleShape = {}, motion = MotionLevel.entries.first(), onMotion = {},
         chatTextSize = ChatTextSize.entries.first(), onChatTextSize = {}, chatWallpaper = ChatWallpaper.entries.first(), onChatWallpaper = {},
         chatDensity = ChatDensity.entries.first(), onChatDensity = {}, effectScene = EffectScene.Main, onEffectScene = {},
-        effectsQuality = EffectsQuality.entries.first(), onEffectsQuality = {}, weakDevice = false, onLogOut = {}
+        effectsQuality = EffectsQuality.entries.first(), onEffectsQuality = {}, weakDevice = false, onLogOut = {},
+        initialTab = tab
     )
 
     /** Draws [content] for a moment (animations are stepped, not run to the end) and saves it. */
@@ -136,11 +135,11 @@ class ScreenshotTest {
 
     @Test fun chats() = shot("01_chats") { Main() }
 
-    @Test fun settings() = shot("02_settings", before = { rule.onNodeWithContentDescription("Настройки").performClick() }) { Main() }
+    @Test fun settings() = shot("02_settings") { Main(tab = 2) }
 
-    @Test fun profile() = shot("03_profile", before = { rule.onNodeWithContentDescription("Профиль").performClick() }) { Main() }
+    @Test fun profile() = shot("03_profile") { Main(tab = 3) }
 
-    @Test fun contacts() = shot("04_contacts", before = { rule.onNodeWithContentDescription("Контакты").performClick() }) { Main() }
+    @Test fun contacts() = shot("04_contacts") { Main(tab = 0) }
 
     @Test fun conversation() = shot("05_chat") {
         val appearance = ChatAppearance()
