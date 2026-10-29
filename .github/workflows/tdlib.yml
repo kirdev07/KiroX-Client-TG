@@ -1,0 +1,73 @@
+# Builds TDLib for Android (arm64-v8a, Java interface) from the commit in tdlib.version and
+# commits libtdjni.so, TdApi.java and Client.java back to the branch. Runs when tdlib.version changes.
+name: TDLib build
+
+on:
+  push:
+    branches: [main, "feature/**", "fix/**"]
+    paths: [tdlib.version]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tdlib-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tdlib:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      NDK_VERSION: 28.2.13676358
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q gperf php-cli perl make zip unzip
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$NDK_VERSION" "cmake;3.22.1" "platforms;android-34" "build-tools;34.0.0" > /dev/null
+
+      - name: Fetch TDLib
+        run: |
+          commit=$(tr -d ' \n\r' < tdlib.version)
+          git init -q td && cd td
+          git remote add origin https://github.com/tdlib/td.git
+          git fetch -q --depth 1 origin "$commit"
+          git checkout -q FETCH_HEAD
+          echo "TDLIB_COMMIT=$commit" >> "$GITHUB_ENV"
+
+      - name: Build OpenSSL
+        working-directory: td/example/android
+        run: ./build-openssl.sh "$ANDROID_SDK_ROOT" "$NDK_VERSION"
+
+      - name: Build TDLib
+        working-directory: td/example/android
+        # minSdk 29 and arm64 only, like the app; NDK 28 links with 16 KB pages.
+        run: ./build-tdlib.sh "$ANDROID_SDK_ROOT" "$NDK_VERSION" third-party/openssl c++_static Java 29 arm64-v8a
+
+      - name: Check
+        run: |
+          so=td/example/android/tdlib/libs/arm64-v8a/libtdjni.so
+          ls -la "$so"
+          readelf -lW "$so" | grep LOAD
+          grep -q "$TDLIB_COMMIT" td/example/android/tdlib/java/org/drinkless/tdlib/TdApi.java
+
+      - name: Commit to the branch
+        run: |
+          cp td/example/android/tdlib/libs/arm64-v8a/libtdjni.so app/src/main/jniLibs/arm64-v8a/libtdjni.so
+          cp td/example/android/tdlib/java/org/drinkless/tdlib/TdApi.java app/src/main/java/org/drinkless/tdlib/TdApi.java
+          cp td/example/android/tdlib/java/org/drinkless/tdlib/Client.java app/src/main/java/org/drinkless/tdlib/Client.java
+          git config user.name "Claude"
+          git config user.email "noreply@anthropic.com"
+          git add app/src/main/jniLibs/arm64-v8a/libtdjni.so app/src/main/java/org/drinkless/tdlib
+          git diff --cached --quiet && { echo "TDLib already up to date"; exit 0; }
+          git commit -q -m "tdlib: update to ${TDLIB_COMMIT:0:8}" -m "Built by the TDLib workflow from github.com/tdlib/td."
+          git push -q origin "HEAD:${GITHUB_REF_NAME}"
