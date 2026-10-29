@@ -75,10 +75,12 @@
             android:name=".voip.GroupCallService"
             android:exported="false"
             android:foregroundServiceType="microphone|camera|mediaProjection" />
-        <!-- Voice notes and music keep playing in the background, with a media notification. -->
+        <!-- Voice notes and music keep playing in the background, with a media notification. Exported so
+             the system media controls can bind; PlaybackService accepts only trusted controllers. -->
         <service
             android:name=".voip.PlaybackService"
             android:exported="true"
+            tools:ignore="ExportedService"
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaSessionService" />

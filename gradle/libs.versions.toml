@@ -15,7 +15,7 @@ lottie = "6.7.1"
 camerax = "1.6.2"
 firebaseBom = "35.1.0"
 annotation = "1.11.0"
-robolectric = "4.16.1"
+robolectric = "4.17"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }

@@ -49,6 +49,7 @@ class PlaybackService : MediaSessionService() {
 
     /** KiroX itself, the system media notification and trusted system controllers; other apps are refused. */
     private object OnlyTrusted : MediaSession.Callback {
+        @androidx.annotation.OptIn(markerClass = [androidx.media3.common.util.UnstableApi::class])
         override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult =
             if (controller.isTrusted || session.isMediaNotificationController(controller)) super.onConnect(session, controller)
             else MediaSession.ConnectionResult.reject()
