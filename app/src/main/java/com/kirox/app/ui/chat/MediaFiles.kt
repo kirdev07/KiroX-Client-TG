@@ -41,9 +41,11 @@ internal suspend fun openFile(context: Context, path: String, name: String, mime
     val fileName = displayFileName(path, name, mimeType)
     val copy = withContext(Dispatchers.IO) {
         runCatching {
-            val dir = File(context.cacheDir, "shared").apply { mkdirs() }
+            val root = File(context.cacheDir, "shared").apply { mkdirs() }
             // Older copies are not needed once opened; keep the folder small.
-            dir.listFiles()?.filter { System.currentTimeMillis() - it.lastModified() > 24 * 60 * 60 * 1000L }?.forEach { it.delete() }
+            root.listFiles()?.filter { System.currentTimeMillis() - it.lastModified() > 24 * 60 * 60 * 1000L }?.forEach { it.deleteRecursively() }
+            // One folder per source file: two documents with the same name never overwrite each other.
+            val dir = File(root, Integer.toHexString(path.hashCode())).apply { mkdirs() }
             File(dir, fileName).also { File(path).copyTo(it, overwrite = true) }
         }.getOrNull()
     } ?: return false

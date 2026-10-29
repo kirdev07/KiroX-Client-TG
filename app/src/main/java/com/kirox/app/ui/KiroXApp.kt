@@ -69,7 +69,7 @@ fun KiroXApp() {
     val stack = rememberSaveable(saver = BackStack.Saver) { BackStack(listOf(Screen.Phone)) }
     var openChatId by rememberSaveable { mutableLongStateOf(0L) }
     /** Comment thread or forum topic shown on Screen.Thread; lost with the process, then Thread pops. */
-    var openThread by remember { mutableStateOf<ThreadSpec?>(null) }
+    var openThread by rememberSaveable(stateSaver = ThreadSpec.Saver) { mutableStateOf<ThreadSpec?>(null) }
     val history by telegramViewModel.messages.history.collectAsStateWithLifecycle()
     val autoDownloadRule by telegramViewModel.autoDownload.rule.collectAsStateWithLifecycle()
     val messageError by telegramViewModel.messages.error.collectAsStateWithLifecycle()
@@ -168,7 +168,14 @@ fun KiroXApp() {
     val chatDensity by settings.chatDensity.collectAsStateWithLifecycle()
     val weakDevice = remember { com.kirox.app.settings.prefersLightEffects(context) }
     val scope = rememberCoroutineScope()
-    fun openChat(id: Long) { openChatId = id; telegramViewModel.messages.open(id); stack.push(Screen.Conversation) }
+    fun openChat(id: Long) {
+        openChatId = id
+        telegramViewModel.messages.open(id)
+        // One open conversation id: a chat opened from inside another (a t.me link in comments)
+        // replaces it, so Back never lands on a Conversation that shows a different chat.
+        if (Screen.Conversation in stack || Screen.Thread in stack) stack.resetTo(Screen.Chats, Screen.Conversation)
+        else stack.push(Screen.Conversation)
+    }
     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
     // t.me and tg: links open the chat inside KiroX; anything else (and unknown names) in the browser.
     val linkOpener: (String) -> Unit = remember(uriHandler) {
@@ -424,8 +431,27 @@ private class TelegramStickerSource(private val repository: com.kirox.app.telegr
     override suspend fun savedGifs() = repository.savedGifs()
 }
 
-/** What Screen.Thread shows. */
+/** What Screen.Thread shows; saved with the back stack across rotation and process death. */
 private sealed interface ThreadSpec {
     data class Comments(val chatId: Long, val postId: Long) : ThreadSpec
     data class Topic(val chatId: Long, val topicId: Int, val title: String) : ThreadSpec
+
+    companion object {
+        val Saver = androidx.compose.runtime.saveable.Saver<ThreadSpec?, List<Any>>(
+            save = { spec ->
+                when (spec) {
+                    is Comments -> listOf("c", spec.chatId, spec.postId)
+                    is Topic -> listOf("t", spec.chatId, spec.topicId.toLong(), spec.title)
+                    null -> listOf("-")
+                }
+            },
+            restore = { saved ->
+                when (saved.firstOrNull()) {
+                    "c" -> Comments(saved[1] as Long, saved[2] as Long)
+                    "t" -> Topic(saved[1] as Long, (saved[2] as Long).toInt(), saved[3] as String)
+                    else -> null
+                }
+            }
+        )
+    }
 }

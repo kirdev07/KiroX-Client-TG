@@ -113,7 +113,7 @@ internal fun StickerPanel(source: StickerPanelSource?, onEmoji: (String) -> Unit
                 else -> LazyVerticalGrid(GridCells.Adaptive(if (tab == PanelTab.Gifs) 110.dp else 76.dp), Modifier.fillMaxWidth().weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(8.dp)) {
                     items(current, key = { it.fileId }) { item ->
                         Box(Modifier.padding(3.dp).aspectRatio(1f).clip(RoundedCornerShape(12.dp)).clickable { onSend(item) }, contentAlignment = Alignment.Center) {
-                            if (item.isGif) AnimationMessage(item.media, item.thumbnail)
+                            if (item.isGif) AnimationMessage(item.media, item.thumbnail, preview = true)
                             // TGS animate in the panel too; WEBM would need one video player per tile, so they stay still here.
                             else StickerMessage(item.media, item.thumbnail, size = 70.dp, animate = item.media.lottieSticker)
                         }

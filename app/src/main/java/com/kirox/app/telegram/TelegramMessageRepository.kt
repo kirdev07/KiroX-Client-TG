@@ -465,6 +465,7 @@ class TelegramMessageRepository(
         savedChat = peerUser != null && peerUser.id == users.myId()
         val mapped = messages.values.map { it.toModel() }
         _history.value = TelegramChatHistory(
+            loaded = true,
             chatId = id,
             title = chat?.title.orEmpty(),
             photo = chat?.photo?.small?.toRef(),

@@ -226,7 +226,10 @@ internal fun StoryViewer(chat: TelegramStoryChat, actions: TelegramStoryActions,
     var viewersOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
-    val paused = holding || replying || viewersOpen || confirmDelete
+    var inBackground by remember { mutableStateOf(false) }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) { inBackground = true }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_START) { inBackground = false }
+    val paused = holding || replying || viewersOpen || confirmDelete || inBackground
     val scope = rememberCoroutineScope()
     BackHandler(onBack = onClose)
 
@@ -358,6 +361,11 @@ private fun StoryVideo(file: com.kirox.app.telegram.TelegramFileRef, durationS: 
     val player = remember(path) {
         com.kirox.app.ui.chat.VoicePlayer.stop()
         androidx.media3.exoplayer.ExoPlayer.Builder(context.applicationContext).build().apply {
+            // Takes audio focus like any video: music pauses, a call interrupts it.
+            setAudioAttributes(
+                androidx.media3.common.AudioAttributes.Builder().setUsage(androidx.media3.common.C.USAGE_MEDIA).setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MOVIE).build(),
+                true
+            )
             setMediaItem(androidx.media3.common.MediaItem.fromUri(android.net.Uri.fromFile(java.io.File(path))))
             prepare()
         }
@@ -369,7 +377,10 @@ private fun StoryVideo(file: com.kirox.app.telegram.TelegramFileRef, durationS: 
         player.addListener(listener)
         onDispose { player.removeListener(listener); player.release() }
     }
-    LaunchedEffect(player, paused) { player.playWhenReady = !paused }
+    var background by remember { mutableStateOf(false) }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) { background = true }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_START) { background = false }
+    LaunchedEffect(player, paused, background) { player.playWhenReady = !paused && !background }
     LaunchedEffect(player) {
         while (true) {
             val total = player.duration.takeIf { it > 0 } ?: (durationS * 1000).toLong().coerceAtLeast(1)

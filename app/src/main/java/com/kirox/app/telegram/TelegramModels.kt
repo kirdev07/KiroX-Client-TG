@@ -208,7 +208,9 @@ data class TelegramChatHistory(
     /** Forum supergroup opened as a whole: the screen shows its topics. */
     val isForum: Boolean = false,
     /** Custom keyboard a bot sent (rows of button texts); empty when none. */
-    val replyKeyboard: List<List<String>> = emptyList()
+    val replyKeyboard: List<List<String>> = emptyList(),
+    /** Published from the chat's real data; false for placeholders while it opens (draft not known yet). */
+    val loaded: Boolean = false
 )
 
 /** A topic of a forum supergroup. */

@@ -150,16 +150,19 @@ internal fun VideoMessage(media: TelegramMedia, thumbnail: TelegramFileRef?) {
 }
 
 @Composable
-internal fun AnimationMessage(media: TelegramMedia, thumbnail: TelegramFileRef?) {
+internal fun AnimationMessage(media: TelegramMedia, thumbnail: TelegramFileRef?, preview: Boolean = false) {
     val files = LocalTelegramFiles.current
     val state = rememberFileState(media.file)
-    LaunchedEffect(media.file.id, files) {
+    // A preview (sticker panel tile) shows only the frame: no download, no player, no own taps,
+    // so a grid of GIFs does not open a decoder per tile and a tap reaches the tile (send).
+    if (!preview) LaunchedEffect(media.file.id, files) {
         if (state.path == null && !state.downloading && media.size in 1..AUTO_ANIMATION_BYTES) files?.download(media.file)
     }
-    Box(Modifier.clickable(enabled = state.path == null) { if (state.downloading) files?.cancel(media.file) else files?.download(media.file) }) {
+    Box(if (preview) Modifier else Modifier.clickable(enabled = state.path == null) { if (state.downloading) files?.cancel(media.file) else files?.download(media.file) }) {
         MediaFrame(thumbnail, mediaAspect(media)) {
             val path = state.path
-            if (path != null) LoopingVideo(path, Modifier.fillMaxSize()) else MediaStateBadge(state, playIcon = false)
+            if (preview) Unit
+            else if (path != null) LoopingVideo(path, Modifier.fillMaxSize()) else MediaStateBadge(state, playIcon = false)
         }
         Text("GIF", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.TopStart).padding(6.dp).clip(RoundedCornerShape(8.dp)).background(Color(0x99000000)).padding(horizontal = 6.dp, vertical = 2.dp))
     }
@@ -410,5 +413,8 @@ private fun rememberPlayer(path: String, loop: Boolean, muted: Boolean, autoPlay
         }
     }
     DisposableEffect(player) { onDispose { player.release() } }
+    // Nothing plays on with KiroX in the background; silent GIF loops carry on when it returns.
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) { player.pause() }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_START) { if (loop && muted && autoPlay) player.play() }
     return player
 }

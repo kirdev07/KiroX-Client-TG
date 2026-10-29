@@ -177,8 +177,10 @@ fun TelegramChatScreen(
     // Drafts: the chat's Telegram draft fills an empty input once; unsent text is saved back when
     // leaving the chat or the app. Text being edited is an existing message, not a draft.
     var draftLoaded by remember(history.chatId) { mutableStateOf(false) }
-    LaunchedEffect(history.chatId, history.draft) {
-        if (history.chatId == 0L || draftLoaded) return@LaunchedEffect
+    LaunchedEffect(history.chatId, history.draft, history.loaded) {
+        // A placeholder history has no draft yet: taking it would show an empty input and then
+        // overwrite the real draft with "" on leaving.
+        if (history.chatId == 0L || !history.loaded || draftLoaded) return@LaunchedEffect
         draftLoaded = true
         if (input.text.isEmpty() && history.draft.isNotEmpty()) input = TextFieldValue(history.draft, androidx.compose.ui.text.TextRange(history.draft.length))
     }
@@ -197,7 +199,7 @@ fun TelegramChatScreen(
     }
     androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) {
         VoicePlayer.stop()
-        if (recording) { recorder.stop(discard = true); recording = false }
+        if (recording) { recorder.stop(discard = true); recording = false; recordPaused = false }
         pendingDraft.save(actions)
     }
     var menuOpen by remember { mutableStateOf(false) }
@@ -215,8 +217,11 @@ fun TelegramChatScreen(
     // Server search: finds messages that are not loaded yet; tapping one scrolls the chat to it.
     var searchResults by remember(history.chatId) { mutableStateOf<List<TelegramMessage>?>(null) }
     var searchNext by remember(history.chatId) { mutableStateOf(0L) }
+    /** Bumped per query: a page that arrives for an older query is dropped. */
+    var searchGeneration by remember(history.chatId) { mutableStateOf(0) }
     LaunchedEffect(searchQuery, searching) {
         val q = searchQuery.trim()
+        searchGeneration++
         searchResults = null
         searchNext = 0
         if (!searching || q.length < 2) return@LaunchedEffect
@@ -226,6 +231,9 @@ fun TelegramChatScreen(
             .onFailure { searchResults = emptyList() }
     }
     val rows = remember(shownMessages) { toRows(shownMessages.asReversed()) }
+    /** Every message of an album → all its ids: actions on an album act on all of it. */
+    val albumIds = remember(rows) { rows.filter { it.album.size > 1 }.flatMap { row -> row.album.map { it.id to row.album.map { m -> m.id } } }.toMap() }
+    fun idsOf(message: MessageUi): List<Long> = albumIds[message.id] ?: listOf(message.id)
     val byId = remember(history.messages) { history.messages.associateBy { it.id } }
 
     LaunchedEffect(error) { if (error != null) { notice = error; onErrorShown() } }
@@ -237,9 +245,13 @@ fun TelegramChatScreen(
             listState.animateScrollToItem(index)
             highlighted = target
             actions.jumpDone()
-            kotlinx.coroutines.delay(1600)
-            if (highlighted == target) highlighted = 0
         }
+    }
+    // Own effect: jumpDone() restarts the one above, which would cancel this delay.
+    LaunchedEffect(highlighted) {
+        if (highlighted == 0L) return@LaunchedEffect
+        kotlinx.coroutines.delay(1600)
+        highlighted = 0
     }
     LaunchedEffect(listState, history.chatId) {
         snapshotFlow { listState.layoutInfo.let { (it.visibleItemsInfo.lastOrNull()?.index ?: 0) >= it.totalItemsCount - 15 } }
@@ -423,7 +435,15 @@ fun TelegramChatScreen(
                 onLoadMore = {
                     val q = searchQuery.trim()
                     val from = searchNext
-                    scope.launch { runCatching { actions.search(q, from) }.onSuccess { (more, next) -> searchResults = results + more; searchNext = next } }
+                    val generation = searchGeneration
+                    scope.launch {
+                        val page = runCatching { actions.search(q, from) }.getOrNull()
+                        if (generation != searchGeneration) return@launch
+                        // A failed or empty page ends the list instead of spinning forever.
+                        if (page == null || page.first.isEmpty()) { searchNext = 0; return@launch }
+                        searchResults = (searchResults ?: emptyList()) + page.first
+                        searchNext = page.second
+                    }
                 },
                 onOpen = { message -> searching = false; searchQuery = ""; actions.jumpTo(message.id) }
             ) else if (history.messages.isEmpty()) {
@@ -451,13 +471,13 @@ fun TelegramChatScreen(
                         showAuthor = isGroup,
                         onLongClick = {
                             if (row.message.direction == MessageDirection.System) Unit
-                            else if (selectedIds.isNotEmpty()) selectedIds = selectedIds.toggle(row.message.id)
+                            else if (selectedIds.isNotEmpty()) selectedIds = selectedIds.toggleAll(idsOf(row.message))
                             else selected = row.message
                         },
                         onReply = { replyTo = row.message; editing = null },
                         onNotice = { notice = it },
                         selected = row.message.id in selectedIds,
-                        onClick = if (selectedIds.isNotEmpty() && row.message.direction != MessageDirection.System) ({ selectedIds = selectedIds.toggle(row.message.id) }) else null,
+                        onClick = if (selectedIds.isNotEmpty() && row.message.direction != MessageDirection.System) ({ selectedIds = selectedIds.toggleAll(idsOf(row.message)) }) else null,
                         onQuote = { id -> actions.jumpTo(id) },
                         highlighted = row.message.id == highlighted,
                         onVote = { indices -> actions.vote(row.message.id, indices) },
@@ -526,12 +546,12 @@ fun TelegramChatScreen(
                 when (action) {
                     "Копировать" -> { clipboard.setText(AnnotatedString(message.text)); notice = "Сообщение скопировано" }
                     "Редактировать" -> { editing = message; replyTo = null; input = TextFieldValue(message.text) }
-                    "Удалить" -> deleting = message
-                    "Переслать" -> forwarding = listOf(message.id)
+                    "Удалить" -> if (albumIds.containsKey(message.id)) deletingMany = idsOf(message) else deleting = message
+                    "Переслать" -> forwarding = idsOf(message)
                     "Сохранить" -> saveMedia(message)
                     "Закрепить" -> { actions.pin(message.id); notice = "Сообщение закреплено" }
                     "Открепить" -> actions.unpin(message.id)
-                    "Выбрать" -> selectedIds = setOf(message.id)
+                    "Выбрать" -> selectedIds = idsOf(message).toSet()
                     "Перевести" -> {
                         translation = message.text to null
                         scope.launch {
@@ -776,7 +796,8 @@ private fun toRows(newestFirst: List<TelegramMessage>): List<ChatRow> {
         val older = newestFirst.getOrNull(index + 1)
         val day = dayFormat.format(Date(message.date * 1000L))
         if (older == null || dayFormat.format(Date(older.date * 1000L)) != day) {
-            rows += ChatRow("d$day", MessageUi(-message.id, "", MessageDirection.System, text = day, time = ""))
+            // Keyed by message: the same day can appear twice when dates are not in id order.
+            rows += ChatRow("d${message.id}", MessageUi(-message.id, "", MessageDirection.System, text = day, time = ""))
         }
     }
     return rows
@@ -889,6 +910,9 @@ private class DraftHolder {
 
 
 private fun Set<Long>.toggle(id: Long): Set<Long> = if (id in this) this - id else this + id
+
+/** Album rows select or unselect all their messages together. */
+private fun Set<Long>.toggleAll(ids: List<Long>): Set<Long> = if (ids.first() in this) this - ids.toSet() else this + ids
 
 /** "сообщение", "сообщения", "сообщений" for Russian plural rules. */
 internal fun messageWord(count: Int): String {

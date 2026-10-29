@@ -187,8 +187,9 @@ object VoicePlayer {
         if (manager?.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_FAILED) return
         audio = manager
         focus = request
+        val created = MediaPlayer()
         player = runCatching {
-            MediaPlayer().apply {
+            created.apply {
                 setAudioAttributes(attributes)
                 setDataSource(path)
                 setOnCompletionListener { stop() }
@@ -197,7 +198,7 @@ object VoicePlayer {
                 start()
                 applySpeed(this)
             }
-        }.getOrNull()
+        }.getOrElse { created.release(); null }
         if (player == null) stop() else _playingPath.value = path
     }
 

@@ -102,9 +102,15 @@ internal fun VideoNoteRecorder(onDone: (RecordedVideoNote) -> Unit, onCancel: ()
     var discard by remember { mutableStateOf(false) }
 
     DisposableEffect(front) {
+        // Both the listener and onDispose run on the main thread: a listener that comes after the
+        // screen closed must not bind the camera to the activity (it would stay on).
+        var disposed = false
+        var bound: ProcessCameraProvider? = null
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
+            if (disposed) return@addListener
             val provider = runCatching { future.get() }.getOrNull() ?: return@addListener onError("Камера недоступна")
+            bound = provider
             val selector = if (front) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
             val surface = Preview.Builder().build().also { it.setSurfaceProvider(preview.surfaceProvider) }
             runCatching {
@@ -112,9 +118,10 @@ internal fun VideoNoteRecorder(onDone: (RecordedVideoNote) -> Unit, onCancel: ()
                 provider.bindToLifecycle(lifecycleOwner, selector, surface, capture)
             }.onFailure { onError("Не удалось открыть камеру") }
         }, ContextCompat.getMainExecutor(context))
-        onDispose { runCatching { future.get().unbindAll() } }
+        onDispose { disposed = true; runCatching { bound?.unbindAll() } }
     }
-    DisposableEffect(Unit) { onDispose { recording?.close(); if (!processing) raw.delete() } }
+    // Leaving the recorder in any other way than «Отправить» drops the clip.
+    DisposableEffect(Unit) { onDispose { if (!processing) { discard = true; recording?.close(); raw.delete() } } }
 
     fun finish(cancelled: Boolean) {
         val active = recording ?: return

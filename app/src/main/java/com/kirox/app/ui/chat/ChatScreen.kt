@@ -137,7 +137,7 @@ internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAp
                 MessageKind.VideoNote -> if (media != null) VideoNoteMessage(media, message.thumbnail) else MediaPlaceholder(message.kind)
                 MessageKind.Voice -> VoiceMessage(message.text, message.photo, message.media?.waveform.orEmpty())
                 MessageKind.Audio -> { if (media != null) AudioMessage(media); Caption() }
-                MessageKind.Document -> { if (media != null) DocumentMessage(media, onNotice) else MessageText(message.text, message.entities, textScale); Caption() }
+                MessageKind.Document -> if (media != null) { DocumentMessage(media, onNotice); Caption() } else MessageText(message.text, message.entities, textScale)
                 MessageKind.Sticker -> if (media != null) StickerMessage(media, message.thumbnail) else MessageText(message.text, message.entities, textScale)
                 MessageKind.Text -> {
                     val poll = message.poll
@@ -334,7 +334,8 @@ internal fun commentsLabel(count: Int): String {
  */
 @Composable
 private fun PollView(poll: com.kirox.app.telegram.TelegramPoll, onVote: (List<Int>) -> Unit) {
-    var picked by remember(poll) { mutableStateOf(setOf<Int>()) }
+    // Kept while others vote (the poll object changes); cleared once this account has voted.
+    var picked by remember(poll.question, poll.voted) { mutableStateOf(setOf<Int>()) }
     val showResults = poll.voted || poll.isClosed
     Column(Modifier.widthIn(min = 220.dp)) {
         Text(poll.question, color = ChatWhite, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
