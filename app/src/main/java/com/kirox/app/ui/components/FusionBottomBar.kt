@@ -42,7 +42,7 @@ fun FusionBottomBar(items: List<FusionNavItem>, selected: Int, onSelect: (Int) -
         val shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp)
         NavigationBar(
             containerColor = if (colors.glass) androidx.compose.ui.graphics.Color.Transparent else colors.background, tonalElevation = 0.dp,
-            windowInsets = if (colors.glass) androidx.compose.foundation.layout.WindowInsets(0) else androidx.compose.foundation.layout.WindowInsets.navigationBars,
+            windowInsets = if (colors.glass) androidx.compose.foundation.layout.WindowInsets(0) else androidx.compose.material3.NavigationBarDefaults.windowInsets,
             modifier = if (colors.glass) modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp).clip(shape).fusionPanel(colors, shape)
                 else modifier.fillMaxWidth()
         ) {
