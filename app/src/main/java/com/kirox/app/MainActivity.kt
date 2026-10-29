@@ -62,7 +62,7 @@ class MainActivity : ComponentActivity() {
     /** A notification of another signed-in account opens that account. */
     private fun openAccountFrom(intent: android.content.Intent?) {
         intent?.getLongExtra(com.kirox.app.notify.MessageNotifications.EXTRA_OPEN_CHAT, 0L)?.takeIf { it != 0L }?.let { chatId ->
-            intent.removeExtra(com.kirox.app.notify.MessageNotifications.EXTRA_OPEN_CHAT)
+            intent?.removeExtra(com.kirox.app.notify.MessageNotifications.EXTRA_OPEN_CHAT)
             com.kirox.app.notify.NotificationTarget.chat.value = chatId
         }
         val session = intent?.getStringExtra(com.kirox.app.notify.AccountPeek.EXTRA_SESSION) ?: return
