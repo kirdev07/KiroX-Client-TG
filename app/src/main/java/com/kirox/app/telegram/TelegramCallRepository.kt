@@ -40,7 +40,7 @@ class TelegramCallRepository(private val client: TelegramClient, private val cha
     }
 
     /** Loads the next page; the first call also starts listening for new calls. */
-    fun loadMore() = client.post {
+    fun loadMore(): Unit = client.post {
         started = true
         if (loading || complete) return@post
         loading = true

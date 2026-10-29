@@ -29,17 +29,19 @@ object SessionLocks {
             if (holders.containsKey(session)) return null
             holders[session] = holder
         }
-        if (timeoutMs > 0) timer.postDelayed({ release(session, holder) }, timeoutMs)
+        if (timeoutMs > 0) timer.postDelayed({ releaseHolder(session, holder) }, timeoutMs)
         return holder
     }
 
     /** Called by the holder once its client has closed; runs whatever waited for the session. */
-    fun release(session: String) = release(session, null)
+    fun release(session: String) = releaseHolder(session, null)
 
     /** Releases [session] only if [handle] still holds it. */
-    fun release(session: String, handle: Any) = release(session, handle as? Holder ?: return)
+    fun release(session: String, handle: Any) {
+        releaseHolder(session, handle as? Holder ?: return)
+    }
 
-    private fun release(session: String, only: Holder?) {
+    private fun releaseHolder(session: String, only: Holder?) {
         val waiting = synchronized(this) {
             val current = holders[session] ?: return
             if (only != null && current !== only) return
