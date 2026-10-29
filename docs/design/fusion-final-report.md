@@ -4,9 +4,8 @@
 
 ## Reference check
 
-`python3 design-reference/fusion-v2/check_approved_reference.py` → **MISSING_APPROVED_PNG**.
-The approved original `1000084555.png` (1536×620, SHA-256 `0092657…d4f3`) is not in the repository.
-No visual match is claimed. Per `APPROVED_CORE_VISUAL_EXACT.md` further Compose redesign is stopped until the PNG is added.
+`python3 design-reference/fusion-v2/check_approved_reference.py` → **APPROVED_REFERENCE_OK** (1536×620, SHA-256 `0092657…d4f3`, added in `6f438bf`).
+Current screenshots were compared with it below. No visual match is claimed yet.
 
 ## What is in the code now (kept, works with TDLib)
 
@@ -28,21 +27,21 @@ No visual match is claimed. Per `APPROVED_CORE_VISUAL_EXACT.md` further Compose 
 | Device | NOT TESTED |
 | Visual match with the approved PNG | NOT TESTED — `MISSING_APPROVED_PNG` |
 
-## Six-screen gap matrix (from the text of `APPROVED_CORE_VISUAL_EXACT.md`)
+## Six-screen gap matrix (approved PNG vs. screenshots of `8a17166`)
 
-| Screen | Reference (text) | Current implementation | Differences (P0 first) | Files to change |
+| Screen | Approved PNG | Current implementation | Differences (P0 first) | Files to change |
 |---|---|---|---|---|
-| Expressive · Чаты | KiroX centred in header, menu left, search + action right; big rounded search; stories row right under it; chips Все/Личные/Каналы/Группы; dense list; pill dock | Large left title «Чаты» with 3 icon actions; no search bar (search is an icon); stories row; Архив/Сообщения tabs; chips; list; floating dock | P0: header layout (centred KiroX + menu), always-visible search bar above stories. Archive tabs stay (owner rule) — placement to agree | `TelegramMainScreen.kt` (ChatsTab), `AccountScreens.kt` (ScreenTitle), `FusionMaterial.kt` (search) |
-| Expressive · Переписка | Header avatar + name + status; textured violet abstract wallpaper over the whole area; dark translucent incoming, saturated lilac outgoing; media card; lilac voice card with wave; rounded composer | Plain back title with name only; flat violet gradient; colours roughly match; composer rounded | P0: real wallpaper image instead of gradient; header with avatar/status. P1: media and voice card styling | `TelegramChatScreen.kt`, `ChatScreen.kt`, `ChatWallpaper.kt`, new wallpaper asset |
-| Expressive · Профиль/настройки | Deep black base, centred round avatar, name/status, two compact groups of card buttons: «Изменить профиль», Premium (real), then notifications, privacy, data, appearance, language, KiroX, help | Settings: avatar, name, edit pill + accounts button, four grouped cards (Аккаунт/Оформление/Telegram/Приложение) on violet gradient | P0: base colour and compact two-group layout, item order (no Language/Help rows yet) | `AccountScreens.kt` (SettingsTab, ProfileHeader), `FusionTheme.kt` |
-| Glass · Чаты | Same layout; blue-graphite glass search; transparent list with thin dividers; blue story rings; blue-violet active chips; floating glass dock | Same as Expressive with blue tint; dock translucent; list opaque-looking | P0: a real themed background image behind content (licensed), visible glass layers; inherits header/search P0 | `FusionBackdrop.kt`, `FusionBottomBar.kt`, `TelegramMainScreen.kt`, asset |
-| Glass · Переписка | Mountain/lake evening wallpaper behind messages with soft blue scrim; glass bubbles, blue-lilac outgoing; strokes and glow | Navy gradient, solid blue outgoing, translucent incoming without stroke | P0: wallpaper image + scrim; glass bubbles with stroke | `ChatWallpaper.kt`, `ChatScreen.kt` (MessageRow), asset |
-| Glass · Профиль/настройки | Mountains with haze on top, then dark navy; translucent rounded items with thin blue stroke; same order as Expressive | Translucent cards with light stroke on navy gradient | P0: top image area; stroke colour; inherits Expressive layout P0 | `AccountScreens.kt`, `FusionBackdrop.kt`, asset |
+| Expressive · Чаты | Near-black base; header: menu left, **KiroX centred**, two icons right; always-visible rounded search; stories row (Моя история, Избранное, channels…); chips Все/Личные/Каналы/Группы; list; **Архив as a list row** («24 чата»); opaque dock with labels and violet pill | Violet gradient base; large left title «Чаты» + 3 icons; search only as icon; Архив/Сообщения tabs; chips Все/Личные/Группы/Каналы + folders; FAB; floating dock | P0: base colour; centred header + menu; search bar; chip order. **Archive tabs vs. archive row — owner decision** (owner rule: do not touch archive) | `TelegramMainScreen.kt`, `AccountScreens.kt` (ScreenTitle), `FusionMaterial.kt`, `FusionTheme.kt`, `FusionBottomBar.kt` |
+| Expressive · Переписка | Header: back, avatar, name, «в сети», call + more; **violet floral wallpaper** full screen; incoming dark translucent; outgoing violet gradient; file card; violet voice card with wave; composer: emoji, field, attach, mic in violet circle | Back + name only; flat gradient; solid bubbles; mic plain icon | P0: wallpaper image; header avatar/status/actions; outgoing gradient; mic button style | `TelegramChatScreen.kt`, `ChatScreen.kt`, `ChatWallpaper.kt`, wallpaper asset |
+| Expressive · Профиль/настройки | No dock; back + more; ringed avatar, name, status; cards: [Изменить профиль, Premium] · [Уведомления и звуки, Конфиденциальность, Данные и память, Оформление, Язык] · [KiroX Настройки, Помощь, О приложении] | Settings tab: search icon, avatar with camera, edit pill + accounts button, four groups with other items | P0: three groups in this order; Язык / Помощь / О приложении rows; Premium row only with real status text | `AccountScreens.kt` (SettingsTab, ProfileHeader) |
+| Glass · Чаты | Same layout; navy blurred backdrop; glass search; thin dividers; blue rings; **floating glass dock** | Navy gradient; same structure as current Expressive | Inherits Expressive P0; glass search/dock strokes | as above + `FusionBackdrop.kt` |
+| Glass · Переписка | **Mountains/lake evening photo** behind messages; glass bubbles with stroke; blue-violet outgoing; glass composer | Navy gradient, solid bubbles | P0: wallpaper photo + scrim; bubble stroke/translucency | `ChatWallpaper.kt`, `ChatScreen.kt`, asset |
+| Glass · Профиль/настройки | Mountain photo header fading to navy; translucent groups with thin stroke | Translucent cards on gradient | P0: photo header; same group layout as Expressive | `AccountScreens.kt`, asset |
 
-Cross-cutting P0: background images need licensed assets (none in the repo); typography and icon style cannot be checked without the PNG; animations to return with a fallback.
+Cross-cutting: the PNG's wallpapers and avatars are illustrations inside a 1536×620 collage — too small to crop; full-size licensed images are needed. Animations: the PNG subtitle says «Плавные анимации»; current code has them globally off (owner's earlier request).
 
 ## Next step (waiting for the owner)
 
-1. Add the original PNG to `design-reference/fusion-v2/assets/KiroX_Fusion_Expressive_Glass_APPROVED_ORIGINAL.png`.
+1. ~~Add the original PNG~~ — done (`6f438bf`).
 2. Provide (or approve the source of) the background images: Expressive abstract wallpaper, Glass mountains/lake.
 3. Then one small sub-stage at a time (first: Expressive · Чаты header/search), screenshots after each, waiting for feedback.
