@@ -115,6 +115,22 @@ fun TelegramAuthStepScreen(state: TelegramAuthState, repository: TelegramAuthRep
     // A wrong code clears the cells so it can be typed again; the cells shake once.
     LaunchedEffect(error) { if (error != null && codeLength != null) first = "" }
 
+    // Fusion v2 (approved auth board): code with an on-screen keypad, and the cloud password step.
+    if (Fusion.colors.backdrop != null && state is TelegramAuthState.WaitCode && codeLength != null && !state.words) {
+        FusionCodeStep(state, first, codeLength, error, busy, resendSeconds, onBack, repository) { value ->
+            first = value
+            repository.clearError()
+            if (value.length == codeLength) repository.code(value)
+        }
+        return
+    }
+    if (Fusion.colors.backdrop != null && state is TelegramAuthState.WaitPassword && !recovering) {
+        FusionPasswordStep(state, first, error, busy, recoveryUnavailable, onBack, onValue = { first = it.take(128); repository.clearError() }, onSubmit = submit) {
+            if (state.hasRecoveryEmail) repository.requestPasswordRecovery() else recoveryUnavailable = true
+        }
+        return
+    }
+
     Column(
         Modifier.fillMaxSize().fusionBackground(Fusion.colors).statusBarsPadding().navigationBarsPadding().imePadding()
     ) {
@@ -379,4 +395,92 @@ private fun prettyPhone(raw: String): String {
         val util = com.google.i18n.phonenumbers.PhoneNumberUtil.getInstance()
         util.format(util.parse(digits, null), com.google.i18n.phonenumbers.PhoneNumberUtil.PhoneNumberFormat.INTERNATIONAL)
     }.getOrDefault(digits)
+}
+
+/** Back arrow row shared by the Fusion v2 steps. */
+@Composable
+private fun FusionStepBar(busy: Boolean, onBack: () -> Unit) {
+    Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(48.dp).clip(CircleShape).clickable(enabled = !busy, onClick = onBack), contentAlignment = Alignment.Center) {
+            com.kirox.app.ui.icons.KiroXIcon(com.kirox.app.ui.icons.KiroXIcon.Back, "Назад", Modifier.size(24.dp), Fusion.colors.textPrimary)
+        }
+    }
+}
+
+/** «Введите код»: digit boxes fed by the keypad; the code is sent as soon as it is complete. */
+@Composable
+private fun FusionCodeStep(
+    state: TelegramAuthState.WaitCode, value: String, length: Int, error: String?, busy: Boolean,
+    resendSeconds: Int, onBack: () -> Unit, repository: TelegramAuthRepository, onValue: (String) -> Unit
+) {
+    Column(Modifier.fillMaxSize().authBackdrop().statusBarsPadding().navigationBarsPadding()) {
+        FusionStepBar(busy, onBack)
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            AuthMark(com.kirox.app.ui.icons.KiroXIcon.Send)
+            Spacer(Modifier.height(14.dp))
+            val sentTo = when (state.sentTo) {
+                com.kirox.app.telegram.CodeDestination.App -> "Код отправлен в Telegram"
+                com.kirox.app.telegram.CodeDestination.Sms -> "Код отправлен в SMS"
+                com.kirox.app.telegram.CodeDestination.Call -> "Telegram позвонит и продиктует код"
+                com.kirox.app.telegram.CodeDestination.Fragment -> "Код отправлен в Fragment"
+                com.kirox.app.telegram.CodeDestination.Other -> "Код отправлен Telegram"
+            }
+            AuthHeading("Введите код", sentTo)
+            // The number, tappable to go back and fix it.
+            Text(
+                "на номер ${prettyPhone(state.phoneNumber)}", color = Fusion.colors.textSecondary, fontSize = 15.sp,
+                modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable(enabled = !busy) { repository.logOut() }.padding(horizontal = 8.dp, vertical = 2.dp)
+            )
+            Spacer(Modifier.height(24.dp))
+            AuthCodeBoxes(value, length, error != null)
+            if (error != null) Text(error, color = Fusion.colors.danger, fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp))
+            Spacer(Modifier.height(14.dp))
+            if (busy) CircularProgressIndicator(Modifier.size(22.dp), color = Fusion.colors.accent, strokeWidth = 2.dp)
+            else if (state.canResend) {
+                if (resendSeconds > 0) Text("Отправить ещё раз через %02d:%02d".format(resendSeconds / 60, resendSeconds % 60), color = Fusion.colors.textSecondary, fontSize = 14.sp)
+                else AuthLink("Отправить код ещё раз") { repository.resend() }
+            }
+            AuthLink("Войти по QR-коду", enabled = !busy) { repository.requestQr() }
+        }
+        AuthKeypad(enabled = !busy, onDigit = { if (value.length < length) onValue(value + it) }, onDelete = { onValue(value.dropLast(1)) })
+        Spacer(Modifier.height(12.dp))
+    }
+}
+
+/** «Облачный пароль»: lock, password pill with show/hide, «Забыли пароль?», gradient button. */
+@Composable
+private fun FusionPasswordStep(
+    state: TelegramAuthState.WaitPassword, value: String, error: String?, busy: Boolean, recoveryUnavailable: Boolean,
+    onBack: () -> Unit, onValue: (String) -> Unit, onSubmit: () -> Unit, onForgot: () -> Unit
+) {
+    var shown by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().authBackdrop().statusBarsPadding().navigationBarsPadding().imePadding()) {
+        FusionStepBar(busy, onBack)
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Spacer(Modifier.height(40.dp))
+            AuthMark(com.kirox.app.ui.icons.KiroXIcon.Lock)
+            Spacer(Modifier.height(14.dp))
+            AuthHeading("Облачный пароль", if (state.hint.isBlank()) "Введите пароль для\nдвухэтапной проверки" else "Подсказка: ${state.hint}")
+            Spacer(Modifier.height(28.dp))
+            AuthPill(focused = value.isNotEmpty()) {
+                BasicTextField(
+                    value, onValue, singleLine = true, enabled = !busy,
+                    textStyle = TextStyle(Fusion.colors.textPrimary, 17.sp), cursorBrush = SolidColor(Fusion.colors.accent),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { if (value.isNotEmpty()) onSubmit() }),
+                    visualTransformation = if (shown) androidx.compose.ui.text.input.VisualTransformation.None else PasswordVisualTransformation(),
+                    modifier = Modifier.weight(1f),
+                    decorationBox = { inner -> Box { if (value.isEmpty()) Text("Введите пароль", color = Fusion.colors.textTertiary, fontSize = 17.sp); inner() } }
+                )
+                Box(Modifier.size(40.dp).clip(CircleShape).clickable { shown = !shown }, contentAlignment = Alignment.Center) {
+                    com.kirox.app.ui.icons.KiroXIcon(com.kirox.app.ui.icons.KiroXIcon.Eye, if (shown) "Скрыть пароль" else "Показать пароль", Modifier.size(20.dp), if (shown) Fusion.colors.accent else Fusion.colors.textSecondary)
+                }
+            }
+            if (error != null) Text(error, color = Fusion.colors.danger, fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp))
+            if (recoveryUnavailable) Text("К аккаунту не привязана резервная почта, восстановить пароль в KiroX нельзя.", color = Fusion.colors.textSecondary, fontSize = 13.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(top = 10.dp))
+            Spacer(Modifier.height(16.dp))
+            AuthLink("Забыли пароль?", enabled = !busy, onClick = onForgot)
+        }
+        Box(Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) { AuthGradientButton("Продолжить", enabled = value.isNotEmpty(), busy = busy, onClick = onSubmit) }
+    }
 }

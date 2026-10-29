@@ -20,7 +20,7 @@ enum class KiroXIcon {
     Edit, More, Stories, Media, Bookmark, Check, Pin, CallIncoming, CallOutgoing, CallMissed,
     Camera, At, Phone, Cake, File, Link, Music, Voice, Verified, Photo,
     Back, Video, Attach, Send, Emoji, Copy, Forward, Delete, Location, Reply,
-    Chats, Tune, ProfileCircle, Qr, Speaker, CallEnd, FlipCamera, Menu
+    Chats, Tune, ProfileCircle, Qr, Speaker, CallEnd, FlipCamera, Menu, Lock, Eye, Backspace
 }
 
 @Composable
@@ -61,6 +61,9 @@ fun KiroXIcon(
             KiroXIcon.Sliders -> { line(p(4f,7f),p(20f,7f)); line(p(4f,17f),p(20f,17f)); circle(9f,7f,1.8f); circle(15f,17f,1.8f) }
             KiroXIcon.Refresh -> { path(p(19f,8f),p(19f,4f),p(15f,4f)); path(p(19f,5f),p(16f,3.5f),p(12f,3f),p(7f,5f),p(4f,9f)); path(p(5f,16f),p(5f,20f),p(9f,20f)); path(p(5f,19f),p(8f,21f),p(13f,21f),p(18f,18f),p(20f,14f)) }
             KiroXIcon.Info -> { circle(12f,12f,9f); line(p(12f,11f),p(12f,17f)); circle(12f,7.5f,.5f) }
+            KiroXIcon.Lock -> { rect(5f,10.5f,19f,21f,2.5f); path(p(8f,10.5f),p(8f,7.5f),p(9.2f,4.6f),p(12f,3.5f),p(14.8f,4.6f),p(16f,7.5f),p(16f,10.5f)); line(p(12f,14.5f),p(12f,17f)) }
+            KiroXIcon.Eye -> { path(p(2.5f,12f),p(5.5f,8f),p(9f,6f),p(12f,5.5f),p(15f,6f),p(18.5f,8f),p(21.5f,12f),p(18.5f,16f),p(15f,18f),p(12f,18.5f),p(9f,18f),close=false); path(p(9f,18f),p(5.5f,16f),p(2.5f,12f)); circle(12f,12f,3f) }
+            KiroXIcon.Backspace -> { path(p(8f,5f),p(21f,5f),p(21f,19f),p(8f,19f),p(2.5f,12f),close=true); line(p(11.5f,9f),p(17.5f,15f)); line(p(17.5f,9f),p(11.5f,15f)) }
             KiroXIcon.Menu -> { line(p(4f,7f),p(20f,7f)); line(p(4f,12f),p(20f,12f)); line(p(4f,17f),p(20f,17f)) }
             KiroXIcon.More -> { circle(12f,5f,.8f); circle(12f,12f,.8f); circle(12f,19f,.8f) }
             KiroXIcon.Stories -> { circle(12f,12f,8f); circle(12f,12f,3f) }
