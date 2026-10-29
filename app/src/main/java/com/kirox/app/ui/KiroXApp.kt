@@ -77,13 +77,6 @@ fun KiroXApp() {
     val activeCall by telegramViewModel.voip.call.collectAsStateWithLifecycle()
     val groupCall by telegramViewModel.groupCalls.call.collectAsStateWithLifecycle()
     var groupCallNotice by remember { mutableStateOf<String?>(null) }
-    val groupCallActions = remember {
-        object : com.kirox.app.ui.call.GroupCallActions {
-            override fun setMuted(muted: Boolean) = telegramViewModel.groupCalls.setMuted(muted)
-            override fun leave() = telegramViewModel.groupCalls.leave()
-            override fun dismiss() = telegramViewModel.groupCalls.dismiss()
-        }
-    }
     val callActions = remember {
         object : com.kirox.app.ui.call.CallActions {
             override fun accept() = telegramViewModel.voip.accept()
@@ -123,6 +116,21 @@ fun KiroXApp() {
         )
             .filter { androidx.core.content.ContextCompat.checkSelfPermission(context, it) != android.content.pm.PackageManager.PERMISSION_GRANTED }
         if (needed.isEmpty()) action() else { pendingCall = action; callPermissions.launch(needed.toTypedArray()) }
+    }
+    val groupCallActions = remember {
+        object : com.kirox.app.ui.call.GroupCallActions {
+            override fun setMuted(muted: Boolean) = telegramViewModel.groupCalls.setMuted(muted)
+            override fun leave() = telegramViewModel.groupCalls.leave()
+            override fun dismiss() = telegramViewModel.groupCalls.dismiss()
+            override fun setCamera(on: Boolean) {
+                // The video chat service adds the camera type itself when the camera turns on.
+                if (on) withCallPermissions(video = true) { telegramViewModel.groupCalls.setCamera(true) }
+                else telegramViewModel.groupCalls.setCamera(false)
+            }
+            override fun switchCamera() = telegramViewModel.groupCalls.switchCamera()
+            override fun setLocalSink(sink: org.webrtc.VideoSink?) = telegramViewModel.groupCalls.setLocalSink(sink)
+            override fun setRemoteSink(endpoint: String, sink: org.webrtc.VideoSink?) = telegramViewModel.groupCalls.setRemoteSink(endpoint, sink)
+        }
     }
     val permittedCallActions = remember(callActions) {
         object : com.kirox.app.ui.call.CallActions by callActions {

@@ -48,11 +48,17 @@ interface GroupCallActions {
     fun setMuted(muted: Boolean)
     fun leave()
     fun dismiss()
+    /** Turning the camera on asks for the CAMERA permission first. */
+    fun setCamera(on: Boolean) {}
+    fun switchCamera() {}
+    fun setLocalSink(sink: org.webrtc.VideoSink?) {}
+    fun setRemoteSink(endpoint: String, sink: org.webrtc.VideoSink?) {}
 }
 
 /**
- * Video chat of a group or channel, voice only: members in a grid with a ring around whoever speaks,
- * microphone, sound route and leave. Fusion style on a black stage, like the 1:1 call.
+ * Video chat of a group or channel: members in a grid with a ring around whoever speaks; cameras that
+ * are on (ours and up to four others) replace the avatar. Microphone, camera, sound route and leave.
+ * Fusion style on a black stage, like the 1:1 call.
  */
 @Composable
 fun GroupCallScreen(call: TelegramGroupCall, actions: GroupCallActions) {
@@ -82,13 +88,28 @@ fun GroupCallScreen(call: TelegramGroupCall, actions: GroupCallActions) {
         }
         Box(Modifier.fillMaxWidth().weight(1f)) {
             if (call.members.isEmpty() && failed == null) CircularProgressIndicator(Modifier.align(Alignment.Center).size(28.dp), color = Color.White, strokeWidth = 2.dp)
-            LazyVerticalGrid(GridCells.Adaptive(96.dp), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(call.members, key = { it.key }) { member -> MemberTile(member) }
+            val anyVideo = call.cameraOn || call.members.any { it.videoEndpoint != null }
+            LazyVerticalGrid(
+                GridCells.Adaptive(if (anyVideo) 150.dp else 96.dp), contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(call.members, key = { it.key }) { member ->
+                    when {
+                        member.isSelf && call.cameraOn -> VideoTile(member, mirror = call.frontCamera, attach = actions::setLocalSink)
+                        member.videoEndpoint != null -> {
+                            val endpoint = member.videoEndpoint
+                            VideoTile(member, mirror = false) { sink -> actions.setRemoteSink(endpoint, sink) }
+                        }
+                        else -> MemberTile(member)
+                    }
+                }
             }
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Top) {
             if (failed == null) {
                 GroupButton(route.label, active = route != CallAudioRoute.Earpiece) { router.toggle() }
+                if (call.canEnableVideo || call.cameraOn) GroupButton(if (call.cameraOn) "Камера" else "Включить камеру", active = call.cameraOn, icon = "📷") { actions.setCamera(!call.cameraOn) }
+                if (call.cameraOn) GroupButton("Повернуть", active = false, icon = "🔄") { actions.switchCamera() }
                 GroupButton(
                     if (!call.canUnmute) "Микрофон выключен админом" else if (call.muted) "Включить микрофон" else "Микрофон",
                     active = !call.muted, enabled = call.canUnmute
@@ -115,8 +136,37 @@ private fun MemberTile(member: GroupCallMember) {
     }
 }
 
+/**
+ * A participant's camera (or ours): a WebRTC renderer handed to the engine through [attach] while
+ * on screen, released when it leaves.
+ */
 @Composable
-private fun GroupButton(label: String, active: Boolean, enabled: Boolean = true, danger: Boolean = false, onClick: () -> Unit) {
+private fun VideoTile(member: GroupCallMember, mirror: Boolean, attach: (org.webrtc.VideoSink?) -> Unit) {
+    val context = LocalContext.current
+    val renderer = androidx.compose.runtime.remember { org.webrtc.TextureViewRenderer(context) }
+    androidx.compose.runtime.DisposableEffect(renderer) {
+        renderer.init(com.kirox.app.voip.VideoCapturerDevice.getSharedEGLContext(), null)
+        renderer.setScalingType(org.webrtc.RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+        attach(renderer)
+        onDispose { attach(null); renderer.release() }
+    }
+    androidx.compose.runtime.LaunchedEffect(mirror) { renderer.setMirror(mirror) }
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            Modifier.fillMaxWidth().height(200.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp)).background(Color(0xFF15171B))
+                .border(if (member.speaking) 3.dp else 0.dp, if (member.speaking) Color.White else Color.Transparent, androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+        ) {
+            androidx.compose.ui.viewinterop.AndroidView({ renderer }, Modifier.fillMaxSize())
+            Text(
+                member.name + if (member.muted) " · 🔇" else "", color = Color.White, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.align(Alignment.BottomStart).padding(8.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp)).background(Color(0x99000000)).padding(horizontal = 6.dp, vertical = 2.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun GroupButton(label: String, active: Boolean, enabled: Boolean = true, danger: Boolean = false, icon: String? = null, onClick: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 4.dp)) {
         Box(
             Modifier.size(64.dp).clip(CircleShape)
@@ -125,7 +175,7 @@ private fun GroupButton(label: String, active: Boolean, enabled: Boolean = true,
             contentAlignment = Alignment.Center
         ) {
             Text(
-                when { danger -> "✕"; label.startsWith("Микрофон") || label.startsWith("Включить") -> if (active) "🎙" else "🔇"; else -> "🔊" },
+                icon ?: when { danger -> "✕"; label.startsWith("Микрофон") || label.startsWith("Включить микрофон") -> if (active) "🎙" else "🔇"; else -> "🔊" },
                 fontSize = 22.sp, color = if (active && !danger) Color.Black else Color.White
             )
         }

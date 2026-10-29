@@ -14,8 +14,14 @@ data class GroupCallMember(
     val isSelf: Boolean,
     val speaking: Boolean,
     val muted: Boolean,
-    val handRaised: Boolean
+    val handRaised: Boolean,
+    /** Endpoint of their camera stream while it is on, for the renderer. */
+    val videoEndpoint: String? = null
 )
+
+/** TDLib source groups → "SIM:1,2,3;FID:1,4" for the engine. */
+internal fun encodeSourceGroups(groups: Array<TdApi.GroupCallVideoSourceGroup>?): String =
+    groups.orEmpty().filter { it.sourceIds.isNotEmpty() }.joinToString(";") { group -> group.semantics + ":" + group.sourceIds.joinToString(",") }
 
 sealed interface GroupCallPhase {
     data object Joining : GroupCallPhase
@@ -33,7 +39,11 @@ data class TelegramGroupCall(
     /** Whether Telegram lets us speak (admins can mute everyone). */
     val canUnmute: Boolean,
     val members: List<GroupCallMember>,
-    val count: Int
+    val count: Int,
+    val cameraOn: Boolean = false,
+    val frontCamera: Boolean = true,
+    /** Whether Telegram allows this account to turn its camera on here. */
+    val canEnableVideo: Boolean = true
 )
 
 /**
@@ -50,6 +60,8 @@ class TelegramGroupCallRepository(private val client: TelegramClient, private va
     private val participants = LinkedHashMap<String, TdApi.GroupCallParticipant>()
     private val speakingSources = HashSet<Int>()
     private var mySource = 0
+    /** Last streams requested from the engine, so it is told only about changes. */
+    private var requestedVideo: List<NativeGroupCall.VideoChannel> = emptyList()
 
     init {
         client.addUpdateHandler { update ->
@@ -68,7 +80,7 @@ class TelegramGroupCallRepository(private val client: TelegramClient, private va
                     val group = update.groupCall
                     if (!group.isActive) { end("Видеочат завершён"); return@addUpdateHandler }
                     if (group.needRejoin && current.phase == GroupCallPhase.Connected) rejoin()
-                    _call.value = current.copy(title = group.title.ifBlank { current.title }, count = group.participantCount)
+                    _call.value = current.copy(title = group.title.ifBlank { current.title }, count = group.participantCount, canEnableVideo = group.canEnableVideo)
                 }
                 is TdApi.UpdateAuthorizationState -> if (update.authorizationState is TdApi.AuthorizationStateClosed) end(null)
             }
@@ -112,11 +124,15 @@ class TelegramGroupCallRepository(private val client: TelegramClient, private va
     private fun sendJoin(groupCallId: Int, audioSourceId: Int, payload: String) {
         mySource = audioSourceId
         val muted = _call.value?.muted ?: true
-        client.send(TdApi.JoinVideoChat(groupCallId, null, TdApi.GroupCallJoinParameters(audioSourceId, payload, muted, false), "")) { result ->
+        val camera = _call.value?.cameraOn ?: false
+        client.send(TdApi.JoinVideoChat(groupCallId, null, TdApi.GroupCallJoinParameters(audioSourceId, payload, muted, camera), "")) { result ->
             when (result) {
                 is TdApi.Text -> {
                     engine?.setJoinResponse(result.text)
                     engine?.setMuted(muted)
+                    // After a rejoin the camera keeps going.
+                    if (camera) _call.value?.let { engine?.setVideo(true, it.frontCamera) }
+                    requestedVideo = emptyList()
                     client.send(TdApi.LoadGroupCallParticipants(groupCallId, PARTICIPANTS_LIMIT))
                 }
                 is TdApi.Error -> end(humanError(result))
@@ -140,6 +156,28 @@ class TelegramGroupCallRepository(private val client: TelegramClient, private va
         }
     }
 
+    /** Turns our camera on or off (needs CAMERA permission, asked by the screen). */
+    fun setCamera(on: Boolean) = client.post {
+        val current = _call.value ?: return@post
+        if (on && !current.canEnableVideo) return@post
+        _call.value = current.copy(cameraOn = on)
+        engine?.setVideo(on, current.frontCamera)
+        if (current.groupCallId != 0) client.send(TdApi.ToggleGroupCallIsMyVideoEnabled(current.groupCallId, on))
+    }
+
+    fun switchCamera() = client.post {
+        val current = _call.value ?: return@post
+        val front = !current.frontCamera
+        _call.value = current.copy(frontCamera = front)
+        if (current.cameraOn) engine?.setVideo(true, front)
+    }
+
+    /** Renderer of our own camera; null detaches it. */
+    fun setLocalSink(sink: org.webrtc.VideoSink?) { engine?.setLocalSink(sink) }
+
+    /** Renderer of a participant's camera by its endpoint; null detaches it. */
+    fun setRemoteSink(endpoint: String, sink: org.webrtc.VideoSink?) { engine?.setRemoteSink(endpoint, sink) }
+
     fun leave() = client.post {
         val current = _call.value ?: return@post
         if (current.groupCallId != 0) client.send(TdApi.LeaveGroupCall(current.groupCallId))
@@ -152,7 +190,7 @@ class TelegramGroupCallRepository(private val client: TelegramClient, private va
     private fun end(message: String?) {
         engine?.stop()
         engine = null
-        participants.clear(); speakingSources.clear()
+        participants.clear(); speakingSources.clear(); requestedVideo = emptyList()
         val current = _call.value
         _call.value = if (message != null && current != null) current.copy(phase = GroupCallPhase.Failed(message), members = emptyList()) else null
     }
@@ -168,8 +206,19 @@ class TelegramGroupCallRepository(private val client: TelegramClient, private va
                 isSelf = p.isCurrentUser,
                 speaking = p.isSpeaking || (p.audioSourceId != 0 && p.audioSourceId in speakingSources),
                 muted = p.isMutedForAllUsers || p.isMutedForCurrentUser || (p.isCurrentUser && current.muted),
-                handRaised = p.isHandRaised
+                handRaised = p.isHandRaised,
+                videoEndpoint = p.videoInfo?.takeIf { !it.isPaused && !p.isCurrentUser }?.endpointId?.takeIf { it.isNotBlank() }
             )
+        }
+        // Receive at most MAX_VIDEOS cameras: each stream costs bandwidth and a decoder.
+        val video = participants.values.asSequence()
+            .filter { !it.isCurrentUser && it.videoInfo != null && !it.videoInfo.isPaused }
+            .take(MAX_VIDEOS)
+            .map { NativeGroupCall.VideoChannel(it.audioSourceId, it.videoInfo.endpointId, encodeSourceGroups(it.videoInfo.sourceGroups)) }
+            .toList()
+        if (video != requestedVideo) {
+            requestedVideo = video
+            engine?.setVideoChannels(video, full = video.size == 1)
         }
         _call.value = current.copy(
             members = members,
@@ -199,5 +248,6 @@ class TelegramGroupCallRepository(private val client: TelegramClient, private va
     private companion object {
         const val PARTICIPANTS_LIMIT = 100
         const val SPEAKING_LEVEL = 0.05f
+        const val MAX_VIDEOS = 4
     }
 }
