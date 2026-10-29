@@ -205,6 +205,16 @@ class ScreenshotTest(private val palette: FusionPalette) {
         PhoneLoginScreen(PhoneEntryState.create(ApplicationProvider.getApplicationContext()), onChooseCountry = {})
     }
 
+    private val auth by lazy { com.kirox.app.telegram.TelegramAuthRepository(com.kirox.app.telegram.TelegramClient(ApplicationProvider.getApplicationContext())) }
+
+    @Test fun code() = shot("10_code") {
+        com.kirox.app.ui.auth.TelegramAuthStepScreen(com.kirox.app.telegram.TelegramAuthState.WaitCode("77011234567", 5, canResend = true, timeout = 48), auth, busy = false, error = null, recoveryCodeSent = false)
+    }
+
+    @Test fun password() = shot("11_password") {
+        com.kirox.app.ui.auth.TelegramAuthStepScreen(com.kirox.app.telegram.TelegramAuthState.WaitPassword("", hasRecoveryEmail = false, recoveryEmailPattern = ""), auth, busy = false, error = null, recoveryCodeSent = false)
+    }
+
     @Test fun call() = shot("09_call") {
         CallScreen(
             TelegramActiveCall(7, 2, "Анна", null, isOutgoing = true, isVideo = false, phase = CallPhase.Active(System.currentTimeMillis() - 95_000), emojis = listOf("🐶", "🚀", "🍀", "🎧")),
