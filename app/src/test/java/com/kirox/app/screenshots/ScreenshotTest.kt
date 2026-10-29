@@ -6,8 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -17,7 +15,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
-import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.robolectric.ParameterizedRobolectricTestRunner
 import com.kirox.app.phone.PhoneEntryState
 import com.kirox.app.settings.BubbleShape
 import com.kirox.app.settings.ChatDensity
@@ -63,10 +61,17 @@ import java.io.File
  * Renders the main screens with sample data to PNG files in build/screenshots (Robolectric, no
  * device). Only a look at the layout: no Telegram connection, photos or real data.
  */
-@RunWith(AndroidJUnit4::class)
+@RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [35], qualifiers = "w400dp-h860dp-xxhdpi")
-class ScreenshotTest {
+class ScreenshotTest(private val palette: FusionPalette) {
+    companion object {
+        /** Each Fusion UI v2 style gets its own run: one composition per screenshot keeps captures fresh. */
+        @JvmStatic
+        @ParameterizedRobolectricTestRunner.Parameters(name = "{0}")
+        fun styles(): List<Array<Any>> = listOf(arrayOf(FusionPalette.Expressive), arrayOf(FusionPalette.Glass))
+    }
+
     @get:Rule val rule = createComposeRule()
 
     private val now = (System.currentTimeMillis() / 1000).toInt()
@@ -131,29 +136,17 @@ class ScreenshotTest {
         initialTab = tab
     )
 
-    private var palette = FusionPalette.Expressive
-
-    /**
-     * Draws [content] in each Fusion UI v2 style and saves `<style>_<name>.png`. Animations are off
-     * as in the app (motion factor 0).
-     */
+    /** Draws [content] in [palette] with animations off, as in the app, and saves `<style>_<name>.png`. */
     private fun shot(name: String, content: @Composable () -> Unit) {
         // Only in the screenshots workflow; the normal unit test run skips it.
         org.junit.Assume.assumeTrue(System.getenv("KIROX_SCREENSHOTS") == "true")
-        var current by androidx.compose.runtime.mutableStateOf(FusionPalette.Expressive)
         rule.mainClock.autoAdvance = false
         rule.setContent {
-            FusionTheme(current) {
-                androidx.compose.runtime.CompositionLocalProvider(com.kirox.app.ui.theme.LocalMotionFactor provides 0f) {
-                    androidx.compose.runtime.key(current) { content() }
-                }
+            FusionTheme(palette) {
+                androidx.compose.runtime.CompositionLocalProvider(com.kirox.app.ui.theme.LocalMotionFactor provides 0f) { content() }
             }
         }
-        for (style in listOf(FusionPalette.Expressive, FusionPalette.Glass)) {
-            palette = style
-            current = style
-            capture("${style.name.lowercase()}_$name")
-        }
+        capture("${palette.name.lowercase()}_$name")
     }
 
     private fun capture(name: String) {

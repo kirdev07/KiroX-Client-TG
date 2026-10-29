@@ -255,7 +255,7 @@ internal fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier
             .fillMaxWidth()
             .heightIn(min = 56.dp)
             .clip(RoundedCornerShape(18.dp))
-            .background(KiroXWhite)
+            .background(Fusion.colors.accent)
             .clickable(interactionSource = interaction, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
