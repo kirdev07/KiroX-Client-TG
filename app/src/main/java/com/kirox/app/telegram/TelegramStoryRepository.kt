@@ -22,7 +22,7 @@ class TelegramStoryRepository(
             when (update) {
                 is TdApi.UpdateAuthorizationState -> when (update.authorizationState) {
                     is TdApi.AuthorizationStateReady -> loadActive(remaining = MAX_PAGES)
-                    is TdApi.AuthorizationStateClosed -> { active.clear(); _chats.value = emptyList() }
+                    is TdApi.AuthorizationStateClosed -> if (!client.paused) { active.clear(); _chats.value = emptyList() }
                 }
                 is TdApi.UpdateChatActiveStories -> {
                     val stories = update.activeStories
@@ -82,6 +82,34 @@ class TelegramStoryRepository(
         }
     }
 
+    /** Sets or (with null) removes our emoji reaction on a story. */
+    suspend fun react(chatId: Long, storyId: Int, emoji: String?) {
+        client.query(TdApi.SetStoryReaction(chatId, storyId, emoji?.let { TdApi.ReactionTypeEmoji(it) }, true))
+    }
+
+    /** Answers a story in a private message to its poster. */
+    suspend fun reply(chatId: Long, storyId: Int, text: String) {
+        client.query(TdApi.SendMessage(chatId, null, TdApi.InputMessageReplyToStory(chatId, storyId), null, null,
+            TdApi.InputMessageText(TdApi.FormattedText(text, emptyArray()), null, true)))
+    }
+
+    suspend fun delete(chatId: Long, storyId: Int) { client.query(TdApi.DeleteStory(chatId, storyId)) }
+
+    /** Who viewed an own story (and their reactions), newest first, up to [limit]. */
+    suspend fun viewers(storyId: Int, limit: Int = 100): List<TelegramStoryViewer> {
+        val found = client.query(TdApi.GetStoryInteractions(storyId, "", false, false, true, "", limit))
+        return found.interactions.mapNotNull { interaction ->
+            val userId = (interaction.actorId as? TdApi.MessageSenderUser)?.userId ?: return@mapNotNull null
+            val user = runCatching { client.query(TdApi.GetUser(userId)) }.getOrNull() ?: return@mapNotNull null
+            TelegramStoryViewer(
+                listOf(user.firstName, user.lastName).filter { it.isNotBlank() }.joinToString(" "),
+                user.profilePhoto?.small?.toRef(),
+                interaction.interactionDate,
+                ((interaction.type as? TdApi.StoryInteractionTypeView)?.chosenReactionType as? TdApi.ReactionTypeEmoji)?.emoji
+            )
+        }
+    }
+
     private companion object {
         const val STORY_PERIOD_S = 86400
         const val MAX_PAGES = 5
@@ -104,6 +132,13 @@ internal fun toStory(story: TdApi.Story): TelegramStory {
             else -> 9f / 16f
         },
         isVideo = video != null,
-        caption = story.caption?.text.orEmpty()
+        caption = story.caption?.text.orEmpty(),
+        video = video?.video?.toRef(),
+        durationS = video?.duration ?: 0.0,
+        canReply = story.canBeReplied,
+        canDelete = story.canBeDeleted,
+        canSeeViews = story.canGetInteractions,
+        viewCount = story.interactionInfo?.viewCount ?: 0,
+        chosenReaction = (story.chosenReactionType as? TdApi.ReactionTypeEmoji)?.emoji
     )
 }

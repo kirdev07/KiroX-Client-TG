@@ -51,6 +51,10 @@ interface TelegramChatListActions {
     fun markRead(chatId: Long)
     fun markUnread(chatId: Long)
     suspend fun search(query: String): List<TelegramChatItem>
+    /** Messages in all chats matching the query, newest first. */
+    suspend fun searchMessages(query: String): List<com.kirox.app.telegram.TelegramFoundMessage> = emptyList()
+    /** After opening a chat from a message result: scroll it to that message. */
+    fun jumpToMessage(messageId: Long) {}
 }
 
 /** Bottom toast; [actionLabel] adds a tappable action such as «Отменить». */
@@ -121,31 +125,67 @@ internal fun ChatContextSheet(chat: TelegramChatItem, onDismiss: () -> Unit, onP
 
 @Composable
 private fun SheetAction(icon: KiroXIcon, title: String, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 52.dp).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-        IconGlyph(icon, null, Modifier.size(22.dp), Fusion.colors.textPrimary)
-        Spacer(Modifier.width(16.dp))
-        Text(title, color = Fusion.colors.textPrimary, fontSize = 15.sp)
-    }
+    // Material 3 list item on the sheet surface.
+    androidx.compose.material3.ListItem(
+        headlineContent = { Text(title) },
+        leadingContent = { IconGlyph(icon, null, Modifier.size(22.dp), Fusion.colors.textPrimary) },
+        colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Fusion.colors.surface1, headlineColor = Fusion.colors.textPrimary),
+        modifier = Modifier.clickable(onClick = onClick)
+    )
 }
 
-/** Search over all chats TDLib knows; debounced so typing does not flood the client. */
+/**
+ * Global search: chats (own, server and public) and then messages from all chats, debounced so
+ * typing does not flood the client.
+ */
 @Composable
-internal fun ChatSearchResults(query: String, search: suspend (String) -> List<TelegramChatItem>, row: @Composable (TelegramChatItem) -> Unit) {
+internal fun ChatSearchResults(
+    query: String,
+    search: suspend (String) -> List<TelegramChatItem>,
+    searchMessages: suspend (String) -> List<com.kirox.app.telegram.TelegramFoundMessage> = { emptyList() },
+    onOpenMessage: (com.kirox.app.telegram.TelegramFoundMessage) -> Unit = {},
+    row: @Composable (TelegramChatItem) -> Unit
+) {
     var results by remember { mutableStateOf<List<TelegramChatItem>?>(null) }
+    var messages by remember { mutableStateOf<List<com.kirox.app.telegram.TelegramFoundMessage>>(emptyList()) }
     LaunchedEffect(query) {
         val q = query.trim()
+        messages = emptyList()
         if (q.isEmpty()) { results = emptyList(); return@LaunchedEffect }
         results = null
         delay(250)
         results = search(q)
+        if (q.length >= 2) messages = searchMessages(q)
     }
     val current = results
     when {
-        query.isBlank() -> Hint("Введите название чата или имя")
+        query.isBlank() -> Hint("Введите название чата, имя или текст сообщения")
         current == null -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(Modifier.size(24.dp), color = Fusion.colors.textSecondary, strokeWidth = 2.dp) }
-        current.isEmpty() -> Hint("Ничего не найдено")
-        else -> LazyColumn(Modifier.fillMaxSize()) { items(current, key = { it.id }) { row(it) } }
+        current.isEmpty() && messages.isEmpty() -> Hint("Ничего не найдено")
+        else -> LazyColumn(Modifier.fillMaxSize()) {
+            if (current.isNotEmpty()) item(key = "chats") { SectionTitle("Чаты и каналы") }
+            items(current, key = { it.id }) { row(it) }
+            if (messages.isNotEmpty()) item(key = "messages") { SectionTitle("Сообщения") }
+            items(messages, key = { "m${it.chatId}_${it.messageId}" }) { found ->
+                Row(Modifier.fillMaxWidth().clickable { onOpenMessage(found) }.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    com.kirox.app.ui.components.TelegramAvatar(found.chatTitle, found.photo, 44.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(found.chatTitle, color = Fusion.colors.textPrimary, fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            Text(com.kirox.app.ui.format.TelegramFormat.chatTime(found.date), color = Fusion.colors.textSecondary, fontSize = 12.sp)
+                        }
+                        Text(found.text, color = Fusion.colors.textSecondary, fontSize = 14.sp, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
     }
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(text, color = Fusion.colors.textSecondary, fontSize = 13.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
 }
 
 @Composable

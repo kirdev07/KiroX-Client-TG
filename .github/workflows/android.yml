@@ -1,0 +1,93 @@
+name: Android build
+
+on:
+  push:
+    branches: [main, "feature/**", "fix/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The release key and Telegram API keys are not in the repository; the debug build runs without them.
+      - name: Unit tests
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon :app:testDebugUnitTest 2>&1 | tee -a build.log
+
+      - name: Debug APK
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon :app:assembleDebug 2>&1 | tee -a build.log
+
+      # Compiler errors and failed tests as annotations, readable without the full log.
+      - name: Report errors
+        if: failure()
+        run: |
+          grep -E '^e: |error:|FAILED|What went wrong' -A3 build.log | head -60 | while IFS= read -r line; do
+            echo "::error title=build::${line//%/%25}"
+          done
+          for f in app/build/test-results/testDebugUnitTest/*.xml; do
+            [ -f "$f" ] || continue
+            grep -o '<testcase name="[^"]*" classname="[^"]*"[^>]*>[[:space:]]*<failure message="[^"]*"' "$f" | head -20 | while IFS= read -r line; do
+              echo "::error title=test::${line//%/%25}"
+            done
+          done
+
+      # R8 build as in release (signed with the debug key): catches what breaks only when minified.
+      - name: Release (R8) build
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon :app:assembleReleaseCheck 2>&1 | tee -a build.log
+
+      - name: Lint
+        if: always()
+        run: ./gradlew --no-daemon :app:lintDebug
+        continue-on-error: true
+
+      # Lint errors as annotations; warnings stay in the uploaded report.
+      - name: Report lint errors
+        if: always()
+        run: |
+          f=app/build/reports/lint-results-debug.txt
+          [ -f "$f" ] || exit 0
+          grep -E ': Error: ' "$f" | head -40 | while IFS= read -r line; do echo "::error title=lint::${line//%/%25}"; done
+          grep -cE ': Warning: ' "$f" | xargs -I{} echo "::notice title=lint::{} warnings, see lint-results-debug in the artifact"
+          # Warnings too, 15 per annotation (GitHub keeps only a few annotations per step).
+          grep -E ': Warning: ' "$f" | sed "s|$PWD/||" | split -l 15 - /tmp/lintw_
+          for part in /tmp/lintw_*; do
+            [ -f "$part" ] || continue
+            body=$(sed 's/%/%25/g' "$part" | awk '{printf "%s%%0A", $0}')
+            echo "::notice title=lint-warnings::$body"
+          done
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kirox-debug
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/releaseCheck/*.apk
+            app/build/outputs/mapping/releaseCheck/mapping.txt
+            app/build/reports/
+          if-no-files-found: ignore
+          retention-days: 14

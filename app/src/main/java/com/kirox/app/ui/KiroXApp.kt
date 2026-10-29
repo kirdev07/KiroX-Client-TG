@@ -68,10 +68,16 @@ fun KiroXApp() {
     var splashVisible by rememberSaveable { mutableStateOf(true) }
     val stack = rememberSaveable(saver = BackStack.Saver) { BackStack(listOf(Screen.Phone)) }
     var openChatId by rememberSaveable { mutableLongStateOf(0L) }
+    /** Comment thread or forum topic shown on Screen.Thread; lost with the process, then Thread pops. */
+    var openThread by rememberSaveable(stateSaver = ThreadSpec.Saver) { mutableStateOf<ThreadSpec?>(null) }
     val history by telegramViewModel.messages.history.collectAsStateWithLifecycle()
+    val autoDownloadRule by telegramViewModel.autoDownload.rule.collectAsStateWithLifecycle()
     val messageError by telegramViewModel.messages.error.collectAsStateWithLifecycle()
     val callsState by telegramViewModel.calls.state.collectAsStateWithLifecycle()
+    // Ringtone, audio route and proximity lock follow the call in CallMedia, not this screen state.
     val activeCall by telegramViewModel.voip.call.collectAsStateWithLifecycle()
+    val groupCall by telegramViewModel.groupCalls.call.collectAsStateWithLifecycle()
+    var groupCallNotice by remember { mutableStateOf<String?>(null) }
     val callActions = remember {
         object : com.kirox.app.ui.call.CallActions {
             override fun accept() = telegramViewModel.voip.accept()
@@ -85,13 +91,31 @@ fun KiroXApp() {
     }
     // Microphone (and camera for video) are asked right before a call starts or is answered.
     var pendingCall by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var pendingNeedsCamera by remember { mutableStateOf(false) }
+    var pendingWantsVideo by remember { mutableStateOf(false) }
+    fun granted(permission: String) =
+        androidx.core.content.ContextCompat.checkSelfPermission(context, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
     val callPermissions = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
-    ) { granted ->
+    ) { _ ->
         val action = pendingCall
         pendingCall = null
-        if (granted[android.Manifest.permission.RECORD_AUDIO] == true) action?.invoke()
-        else android.widget.Toast.makeText(context, "Без доступа к микрофону звонок невозможен", android.widget.Toast.LENGTH_LONG).show()
+        val camera = granted(android.Manifest.permission.CAMERA)
+        when {
+            !granted(android.Manifest.permission.RECORD_AUDIO) ->
+                android.widget.Toast.makeText(context, "Без доступа к микрофону звонок невозможен", android.widget.Toast.LENGTH_LONG).show()
+            // Turning the camera on needs the camera; nothing to do without it.
+            pendingNeedsCamera && !camera ->
+                android.widget.Toast.makeText(context, "Нет доступа к камере", android.widget.Toast.LENGTH_SHORT).show()
+            else -> {
+                action?.invoke()
+                // A video call without camera access goes on as a voice call with the camera off.
+                if (pendingWantsVideo && !camera) {
+                    telegramViewModel.voip.setCamera(false)
+                    android.widget.Toast.makeText(context, "Нет доступа к камере — звонок без видео", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
     // Android 13+: ask once after sign-in, so new-message notifications can be shown.
     val notificationPermission = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -102,30 +126,61 @@ fun KiroXApp() {
             androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
         ) notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
     }
-    fun withCallPermissions(video: Boolean, action: () -> Unit) {
+    fun withCallPermissions(video: Boolean, cameraOnly: Boolean = false, action: () -> Unit) {
         val needed = listOfNotNull(
             android.Manifest.permission.RECORD_AUDIO,
             if (video) android.Manifest.permission.CAMERA else null,
             // The "call in progress" notification; the call works without it.
-            if (android.os.Build.VERSION.SDK_INT >= 33) android.Manifest.permission.POST_NOTIFICATIONS else null
+            if (android.os.Build.VERSION.SDK_INT >= 33) android.Manifest.permission.POST_NOTIFICATIONS else null,
+            // Bluetooth headsets (12+) and, on Android 17, direct calls over the local Wi-Fi. Both are
+            // "nearby devices": one prompt. The call works without them, over Telegram's servers.
+            if (android.os.Build.VERSION.SDK_INT >= 31) android.Manifest.permission.BLUETOOTH_CONNECT else null,
+            if (android.os.Build.VERSION.SDK_INT >= 37) "android.permission.ACCESS_LOCAL_NETWORK" else null
         )
             .filter { androidx.core.content.ContextCompat.checkSelfPermission(context, it) != android.content.pm.PackageManager.PERMISSION_GRANTED }
-        if (needed.isEmpty()) action() else { pendingCall = action; callPermissions.launch(needed.toTypedArray()) }
+        if (needed.isEmpty()) action() else {
+            pendingCall = action
+            pendingNeedsCamera = cameraOnly
+            pendingWantsVideo = video && !cameraOnly
+            callPermissions.launch(needed.toTypedArray())
+        }
+    }
+    val groupCallActions = remember {
+        object : com.kirox.app.ui.call.GroupCallActions {
+            override fun setMuted(muted: Boolean) = telegramViewModel.groupCalls.setMuted(muted)
+            override fun leave() = telegramViewModel.groupCalls.leave()
+            override fun dismiss() = telegramViewModel.groupCalls.dismiss()
+            override fun setCamera(on: Boolean) {
+                // The video chat service adds the camera type itself when the camera turns on.
+                if (on) withCallPermissions(video = true, cameraOnly = true) { telegramViewModel.groupCalls.setCamera(true) }
+                else telegramViewModel.groupCalls.setCamera(false)
+            }
+            override fun switchCamera() = telegramViewModel.groupCalls.switchCamera()
+            override fun setLocalSink(sink: org.webrtc.VideoSink?) = telegramViewModel.groupCalls.setLocalSink(sink)
+            override fun setRemoteSink(endpoint: String, sink: org.webrtc.VideoSink?) = telegramViewModel.groupCalls.setRemoteSink(endpoint, sink)
+            override fun startScreenShare(consent: android.content.Intent) = telegramViewModel.groupCalls.startScreenShare(consent)
+            override fun stopScreenShare() = telegramViewModel.groupCalls.stopScreenShare()
+        }
+    }
+    // Screen sharing problems (Telegram refused, capture failed) as a short toast.
+    val groupCallError by telegramViewModel.groupCalls.error.collectAsStateWithLifecycle()
+    LaunchedEffect(groupCallError) {
+        groupCallError?.let { android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show(); telegramViewModel.groupCalls.clearError() }
     }
     val permittedCallActions = remember(callActions) {
         object : com.kirox.app.ui.call.CallActions by callActions {
             override fun accept() {
                 val video = telegramViewModel.voip.call.value?.isVideo == true
-                withCallPermissions(video) { callActions.accept() }
+                withCallPermissions(video) { telegramViewModel.groupCalls.leave(); callActions.accept() }
             }
             override fun setCamera(on: Boolean) {
-                if (on) withCallPermissions(video = true) { callActions.setCamera(true) } else callActions.setCamera(false)
+                if (on) withCallPermissions(video = true, cameraOnly = true) { callActions.setCamera(true) } else callActions.setCamera(false)
             }
         }
     }
     val storyChats by telegramViewModel.stories.storyChats.collectAsStateWithLifecycle()
     val storyActions = remember { TelegramStoryActionsImpl(telegramViewModel.stories) }
-    val chatActions = remember { TelegramChatListActionsImpl(telegramViewModel.chats) }
+    val chatActions = remember { TelegramChatListActionsImpl(telegramViewModel.chats, telegramViewModel.messages) }
     val chatMenu = remember {
         object : com.kirox.app.ui.chat.TelegramChatMenuActions {
             override suspend fun isMuted(chatId: Long) = telegramViewModel.chats.isMuted(chatId)
@@ -148,7 +203,27 @@ fun KiroXApp() {
     val chatDensity by settings.chatDensity.collectAsStateWithLifecycle()
     val weakDevice = remember { com.kirox.app.settings.prefersLightEffects(context) }
     val scope = rememberCoroutineScope()
-    fun openChat(id: Long) { openChatId = id; telegramViewModel.messages.open(id); stack.push(Screen.Conversation) }
+    fun openChat(id: Long) {
+        openChatId = id
+        telegramViewModel.messages.open(id)
+        // One open conversation id: a chat opened from inside another (a t.me link in comments)
+        // replaces it, so Back never lands on a Conversation that shows a different chat.
+        if (Screen.Conversation in stack || Screen.Thread in stack) stack.resetTo(Screen.Chats, Screen.Conversation)
+        else stack.push(Screen.Conversation)
+    }
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+    // t.me and tg: links open the chat inside KiroX; anything else (and unknown names) in the browser.
+    val linkOpener: (String) -> Unit = remember(uriHandler) {
+        { url ->
+            val link = com.kirox.app.telegram.telegramLinkOf(url)
+            if (link == null) runCatching { uriHandler.openUri(url) }
+            else scope.launch {
+                val chatId = telegramViewModel.resolveLink(link)
+                if (chatId != null) openChat(chatId)
+                else if (link is com.kirox.app.telegram.TelegramLink.Username) runCatching { uriHandler.openUri(url) }
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         phoneState = withContext(Dispatchers.Default) { PhoneEntryState.create(context) }
@@ -164,6 +239,15 @@ fun KiroXApp() {
                 if (stack.current.graph == NavGraph.Main || stack.current == Screen.AuthStep) stack.resetTo(Screen.Phone)
             else -> stack.resetTo(Screen.Phone, Screen.AuthStep)
         }
+    }
+
+    // A tapped message notification opens its chat once the chat list is up.
+    val notificationChat by com.kirox.app.notify.NotificationTarget.chat.collectAsStateWithLifecycle()
+    LaunchedEffect(notificationChat, authRevision) {
+        val target = notificationChat ?: return@LaunchedEffect
+        if (telegramAuth != TelegramAuthState.Ready || stack.current.graph != NavGraph.Main) return@LaunchedEffect
+        com.kirox.app.notify.NotificationTarget.chat.value = null
+        openChat(target)
     }
 
     BackHandler(enabled = stack.canPop) { stack.pop() }
@@ -202,11 +286,14 @@ fun KiroXApp() {
                             onQrLogin = telegramViewModel.auth::requestQr,
                             externalStatus = telegramBlocked ?: (telegramAuth as? TelegramAuthState.Blocked)?.message ?: telegramError,
                             busy = telegramBusy,
-                            onCancel = if (accounts.size > 1) tdClient::cancelNewAccount else null
+                            onCancel = if (accounts.size > 1 && tdClient.isAddingAccount()) tdClient::cancelNewAccount else null
                         )
                         Screen.Countries -> CountryPickerScreen(state, onBack = { stack.pop() })
                         Screen.AuthStep -> TelegramAuthStepScreen(telegramAuth, telegramViewModel.auth, telegramBusy, telegramError, recoveryCodeSent)
-                        Screen.Chats -> CompositionLocalProvider(LocalTelegramFiles provides telegramViewModel.files) {
+                        Screen.Chats -> CompositionLocalProvider(
+                            LocalTelegramFiles provides telegramViewModel.files,
+                            com.kirox.app.ui.home.LocalChatActivityLines provides telegramViewModel.activity.lines.collectAsStateWithLifecycle().value
+                        ) {
                             TelegramMainScreen(
                                 chatLists, chatActions, chatError, telegramViewModel.chats::clearError, contacts, contactsLoading, profile, connection,
                                 onOpenChat = ::openChat,
@@ -236,31 +323,91 @@ fun KiroXApp() {
                                 weakDevice = weakDevice,
                                 onOpenSavedMessages = { scope.launch { runCatching { telegramViewModel.users.savedMessagesChatId() }.onSuccess(::openChat) } },
                                 onLogOut = telegramViewModel.auth::logOut,
-                                onStartCall = { userId, video -> withCallPermissions(video) { telegramViewModel.voip.start(userId, video) } },
+                                onStartCall = { userId, video -> withCallPermissions(video) { telegramViewModel.groupCalls.leave(); telegramViewModel.voip.start(userId, video) } },
                                 onAddContact = telegramViewModel.users::addContact
                             )
                         }
-                        Screen.Conversation -> CompositionLocalProvider(LocalTelegramFiles provides telegramViewModel.files) {
+                        Screen.Conversation -> CompositionLocalProvider(
+                            LocalTelegramFiles provides telegramViewModel.files,
+                            com.kirox.app.ui.chat.LocalLinkOpener provides linkOpener,
+                            com.kirox.app.ui.chat.LocalAutoDownload provides autoDownloadRule
+                        ) {
                             val chatId = openChatId
                             LaunchedEffect(chatId) { telegramViewModel.messages.open(chatId) }
                             DisposableEffect(chatId) { onDispose { telegramViewModel.messages.close(chatId) } }
-                            val actions = remember { TelegramMessageActions(telegramViewModel.messages) }
+                            val actions = remember { TelegramMessageActions(telegramViewModel.messages, telegramViewModel.activity) }
+                            val activityLines by telegramViewModel.activity.lines.collectAsStateWithLifecycle()
+                            val stickerSource = remember { TelegramStickerSource(telegramViewModel.stickers) }
                             TelegramChatScreen(
-                                history = if (history.chatId == chatId) history else TelegramChatHistory(chatId = chatId),
+                                // A topic of this forum has the same chat id but belongs to the Thread screen.
+                                history = if (history.chatId == chatId && history.threadTitle == null) history else TelegramChatHistory(chatId = chatId),
                                 error = messageError,
                                 onErrorShown = telegramViewModel.messages::clearError,
                                 forwardTargets = chatLists.main.chats,
                                 actions = actions,
                                 onBack = { stack.pop() },
                                 menu = chatMenu,
+                                activityLine = activityLines[chatId],
+                                stickers = stickerSource,
+                                onOpenComments = { postId -> openThread = ThreadSpec.Comments(chatId, postId); stack.push(Screen.Thread) },
+                                onOpenTopic = { topic -> openThread = ThreadSpec.Topic(chatId, topic.id, topic.title); stack.push(Screen.Thread) },
                                 onCall = if (com.kirox.app.ui.call.callsEnabled) { video ->
-                                    withCallPermissions(video) { telegramViewModel.voip.start(chatId, video) }
-                                } else null
+                                    withCallPermissions(video) { telegramViewModel.groupCalls.leave(); telegramViewModel.voip.start(chatId, video) }
+                                } else null,
+                                onGroupCall = if (com.kirox.app.ui.call.callsEnabled) ({
+                                    // One call at a time: both would fight over the microphone and the audio route.
+                                    if (activeCall != null) groupCallNotice = "Сначала завершите текущий звонок"
+                                    else withCallPermissions(false) {
+                                        telegramViewModel.groupCalls.join(chatId)
+                                        // Started now, while KiroX is on screen: Android refuses it from the background.
+                                        com.kirox.app.voip.GroupCallService.start(context)
+                                    }
+                                }) else null
                             )
+                        }
+                        Screen.Thread -> CompositionLocalProvider(
+                            LocalTelegramFiles provides telegramViewModel.files,
+                            com.kirox.app.ui.chat.LocalLinkOpener provides linkOpener,
+                            com.kirox.app.ui.chat.LocalAutoDownload provides autoDownloadRule
+                        ) {
+                            val spec = openThread
+                            if (spec == null) {
+                                LaunchedEffect(Unit) { stack.pop() }
+                            } else {
+                                LaunchedEffect(spec) {
+                                    when (spec) {
+                                        is ThreadSpec.Comments -> telegramViewModel.messages.openComments(spec.chatId, spec.postId)
+                                        is ThreadSpec.Topic -> telegramViewModel.messages.openTopic(spec.chatId, spec.topicId, spec.title)
+                                    }
+                                }
+                                DisposableEffect(spec) { onDispose { telegramViewModel.messages.closeThread() } }
+                                val actions = remember { TelegramMessageActions(telegramViewModel.messages, telegramViewModel.activity) }
+                                val stickerSource = remember { TelegramStickerSource(telegramViewModel.stickers) }
+                                val title = when (spec) { is ThreadSpec.Comments -> "Комментарии"; is ThreadSpec.Topic -> spec.title }
+                                TelegramChatScreen(
+                                    history = if (history.threadTitle != null) history else TelegramChatHistory(threadTitle = title),
+                                    error = messageError,
+                                    onErrorShown = telegramViewModel.messages::clearError,
+                                    forwardTargets = chatLists.main.chats,
+                                    actions = actions,
+                                    onBack = { stack.pop() },
+                                    stickers = stickerSource
+                                )
+                            }
                         }
                     }
                 }
             }
+        }
+        groupCall?.let { call ->
+            CompositionLocalProvider(LocalTelegramFiles provides telegramViewModel.files) { com.kirox.app.ui.call.GroupCallScreen(call, groupCallActions) }
+        }
+        groupCallNotice?.let { text ->
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { groupCallNotice = null },
+                text = { androidx.compose.material3.Text(text) },
+                confirmButton = { androidx.compose.material3.TextButton(onClick = { groupCallNotice = null }) { androidx.compose.material3.Text("Понятно") } }
+            )
         }
         activeCall?.let { call ->
             CompositionLocalProvider(LocalTelegramFiles provides telegramViewModel.files) { com.kirox.app.ui.call.CallScreen(call, permittedCallActions) }
@@ -268,7 +415,10 @@ fun KiroXApp() {
     }
 }
 
-private class TelegramMessageActions(private val repository: TelegramMessageRepository) : TelegramChatActions {
+private class TelegramMessageActions(
+    private val repository: TelegramMessageRepository,
+    private val activityRepository: com.kirox.app.telegram.TelegramChatActionRepository
+) : TelegramChatActions {
     override fun loadOlder() = repository.loadOlder()
     override fun sendText(text: String, replyToMessageId: Long?) = repository.sendText(text, replyToMessageId)
     override fun sendPhoto(path: String, caption: String) = repository.sendPhoto(path, caption)
@@ -279,19 +429,73 @@ private class TelegramMessageActions(private val repository: TelegramMessageRepo
     override fun edit(messageId: Long, text: String) = repository.edit(messageId, text)
     override fun delete(messageIds: List<Long>, forEveryone: Boolean) = repository.delete(messageIds, forEveryone)
     override fun forward(toChatId: Long, messageIds: List<Long>) = repository.forward(toChatId, messageIds)
+    override fun saveDraft(chatId: Long, text: String, threadId: Long, forumTopicId: Int) = repository.saveDraft(chatId, text, threadId, forumTopicId)
+    override fun setActivity(chatId: Long, activity: com.kirox.app.telegram.ChatActivity?) = activityRepository.send(chatId, activity)
+    override fun sendAlbum(items: List<Pair<String, com.kirox.app.telegram.VideoMeta?>>, caption: String) = repository.sendAlbum(items, caption)
+    override fun sendPanelItem(item: com.kirox.app.telegram.TelegramPanelItem, replyToMessageId: Long?) = repository.sendPanelItem(item, replyToMessageId)
+    override fun sendVideoNote(path: String, durationSeconds: Int, length: Int) = repository.sendVideoNote(path, durationSeconds, length)
+    override fun pin(messageId: Long) = repository.pin(messageId)
+    override fun unpin(messageId: Long) = repository.unpin(messageId)
+    override fun jumpTo(messageId: Long) = repository.jumpTo(messageId)
+    override fun jumpDone() = repository.jumpDone()
+    override suspend fun search(query: String, fromMessageId: Long) = repository.search(query, fromMessageId)
+    override suspend fun availableReactions(messageId: Long) = repository.availableReactions(messageId)
+    override suspend fun forumTopics(chatId: Long) = repository.forumTopics(chatId)
+    override fun vote(messageId: Long, indices: List<Int>) = repository.vote(messageId, indices)
+    override fun sendPoll(question: String, options: List<String>, anonymous: Boolean, multipleAnswers: Boolean, correctOption: Int?) = repository.sendPoll(question, options, anonymous, multipleAnswers, correctOption)
+    override suspend fun pressButton(messageId: Long, button: com.kirox.app.telegram.TelegramButton) = repository.pressButton(messageId, button)
+    override suspend fun translate(messageId: Long, language: String) = repository.translate(messageId, language)
 }
 
 private class TelegramStoryActionsImpl(private val repository: TelegramStoryRepository) : TelegramStoryActions {
     override suspend fun story(chatId: Long, storyId: Int): TelegramStory? = repository.story(chatId, storyId)
     override fun open(chatId: Long, storyId: Int) = repository.open(chatId, storyId)
     override fun close(chatId: Long, storyId: Int) = repository.close(chatId, storyId)
+    override suspend fun react(chatId: Long, storyId: Int, emoji: String?) = repository.react(chatId, storyId, emoji)
+    override suspend fun reply(chatId: Long, storyId: Int, text: String) = repository.reply(chatId, storyId, text)
+    override suspend fun delete(chatId: Long, storyId: Int) = repository.delete(chatId, storyId)
+    override suspend fun viewers(storyId: Int) = repository.viewers(storyId)
 }
 
-private class TelegramChatListActionsImpl(private val repository: TelegramChatRepository) : TelegramChatListActions {
+private class TelegramChatListActionsImpl(private val repository: TelegramChatRepository, private val messages: TelegramMessageRepository) : TelegramChatListActions {
+    override suspend fun searchMessages(query: String) = repository.searchMessages(query)
+    override fun jumpToMessage(messageId: Long) = messages.jumpTo(messageId)
     override fun loadMore(key: TelegramChatListKey) = repository.loadMore(key)
     override fun setArchived(chatId: Long, archived: Boolean) = repository.setArchived(chatId, archived)
     override fun setPinned(key: TelegramChatListKey, chatId: Long, pinned: Boolean) = repository.setPinned(key, chatId, pinned)
     override fun markRead(chatId: Long) = repository.markRead(chatId)
     override fun markUnread(chatId: Long) = repository.markUnread(chatId)
     override suspend fun search(query: String): List<TelegramChatItem> = repository.search(query)
+}
+
+private class TelegramStickerSource(private val repository: com.kirox.app.telegram.TelegramStickerRepository) : com.kirox.app.ui.chat.StickerPanelSource {
+    override suspend fun installedSets() = repository.installedSets()
+    override suspend fun set(id: Long) = repository.set(id)
+    override suspend fun recent() = repository.recent()
+    override suspend fun savedGifs() = repository.savedGifs()
+}
+
+/** What Screen.Thread shows; saved with the back stack across rotation and process death. */
+private sealed interface ThreadSpec {
+    data class Comments(val chatId: Long, val postId: Long) : ThreadSpec
+    data class Topic(val chatId: Long, val topicId: Int, val title: String) : ThreadSpec
+
+    companion object {
+        val Saver = androidx.compose.runtime.saveable.Saver<ThreadSpec?, List<Any>>(
+            save = { spec ->
+                when (spec) {
+                    is Comments -> listOf("c", spec.chatId, spec.postId)
+                    is Topic -> listOf("t", spec.chatId, spec.topicId.toLong(), spec.title)
+                    null -> listOf("-")
+                }
+            },
+            restore = { saved ->
+                when (saved.firstOrNull()) {
+                    "c" -> Comments(saved[1] as Long, saved[2] as Long)
+                    "t" -> Topic(saved[1] as Long, (saved[2] as Long).toInt(), saved[3] as String)
+                    else -> null
+                }
+            }
+        )
+    }
 }

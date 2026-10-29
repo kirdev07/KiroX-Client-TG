@@ -15,7 +15,11 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-private val Context.kiroxSettings by preferencesDataStore("kirox_settings")
+// A damaged settings file is replaced with defaults instead of failing every read and write.
+private val Context.kiroxSettings by preferencesDataStore(
+    "kirox_settings",
+    corruptionHandler = androidx.datastore.core.handlers.ReplaceFileCorruptionHandler { androidx.datastore.preferences.core.emptyPreferences() }
+)
 
 enum class BubbleShape(val title: String, val radiusDp: Float) { Soft("Мягкие", 22f), Medium("Средние", 16f), Strict("Строгие", 6f) }
 
@@ -66,7 +70,8 @@ enum class MotionLevel(val title: String, val factor: Float) { Normal("Обыч�
 /** Local KiroX preferences (never Telegram data). */
 class KiroXSettingsRepository(context: Context) {
     private val store = context.applicationContext.kiroxSettings
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // A failed write (full disk) loses that one setting; it must not crash the app.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + kotlinx.coroutines.CoroutineExceptionHandler { _, _ -> })
     private val paletteKey = stringPreferencesKey("palette")
     private val seasonalKey = androidx.datastore.preferences.core.booleanPreferencesKey("seasonal_effects")
     private val bubbleKey = stringPreferencesKey("bubble_shape")

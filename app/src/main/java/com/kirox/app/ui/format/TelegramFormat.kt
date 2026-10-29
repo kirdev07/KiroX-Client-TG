@@ -69,6 +69,7 @@ object TelegramFormat {
             timeInMillis = millis
             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
         }.timeInMillis
-        return ((dayStart(toMillis) - dayStart(fromMillis)) / 86_400_000L).toInt()
+        // Rounded: a day across a daylight-saving switch is 23 or 25 hours long.
+        return Math.round((dayStart(toMillis) - dayStart(fromMillis)) / 86_400_000.0).toInt()
     }
 }

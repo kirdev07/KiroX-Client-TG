@@ -43,3 +43,14 @@ private fun formatWait(seconds: Int): String = when {
     seconds < 3600 -> "${(seconds + 59) / 60} мин"
     else -> "${(seconds + 3599) / 3600} ч"
 }
+
+/** Text for a failed cloud password action; codes and passwords are never shown. */
+fun passwordError(error: Throwable): String = when (error) {
+    is TdException -> when (error.error.message) {
+        "PASSWORD_HASH_INVALID" -> "Неверный текущий пароль"
+        "NEW_SALT_INVALID", "NEW_SETTINGS_INVALID" -> "Пароль не подошёл. Попробуйте другой"
+        "EMAIL_UNCONFIRMED" -> "Подтвердите почту кодом из письма"
+        else -> humanError(error.error)
+    }
+    else -> "Не удалось сохранить"
+}

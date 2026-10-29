@@ -43,7 +43,12 @@ val LocalTelegramFiles = staticCompositionLocalOf<TelegramFileRepository?> { nul
 @Composable
 fun TelegramAvatar(title: String, photo: TelegramFileRef?, size: Dp, modifier: Modifier = Modifier) {
     val bitmap = rememberTelegramBitmap(photo, with(LocalDensity.current) { size.roundToPx() })
-    Box(modifier.size(size).clip(CircleShape).background(Fusion.colors.avatar), contentAlignment = Alignment.Center) {
+    val tone = avatarTone(title)
+    Box(
+        modifier.size(size).clip(CircleShape)
+            .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(tone.copy(alpha = 1f).lighten(0.10f), tone))),
+        contentAlignment = Alignment.Center
+    ) {
         val image = bitmap
         if (image != null) {
             Image(image, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
@@ -62,7 +67,10 @@ fun rememberTelegramBitmap(file: TelegramFileRef?, sizePx: Int, priority: Int = 
     }
     val path by pathFlow.collectAsState()
     val bitmap by produceState(AvatarCache.peek(path, sizePx), path, sizePx) {
-        if (path != null && value == null) value = withContext(Dispatchers.IO) { AvatarCache.load(path!!, sizePx) }
+        // A new photo (changed avatar, next story) must not keep showing the previous one.
+        val current = path
+        value = AvatarCache.peek(current, sizePx)
+        if (current != null && value == null) value = withContext(Dispatchers.IO) { AvatarCache.load(current, sizePx) }
     }
     return bitmap
 }
@@ -76,6 +84,22 @@ fun TelegramPhoto(file: TelegramFileRef, aspect: Float, modifier: Modifier = Mod
         bitmap?.let { Image(it, contentDescription = "Фотография", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
     }
 }
+
+/**
+ * A muted tone per name, so people without a photo are told apart at a glance while the list stays
+ * in the monochrome Fusion look (desaturated slate, plum, moss, sand, steel, rose, teal).
+ */
+private val AvatarTones = listOf(
+    androidx.compose.ui.graphics.Color(0xFF3A4652), androidx.compose.ui.graphics.Color(0xFF4A3F57), androidx.compose.ui.graphics.Color(0xFF3E5045),
+    androidx.compose.ui.graphics.Color(0xFF574B3C), androidx.compose.ui.graphics.Color(0xFF3B4B60), androidx.compose.ui.graphics.Color(0xFF573E48),
+    androidx.compose.ui.graphics.Color(0xFF365353)
+)
+
+internal fun avatarTone(title: String): androidx.compose.ui.graphics.Color =
+    AvatarTones[Math.floorMod(title.trim().lowercase().hashCode(), AvatarTones.size)]
+
+private fun androidx.compose.ui.graphics.Color.lighten(amount: Float) =
+    androidx.compose.ui.graphics.Color(red + (1f - red) * amount, green + (1f - green) * amount, blue + (1f - blue) * amount, alpha)
 
 internal fun initial(title: String): String {
     val trimmed = title.trim()
@@ -91,11 +115,14 @@ private object AvatarCache {
 
     fun peek(path: String?, sizePx: Int): ImageBitmap? = path?.let { cache.get("$it@$sizePx") }
 
-    fun load(path: String, sizePx: Int): ImageBitmap? = runCatching {
+    fun load(path: String, requestedPx: Int): ImageBitmap? = runCatching {
+        val sizePx = requestedPx.coerceAtLeast(16)
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(path, bounds)
         var sample = 1
         while (bounds.outWidth / (sample * 2) >= sizePx && bounds.outHeight / (sample * 2) >= sizePx) sample *= 2
+        // Very long or tall pictures: the long side is limited too, so one image cannot take tens of MB.
+        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > sizePx * 4) sample *= 2
         BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()
-    }.getOrNull()?.also { cache.put("$path@$sizePx", it) }
+    }.getOrNull()?.also { cache.put("$path@$requestedPx", it) }
 }

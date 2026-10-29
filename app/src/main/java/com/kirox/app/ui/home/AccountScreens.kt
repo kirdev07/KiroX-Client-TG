@@ -1,5 +1,9 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.kirox.app.ui.home
 
+import androidx.compose.material3.MaterialTheme
+import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import androidx.activity.compose.BackHandler
@@ -17,7 +21,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -88,14 +91,7 @@ internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Uni
                 SeasonalLayer(Modifier.matchParentSize())
                 Column {
                     ScreenTitle("Настройки", seasonal = false) { TitleAction(KiroXIcon.Search, "Поиск настроек") { searching = !searching; if (!searching) query = "" } }
-                    if (searching) androidx.compose.foundation.text.BasicTextField(
-                        query, { query = it }, singleLine = true,
-                        textStyle = androidx.compose.ui.text.TextStyle(Fusion.colors.textPrimary, 16.sp),
-                        cursorBrush = androidx.compose.ui.graphics.SolidColor(Fusion.colors.textPrimary),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).fillMaxWidth().heightIn(min = 48.dp)
-                            .clip(RoundedCornerShape(24.dp)).background(Fusion.colors.surface1).padding(horizontal = 18.dp, vertical = 14.dp),
-                        decorationBox = { inner -> Box { if (query.isEmpty()) Text("Поиск настроек", color = Fusion.colors.textTertiary, fontSize = 16.sp); inner() } }
-                    )
+                    if (searching) com.kirox.app.ui.components.FusionSearchField(query, { query = it }, "Поиск настроек", Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
                     ProfileHeader(profile, onEdit = onEditProfile, onAccounts = { showAccounts = true }, onAvatar = onOpenProfile, onCamera = pickPhoto)
                 }
             }
@@ -151,19 +147,36 @@ private fun ProfileHeader(profile: TelegramUserProfile?, onEdit: () -> Unit, onA
     }
 }
 
-/** Old Fusion settings row: icon in a rounded tile, large title, chevron. */
+/** Settings row as a Material 3 list item: icon in a Fusion tile, title, value and chevron. */
 @Composable
 internal fun TileRow(icon: KiroXIcon, title: String, trailing: String? = null, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 58.dp).padding(horizontal = 16.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Fusion.colors.iconContainer), contentAlignment = Alignment.Center) {
-            IconGlyph(icon, null, Modifier.size(21.dp), Fusion.colors.textPrimary)
-        }
-        Spacer(Modifier.width(14.dp))
-        Text(title, color = Fusion.colors.textPrimary, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        if (trailing != null) Text(trailing, color = Fusion.colors.textTertiary, fontSize = 13.sp, modifier = Modifier.padding(end = 6.dp))
-        IconGlyph(KiroXIcon.Chevron, null, Modifier.size(17.dp), Fusion.colors.textTertiary)
-    }
+    androidx.compose.material3.ListItem(
+        headlineContent = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        leadingContent = {
+            Box(Modifier.size(40.dp).clip(MaterialTheme.shapes.small).background(Fusion.colors.iconContainer), contentAlignment = Alignment.Center) {
+                IconGlyph(icon, null, Modifier.size(21.dp), Fusion.colors.textPrimary)
+            }
+        },
+        trailingContent = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (trailing != null) Text(trailing, style = MaterialTheme.typography.bodyMedium, color = Fusion.colors.textTertiary, modifier = Modifier.padding(end = 6.dp))
+                IconGlyph(KiroXIcon.Chevron, null, Modifier.size(17.dp), Fusion.colors.textTertiary)
+            }
+        },
+        colors = fusionListColors(),
+        modifier = Modifier.clickable(onClick = onClick)
+    )
 }
+
+/** List item colours on the screen background, as Fusion lists have no cards behind rows. */
+@Composable
+internal fun fusionListColors() = androidx.compose.material3.ListItemDefaults.colors(
+    containerColor = androidx.compose.ui.graphics.Color.Transparent,
+    headlineColor = Fusion.colors.textPrimary,
+    supportingColor = Fusion.colors.textSecondary,
+    leadingIconColor = Fusion.colors.textPrimary,
+    trailingIconColor = Fusion.colors.textTertiary
+)
 
 /** Customization hub: three clear sections, each with its current value. */
 @Composable
@@ -407,8 +420,7 @@ internal fun AnimationsScreen(
             Row(Modifier.fillMaxWidth().clickable { onEnabled(!enabled) }.heightIn(min = 52.dp).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Анимации", color = Fusion.colors.textPrimary, fontSize = 16.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                 Switch(
-                    enabled, onEnabled,
-                    colors = SwitchDefaults.colors(checkedThumbColor = Fusion.colors.onAccent, checkedTrackColor = Fusion.colors.accent, uncheckedThumbColor = Fusion.colors.textTertiary, uncheckedTrackColor = Fusion.colors.surface2, uncheckedBorderColor = Fusion.colors.outlineStrong)
+                    enabled, onEnabled
                 )
             }
         }
@@ -455,8 +467,9 @@ private fun SceneRow(scene: com.kirox.app.settings.EffectScene, selected: Boolea
 
 @Composable
 internal fun SmallCaption(text: String) {
-    Text(text.uppercase(), color = Fusion.colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium, letterSpacing = 1.sp,
-        modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 4.dp))
+    // Material 3 list subheader.
+    Text(text, style = MaterialTheme.typography.titleSmall, color = Fusion.colors.textSecondary,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp))
 }
 
 /** Label with a slim segmented control under it. */
@@ -464,17 +477,7 @@ internal fun SmallCaption(text: String) {
 private fun <T> CompactSegment(title: String, options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
         Text(title, color = Fusion.colors.textPrimary, fontSize = 15.sp, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
-        Row(Modifier.fillMaxWidth().clip(CircleShape).background(Fusion.colors.surface1).padding(3.dp)) {
-            options.forEach { option ->
-                val active = option == selected
-                Text(
-                    label(option), color = if (active) Fusion.colors.textPrimary else Fusion.colors.textSecondary,
-                    fontSize = 13.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium, textAlign = TextAlign.Center, maxLines = 1,
-                    modifier = Modifier.weight(1f).clip(CircleShape).background(if (active) Fusion.colors.surface3 else Fusion.colors.surface1)
-                        .clickable { onSelect(option) }.padding(vertical = 7.dp)
-                )
-            }
-        }
+        com.kirox.app.ui.components.FusionSegmented(options, selected, label, onSelect)
     }
 }
 
@@ -494,17 +497,7 @@ private fun <T> SegmentRow(icon: KiroXIcon, title: String, options: List<T>, sel
             Text(title, color = Fusion.colors.textPrimary, fontSize = 16.sp)
         }
         Spacer(Modifier.height(10.dp))
-        Row(Modifier.fillMaxWidth().clip(CircleShape).background(Fusion.colors.surface1).padding(3.dp)) {
-            options.forEach { option ->
-                val active = option == selected
-                Text(
-                    label(option), color = if (active) Fusion.colors.textPrimary else Fusion.colors.textSecondary,
-                    fontSize = 14.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium, textAlign = TextAlign.Center, maxLines = 1,
-                    modifier = Modifier.weight(1f).clip(CircleShape).background(if (active) Fusion.colors.surface3 else Fusion.colors.surface1)
-                        .clickable { onSelect(option) }.padding(vertical = 8.dp)
-                )
-            }
-        }
+        com.kirox.app.ui.components.FusionSegmented(options, selected, label, onSelect)
     }
 }
 
@@ -717,9 +710,7 @@ internal fun NewMessageScreen(
                 }
                 val picking = mode == NewChatMode.GroupMembers
                 if (picking && members.isNotEmpty()) item {
-                    Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(24.dp)).background(Fusion.colors.accent).clickable { mode = NewChatMode.GroupTitle }, contentAlignment = Alignment.Center) {
-                        Text("Далее", color = Fusion.colors.onAccent, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                    }
+                    com.kirox.app.ui.components.FusionButton("Далее", onClick = { mode = NewChatMode.GroupTitle }, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 }
                 if (contacts.isEmpty()) item { Text("Контактов пока нет", color = Fusion.colors.textSecondary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(32.dp)) }
                 items(contacts, key = { it.id }) { contact ->
@@ -728,8 +719,13 @@ internal fun NewMessageScreen(
                         Modifier.fillMaxWidth().clickable {
                             when {
                                 picking -> members = if (checked) members - contact.id else members + contact.id
-                                mode == NewChatMode.Secret -> scope.launch {
-                                    runCatching { chats.createSecretChat(contact.id) }.onSuccess(onOpenChat).onFailure { onNotice("Не удалось создать секретный чат") }
+                                // One tap, one chat: a double tap would start two secret chats.
+                                mode == NewChatMode.Secret -> if (!busy) {
+                                    busy = true
+                                    scope.launch {
+                                        runCatching { chats.createSecretChat(contact.id) }.onSuccess(onOpenChat).onFailure { onNotice("Не удалось создать секретный чат") }
+                                        busy = false
+                                    }
                                 }
                                 else -> onOpenContact(contact.id)
                             }
@@ -761,14 +757,10 @@ internal fun NewMessageScreen(
                 }
                 item {
                     val canCreate = title.isNotBlank() && !busy
-                    Box(
-                        Modifier.padding(16.dp).fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(26.dp))
-                            .background(if (canCreate) Fusion.colors.accent else Fusion.colors.surface2).clickable(enabled = canCreate) { create(group) },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (busy) androidx.compose.material3.CircularProgressIndicator(Modifier.size(22.dp), color = Fusion.colors.onAccent, strokeWidth = 2.dp)
-                        else Text(if (group) "Создать группу" else "Создать канал", color = if (canCreate) Fusion.colors.onAccent else Fusion.colors.textTertiary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    }
+                    com.kirox.app.ui.components.FusionButton(
+                        if (group) "Создать группу" else "Создать канал", onClick = { create(group) },
+                        modifier = Modifier.padding(16.dp), enabled = canCreate, busy = busy
+                    )
                 }
             }
         }
@@ -787,32 +779,47 @@ internal fun ScreenTitle(title: String, seasonal: Boolean = true, actions: @Comp
     val startPad = with(density) { 16.dp.toPx() }
     Box(Modifier.fillMaxWidth()) {
         if (seasonal) SeasonalLayer(Modifier.matchParentSize(), freeZone = if (actionsStart > titleEnd) (titleEnd + gap)..(actionsStart - gap) else null)
-        Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f)) {
+        // Material 3 top app bar on a transparent container, so the seasonal layer shows through.
+        androidx.compose.material3.TopAppBar(
+            title = {
                 Text(
-                    title, color = Fusion.colors.textPrimary, fontSize = 26.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    title, style = MaterialTheme.typography.headlineMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.onGloballyPositioned { titleEnd = it.positionInParent().x + it.size.width + startPad }
                 )
-            }
-            Row(Modifier.onGloballyPositioned { actionsStart = it.positionInParent().x }, content = actions)
-        }
+            },
+            actions = { Row(Modifier.onGloballyPositioned { actionsStart = it.positionInParent().x }, content = actions) },
+            windowInsets = androidx.compose.foundation.layout.WindowInsets(0),
+            colors = fusionTopBarColors()
+        )
     }
 }
 
 @Composable
 internal fun TitleAction(icon: KiroXIcon, description: String, size: Dp = 24.dp, onClick: () -> Unit) {
-    Box(Modifier.size(48.dp).clip(CircleShape).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+    androidx.compose.material3.IconButton(onClick = onClick, modifier = Modifier.size(48.dp)) {
         IconGlyph(icon, description, Modifier.size(size), Fusion.colors.textPrimary)
     }
 }
 
+/** Material 3 top app bar with a back button. */
 @Composable
 internal fun BackTitle(title: String, onBack: () -> Unit) {
-    Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-        TitleAction(KiroXIcon.Back, "Назад", onClick = onBack)
-        Text(title, color = Fusion.colors.textPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
+    androidx.compose.material3.TopAppBar(
+        title = { Text(title, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        navigationIcon = { TitleAction(KiroXIcon.Back, "Назад", onClick = onBack) },
+        windowInsets = androidx.compose.foundation.layout.WindowInsets(0),
+        colors = fusionTopBarColors()
+    )
 }
+
+@Composable
+internal fun fusionTopBarColors() = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+    containerColor = androidx.compose.ui.graphics.Color.Transparent,
+    scrolledContainerColor = Fusion.colors.surface1,
+    titleContentColor = Fusion.colors.textPrimary,
+    navigationIconContentColor = Fusion.colors.textPrimary,
+    actionIconContentColor = Fusion.colors.textPrimary
+)
 
 /** Updates: current version, beta channel, check / download / install from GitHub releases. */
 @Composable
@@ -848,11 +855,10 @@ internal fun UpdatesScreen(updates: com.kirox.app.update.UpdateCenter, onBack: (
                 is com.kirox.app.update.UpdateState.Checking, is com.kirox.app.update.UpdateState.Downloading -> "Подождите…" to {}
                 else -> "Проверить обновления" to { updates.check() }
             }
-            Box(
-                Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(16.dp))
-                    .background(Fusion.colors.accent).clickable(enabled = s !is com.kirox.app.update.UpdateState.Checking && s !is com.kirox.app.update.UpdateState.Downloading, onClick = action),
-                contentAlignment = Alignment.Center
-            ) { Text(label, color = Fusion.colors.onAccent, fontSize = 16.sp, fontWeight = FontWeight.SemiBold) }
+            com.kirox.app.ui.components.FusionButton(
+                label, onClick = action, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                enabled = s !is com.kirox.app.update.UpdateState.Checking && s !is com.kirox.app.update.UpdateState.Downloading
+            )
             if (s is com.kirox.app.update.UpdateState.Downloading) androidx.compose.material3.LinearProgressIndicator(
                 progress = { s.progress }, modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(), color = Fusion.colors.accent, trackColor = Fusion.colors.surface2
             )
@@ -863,7 +869,7 @@ internal fun UpdatesScreen(updates: com.kirox.app.update.UpdateCenter, onBack: (
                     Text("Бета-версии", color = Fusion.colors.textPrimary, fontSize = 16.sp)
                     Text("Новые функции раньше, но возможны ошибки", color = Fusion.colors.textSecondary, fontSize = 12.sp)
                 }
-                Switch(beta, { beta = it; updates.betaChannel = it }, colors = SwitchDefaults.colors(checkedThumbColor = Fusion.colors.onAccent, checkedTrackColor = Fusion.colors.accent, uncheckedThumbColor = Fusion.colors.textTertiary, uncheckedTrackColor = Fusion.colors.surface2, uncheckedBorderColor = Fusion.colors.outlineStrong))
+                Switch(beta, { beta = it; updates.betaChannel = it })
             }
         }
         val release = when (val s = state) {
@@ -880,7 +886,7 @@ internal fun UpdatesScreen(updates: com.kirox.app.update.UpdateCenter, onBack: (
             Text(
                 "Все версии на GitHub", color = Fusion.colors.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp).clickable {
-                    context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(com.kirox.app.update.UpdateCenter.RELEASES_URL)))
+                    context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, com.kirox.app.update.UpdateCenter.RELEASES_URL.toUri()))
                 }
             )
         }
@@ -994,13 +1000,15 @@ internal fun rememberProfilePhotoPicker(onNotice: (String) -> Unit): () -> Unit 
             val path = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 runCatching {
                     val out = java.io.File(context.cacheDir, "profile_photo_${System.currentTimeMillis()}.jpg")
-                    context.contentResolver.openInputStream(uri)?.use { input -> out.outputStream().use { input.copyTo(it) } }
+                    val input = context.contentResolver.openInputStream(uri) ?: error("no stream")
+                    input.use { out.outputStream().use { output -> it.copyTo(output) } }
                     out.absolutePath
                 }.getOrNull()
             }
             if (path == null) { onNotice("Не удалось прочитать фото"); return@launch }
             onNotice("Загружаю фото…")
             runCatching { users.setProfilePhoto(path) }
+                .also { java.io.File(path).delete() } // TDLib copied it while uploading.
                 .onSuccess { onNotice("Фото профиля обновлено") }
                 .onFailure { onNotice("Не удалось обновить фото") }
         }
@@ -1019,6 +1027,18 @@ internal fun ProfileEditScreen(profile: TelegramUserProfile?, onBack: () -> Unit
     var last by rememberSaveable(profile?.id) { mutableStateOf(profile?.lastName.orEmpty()) }
     var bio by rememberSaveable(profile?.id) { mutableStateOf(profile?.bio.orEmpty()) }
     var username by rememberSaveable(profile?.id) { mutableStateOf(profile?.username.orEmpty()) }
+    // What the fields were filled from. The bio arrives a moment after the name: an untouched field
+    // follows the profile, and saving compares with this, so a late bio is never sent back as "".
+    var base by remember(profile?.id) { mutableStateOf(profile) }
+    LaunchedEffect(profile) {
+        val now = profile ?: return@LaunchedEffect
+        val was = base
+        if (first == was?.firstName.orEmpty()) first = now.firstName
+        if (last == was?.lastName.orEmpty()) last = now.lastName
+        if (bio == was?.bio.orEmpty()) bio = now.bio
+        if (username == was?.username.orEmpty()) username = now.username.orEmpty()
+        base = now
+    }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val pickPhoto = rememberProfilePhotoPicker(onNotice)
@@ -1045,23 +1065,18 @@ internal fun ProfileEditScreen(profile: TelegramUserProfile?, onBack: () -> Unit
         error?.let { message -> item { Text(message, color = Fusion.colors.danger, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) } }
         item {
             val canSave = first.isNotBlank() && !busy && (username.isEmpty() || username.length >= 5)
-            Box(
-                Modifier.padding(16.dp).fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(26.dp))
-                    .background(if (canSave) Fusion.colors.accent else Fusion.colors.surface2)
-                    .clickable(enabled = canSave) {
-                        busy = true; error = null
-                        scope.launch {
-                            runCatching { users.updateProfile(first.trim(), last.trim(), bio.trim(), username.trim(), profile) }
-                                .onSuccess { onNotice("Профиль сохранён"); onBack() }
-                                .onFailure { error = (it as? com.kirox.app.telegram.TdException)?.let { e -> profileError(e.message.orEmpty()) } ?: "Не удалось сохранить профиль" }
-                            busy = false
-                        }
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                if (busy) androidx.compose.material3.CircularProgressIndicator(Modifier.size(22.dp), color = Fusion.colors.onAccent, strokeWidth = 2.dp)
-                else Text("Сохранить", color = if (canSave) Fusion.colors.onAccent else Fusion.colors.textTertiary, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            }
+            com.kirox.app.ui.components.FusionButton(
+                "Сохранить", modifier = Modifier.padding(16.dp), enabled = canSave, busy = busy,
+                onClick = {
+                    busy = true; error = null
+                    scope.launch {
+                        runCatching { users.updateProfile(first.trim(), last.trim(), bio.trim(), username.trim(), base) }
+                            .onSuccess { onNotice("Профиль сохранён"); onBack() }
+                            .onFailure { error = (it as? com.kirox.app.telegram.TdException)?.let { e -> profileError(e.message.orEmpty()) } ?: "Не удалось сохранить профиль" }
+                        busy = false
+                    }
+                }
+            )
         }
     }
 }
@@ -1115,18 +1130,14 @@ private fun AccountsSheet(onDismiss: () -> Unit) {
         Text("Аккаунты", color = Fusion.colors.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
         accounts.forEach { account ->
             val current = account.session == active
-            Row(
-                Modifier.fillMaxWidth().clickable { onDismiss(); if (!current) client.switchTo(account.session) }.heightIn(min = 60.dp).padding(horizontal = 20.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TelegramAvatar(account.title.ifBlank { "?" }, null, 40.dp)
-                Spacer(Modifier.width(14.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(account.title.ifBlank { "Вход не завершён" }, color = Fusion.colors.textPrimary, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (account.phone.isNotBlank()) Text("+" + account.phone.trimStart('+'), color = Fusion.colors.textSecondary, fontSize = 13.sp)
-                }
-                if (current) IconGlyph(KiroXIcon.Check, null, Modifier.size(22.dp), Fusion.colors.accent)
-            }
+            androidx.compose.material3.ListItem(
+                headlineContent = { Text(account.title.ifBlank { "Вход не завершён" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                supportingContent = if (account.phone.isNotBlank()) ({ Text("+" + account.phone.trimStart('+')) }) else null,
+                leadingContent = { TelegramAvatar(account.title.ifBlank { "?" }, null, 40.dp) },
+                trailingContent = if (current) ({ IconGlyph(KiroXIcon.Check, "Выбран", Modifier.size(22.dp), Fusion.colors.accent) }) else null,
+                colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Fusion.colors.surface1, headlineColor = Fusion.colors.textPrimary, supportingColor = Fusion.colors.textSecondary),
+                modifier = Modifier.clickable { onDismiss(); if (!current) client.switchTo(account.session) }
+            )
         }
         if (accounts.size < MAX_ACCOUNTS) TileRow(KiroXIcon.Add, "Добавить аккаунт") { onDismiss(); client.addAccount() }
         Text(

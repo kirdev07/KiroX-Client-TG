@@ -1,9 +1,5 @@
 package com.kirox.app.ui.call
 
-import android.media.AudioAttributes
-import android.media.RingtoneManager
-import android.os.VibrationEffect
-import android.os.Vibrator
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -34,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -60,6 +57,8 @@ import com.kirox.app.telegram.TelegramVoipRepository
 import com.kirox.app.telegram.isLive
 import com.kirox.app.ui.components.TelegramAvatar
 import com.kirox.app.ui.icons.KiroXIcon
+import com.kirox.app.voip.CallAudioRoute
+import com.kirox.app.voip.CallAudioRouter
 import com.kirox.app.ui.icons.KiroXIcon as IconGlyph
 import com.kirox.app.ui.theme.Fusion
 import kotlinx.coroutines.delay
@@ -88,10 +87,11 @@ fun CallScreen(call: TelegramActiveCall, actions: CallActions) {
     BackHandler { if (!live) actions.dismiss() }
     IncomingAlert(call.phase == CallPhase.Incoming)
     val talking = live && call.phase != CallPhase.Incoming
-    var speaker by rememberSaveable(call.id) { mutableStateOf(call.isVideo) }
     // Switch audio to call mode only once connected: during ringing other apps on the phone must not see a busy line.
-    CallAudioRoute(active = call.phase is CallPhase.Active || call.phase == CallPhase.Connecting, speaker = speaker)
-    CallWindow(live = live, earMode = talking && !speaker && !call.cameraOn && !call.remoteVideo)
+    val router = callAudioRouter(call.id, active = call.phase is CallPhase.Active || call.phase == CallPhase.Connecting, video = call.isVideo)
+    val route by router.route.collectAsState()
+    val routes by router.available.collectAsState()
+    CallWindow(live = live, earMode = talking && route == CallAudioRoute.Earpiece && !call.cameraOn && !call.remoteVideo)
     val showVideo = TelegramVoipRepository.mediaAvailable && talking && (call.remoteVideo || call.cameraOn)
 
     Box(
@@ -120,8 +120,8 @@ fun CallScreen(call: TelegramActiveCall, actions: CallActions) {
             when {
                 call.phase == CallPhase.Incoming -> IncomingControls(call, actions)
                 live -> ActiveControls(
-                    call.isVideo || call.cameraOn, call.micMuted, speaker, call.cameraOn,
-                    { actions.setMuted(!call.micMuted) }, { speaker = !speaker }, { actions.setCamera(!call.cameraOn) }, actions::switchCamera, actions::hangUp
+                    call.isVideo || call.cameraOn, call.micMuted, route, routes.size > 2, call.cameraOn,
+                    { actions.setMuted(!call.micMuted) }, router::toggle, { actions.setCamera(!call.cameraOn) }, actions::switchCamera, actions::hangUp
                 )
                 else -> RoundButton(KiroXIcon.Check, "Закрыть", Color.White, Color(0xFF10151C), size = 64.dp, onClick = actions::dismiss)
             }
@@ -170,34 +170,34 @@ private fun CallWindow(live: Boolean, earMode: Boolean) {
             if (activity != null) { activity.setShowWhenLocked(false); activity.setTurnScreenOn(false) }
         }
     }
+    // Held by CallMedia, which also lets it go when the call ends while this screen is not updating.
     DisposableEffect(earMode) {
-        val power = context.getSystemService(android.os.PowerManager::class.java)
-        val lock = if (earMode && power?.isWakeLockLevelSupported(android.os.PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK) == true)
-            power.newWakeLock(android.os.PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "kirox:call-proximity").apply { acquire(3 * 60 * 60 * 1000L) }
-        else null
-        onDispose { if (lock?.isHeld == true) lock.release() }
+        com.kirox.app.voip.CallMedia.setProximity(context, earMode)
+        onDispose { com.kirox.app.voip.CallMedia.setProximity(context, false) }
     }
 }
 
-/** Voice goes to the earpiece or the speaker while the call is connected. */
+/**
+ * Call audio routing for [callId]: switched on while [active] (connected), back to normal after.
+ * Asks for the Bluetooth permission once on Android 12+, so a connected headset can be used.
+ */
 @Composable
-private fun CallAudioRoute(active: Boolean, speaker: Boolean) {
+private fun callAudioRouter(callId: Int, active: Boolean, video: Boolean): CallAudioRouter {
     val context = LocalContext.current
-    val audio = remember { context.getSystemService(android.media.AudioManager::class.java) }
-    DisposableEffect(active) {
-        if (!active || audio == null) return@DisposableEffect onDispose {}
-        val previousMode = audio.mode
-        audio.mode = android.media.AudioManager.MODE_IN_COMMUNICATION
-        onDispose {
-            @Suppress("DEPRECATION")
-            audio.isSpeakerphoneOn = false
-            audio.mode = previousMode
+    // Owned by CallMedia for the whole call: started and stopped with the call, not with this screen.
+    val router = remember(callId) { com.kirox.app.voip.CallMedia.router(context, callId) }
+    val bluetoothPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted && active) { router.stop(); router.start(video) } }
+    LaunchedEffect(router, active) {
+        if (active) {
+            if (!router.isRunning) router.start(video)
+            if (android.os.Build.VERSION.SDK_INT >= 31 &&
+                context.checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) runCatching { bluetoothPermission.launch(android.Manifest.permission.BLUETOOTH_CONNECT) }
         }
     }
-    LaunchedEffect(active, speaker) {
-        @Suppress("DEPRECATION")
-        if (active) audio?.isSpeakerphoneOn = speaker
-    }
+    return router
 }
 
 @Composable
@@ -273,11 +273,14 @@ private fun StatusLine(call: TelegramActiveCall) {
 
 @Composable
 private fun IncomingControls(call: TelegramActiveCall, actions: CallActions) {
+    // After a cold start from a push the engine may still be loading: the Accept button appears then.
+    val engineReady by com.kirox.app.voip.NativeCall.ready.collectAsState()
+    val canAnswer = engineReady || callsEnabled
     val transition = rememberInfiniteTransition(label = "accept")
     val bounce by transition.animateFloat(0f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "bounce")
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Bottom) {
         LabeledButton("Отклонить") { RoundButton(KiroXIcon.CallEnd, "Отклонить", CallRed, Color.White, size = 72.dp, onClick = actions::hangUp) }
-        if (callsEnabled) LabeledButton(if (call.isVideo) "С видео" else "Принять") {
+        if (canAnswer) LabeledButton(if (call.isVideo) "С видео" else "Принять") {
             Box(Modifier.padding(bottom = (6 * bounce).dp)) {
                 RoundButton(if (call.isVideo) KiroXIcon.Video else KiroXIcon.Call, "Принять", CallGreen, Color.White, size = 72.dp, onClick = actions::accept)
             }
@@ -287,12 +290,15 @@ private fun IncomingControls(call: TelegramActiveCall, actions: CallActions) {
 
 @Composable
 private fun ActiveControls(
-    isVideo: Boolean, micOff: Boolean, speaker: Boolean, camera: Boolean,
+    isVideo: Boolean, micOff: Boolean, route: CallAudioRoute, manyRoutes: Boolean, camera: Boolean,
     onMic: () -> Unit, onSpeaker: () -> Unit, onCamera: () -> Unit, onFlip: () -> Unit, onEnd: () -> Unit
 ) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Top) {
         if (isVideo && camera) LabeledButton("Повернуть") { ToggleButton(KiroXIcon.FlipCamera, "Сменить камеру", false, onFlip) }
-        else LabeledButton("Динамик") { ToggleButton(KiroXIcon.Speaker, "Динамик", speaker, onSpeaker) }
+        // With only the phone and the speaker the button is a speaker switch; with a headset it cycles routes.
+        else LabeledButton(if (manyRoutes) route.label else "Динамик") {
+            ToggleButton(KiroXIcon.Speaker, "Звук: ${route.label}", route != CallAudioRoute.Earpiece, onSpeaker)
+        }
         LabeledButton(if (isVideo) "Камера" else "Видео") { ToggleButton(KiroXIcon.Video, "Камера", camera, onCamera, crossed = !camera) }
         LabeledButton(if (micOff) "Без звука" else "Микрофон") { ToggleButton(KiroXIcon.Voice, "Микрофон", micOff, onMic, crossed = micOff) }
         LabeledButton("Завершить") { RoundButton(KiroXIcon.CallEnd, "Завершить", CallRed, Color.White, size = 60.dp, onClick = onEnd) }
@@ -315,10 +321,17 @@ private fun ToggleButton(icon: KiroXIcon, description: String, on: Boolean, onCl
 
 @Composable
 private fun RoundButton(icon: KiroXIcon, description: String, background: Color, tint: Color, size: Dp, crossed: Boolean = false, onClick: () -> Unit) {
-    Box(Modifier.size(size).clip(CircleShape).background(background).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
-        IconGlyph(icon, description, Modifier.size(size * 0.42f), tint)
-        if (crossed) Canvas(Modifier.size(size * 0.5f)) {
-            drawLine(tint, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(this.size.width, this.size.height), 2.dp.toPx())
+    // Material 3 filled icon button in the call screen's own colours.
+    androidx.compose.material3.FilledIconButton(
+        onClick = onClick,
+        modifier = Modifier.size(size),
+        colors = androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(containerColor = background, contentColor = tint)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            IconGlyph(icon, description, Modifier.size(size * 0.42f), tint)
+            if (crossed) Canvas(Modifier.size(size * 0.5f)) {
+                drawLine(tint, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(this.size.width, this.size.height), 2.dp.toPx())
+            }
         }
     }
 }
@@ -327,25 +340,10 @@ private fun RoundButton(icon: KiroXIcon, description: String, background: Color,
 @Composable
 private fun IncomingAlert(active: Boolean) {
     val context = LocalContext.current
+    // CallMedia also stops it when the call stops ringing while this screen is in the background.
     DisposableEffect(active) {
-        if (!active) return@DisposableEffect onDispose {}
-        val ringtone = runCatching {
-            RingtoneManager.getRingtone(context, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))?.apply {
-                audioAttributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).build()
-                isLooping = true
-                play()
-            }
-        }.getOrNull()
-        @Suppress("DEPRECATION")
-        val vibrator = context.getSystemService(Vibrator::class.java)
-        val pattern = longArrayOf(0, 600, 900)
-        runCatching {
-            vibrator?.vibrate(VibrationEffect.createWaveform(pattern, 0))
-        }
-        onDispose {
-            runCatching { ringtone?.stop() }
-            runCatching { vibrator?.cancel() }
-        }
+        if (active) com.kirox.app.voip.CallMedia.startRinging(context)
+        onDispose { com.kirox.app.voip.CallMedia.stopRinging() }
     }
 }
 

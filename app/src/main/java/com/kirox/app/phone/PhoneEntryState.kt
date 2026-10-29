@@ -15,7 +15,7 @@ class PhoneEntryState private constructor(
     var status by mutableStateOf<PhoneStatus>(PhoneStatus.Idle)
         private set
     val formattedNumber: String get() = resolver.formatNational(digits, country)
-    val internationalNumber: String get() = country.dialCode + digits
+    val internationalNumber: String get() = resolver.international(country, digits) ?: (country.dialCode + digits)
 
     fun selectCountry(value: Country) {
         country = value
