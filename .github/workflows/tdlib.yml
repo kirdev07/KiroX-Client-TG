@@ -5,7 +5,7 @@ name: TDLib build
 on:
   push:
     branches: [main, "feature/**", "fix/**"]
-    paths: [tdlib.version]
+    paths: [tdlib.version, .github/workflows/tdlib.yml]
   workflow_dispatch:
 
 permissions:
@@ -62,6 +62,9 @@ jobs:
 
       - name: Commit to the branch
         run: |
+          # The branch may have moved during the build: commit on top of its current head.
+          git fetch -q origin "$GITHUB_REF_NAME"
+          git checkout -q -B tdlib-update "origin/$GITHUB_REF_NAME"
           cp td/example/android/tdlib/libs/arm64-v8a/libtdjni.so app/src/main/jniLibs/arm64-v8a/libtdjni.so
           cp td/example/android/tdlib/java/org/drinkless/tdlib/TdApi.java app/src/main/java/org/drinkless/tdlib/TdApi.java
           cp td/example/android/tdlib/java/org/drinkless/tdlib/Client.java app/src/main/java/org/drinkless/tdlib/Client.java
@@ -70,4 +73,9 @@ jobs:
           git add app/src/main/jniLibs/arm64-v8a/libtdjni.so app/src/main/java/org/drinkless/tdlib
           git diff --cached --quiet && { echo "TDLib already up to date"; exit 0; }
           git commit -q -m "tdlib: update to ${TDLIB_COMMIT:0:8}" -m "Built by the TDLib workflow from github.com/tdlib/td."
-          git push -q origin "HEAD:${GITHUB_REF_NAME}"
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:${GITHUB_REF_NAME}" > push.log 2>&1; then exit 0; fi
+            git pull -q --rebase origin "$GITHUB_REF_NAME" || true
+          done
+          echo "::error title=push::$(tail -5 push.log | tr '\n' ' ')"
+          exit 1
