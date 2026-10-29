@@ -556,6 +556,7 @@ private fun bubbleBrush(outgoing: Boolean, appearance: ChatAppearance): androidx
 private fun attachmentTint(title: String): Color = when (title) {
     "Галерея", "Фото и видео" -> Color(0xFF6E8BFF)
     "Камера", "Видеосообщение" -> Color(0xFFB085FF)
+    "Видео" -> Color(0xFFFF6B8B)
     "Документ", "Файл" -> Color(0xFFFFC24A)
     "Музыка" -> Color(0xFF4FD1A5)
     "Контакт" -> Color(0xFF8FB4FF)

@@ -4,4 +4,6 @@
     <cache-path name="updates" path="updates/" />
     <!-- Copies of message files opened in other apps. -->
     <cache-path name="shared" path="shared/" />
+    <!-- Photos taken with the camera from the attachment panel. -->
+    <cache-path name="camera" path="camera/" />
 </paths>

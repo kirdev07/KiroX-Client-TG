@@ -127,8 +127,9 @@ internal fun StickerPanel(source: StickerPanelSource?, onEmoji: (String) -> Unit
 @Composable
 private fun PanelPill(title: String, selected: Boolean, onClick: () -> Unit) {
     Text(
-        title, color = if (selected) Fusion.colors.background else Fusion.colors.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.clip(RoundedCornerShape(50)).background(if (selected) Fusion.colors.textPrimary else Fusion.colors.surface3).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 8.dp)
+        title, color = when { !selected -> Fusion.colors.textPrimary; Fusion.colors.backdrop != null -> Fusion.colors.onAccent; else -> Fusion.colors.background }, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+        // v2 (approved media board): the selected tab is a violet pill.
+        modifier = Modifier.clip(RoundedCornerShape(50)).background(when { !selected -> Fusion.colors.surface3; Fusion.colors.backdrop != null -> Fusion.colors.accent; else -> Fusion.colors.textPrimary }).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 8.dp)
     )
 }
 

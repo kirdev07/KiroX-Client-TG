@@ -337,6 +337,12 @@ fun TelegramChatScreen(
         }
     }
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> uri?.let { sendPicked(it, asPhoto = false) } }
+    // Camera tile: the photo goes to a cache file shared through the FileProvider, then is sent like a gallery pick.
+    var cameraUri by remember { mutableStateOf<Uri?>(null) }
+    val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok -> cameraUri?.takeIf { ok }?.let { sendPicked(it, asPhoto = true) } }
+    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) cameraUri?.let(takePhoto::launch) else notice = "Нет доступа к камере"
+    }
 
     val peer = ChatPeerUi(
         id = history.chatId,
@@ -484,7 +490,8 @@ fun TelegramChatScreen(
                 state = listState,
                 reverseLayout = true,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
+                // A read-only channel keeps room at the bottom for the notifications button.
+                contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 10.dp, bottom = if (history.peerKind == TelegramPeerKind.Channel && history.threadTitle == null && menu != null) 84.dp else 10.dp),
                 verticalArrangement = Arrangement.spacedBy(appearance.messageSpacingDp.dp)
             ) {
                 itemsIndexed(rows, key = { _, row -> row.key }, contentType = { _, row -> row.message.direction }) { index, row ->
@@ -562,6 +569,16 @@ fun TelegramChatScreen(
             attachments = false
             when (choice) {
                 "Фото и видео" -> pickPhoto.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+                "Галерея" -> pickPhoto.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                "Видео" -> pickPhoto.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+                "Музыка" -> pickFile.launch("audio/*")
+                "Камера" -> {
+                    val file = java.io.File(context.cacheDir, "camera").apply { mkdirs() }.let { java.io.File(it, "photo_${System.currentTimeMillis()}.jpg") }
+                    val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".files", file)
+                    cameraUri = uri
+                    if (context.checkSelfPermission(android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) takePhoto.launch(uri)
+                    else cameraPermission.launch(android.Manifest.permission.CAMERA)
+                }
                 "Опрос" -> creatingPoll = true
                 "Видеосообщение" -> {
                     val needed = arrayOf(android.Manifest.permission.CAMERA, android.Manifest.permission.RECORD_AUDIO)
@@ -571,10 +588,14 @@ fun TelegramChatScreen(
                 else -> pickFile.launch("*/*")
             }
         },
+        // Order of the approved media board: Галерея · Видео · Файлы / Камера … / Опрос · Музыка.
         actions = buildList {
-            add(KiroXIcon.Media to "Фото и видео")
-            if (history.peerKind != TelegramPeerKind.Channel) add(KiroXIcon.Camera to "Видеосообщение")
+            add(KiroXIcon.Media to "Галерея")
+            add(KiroXIcon.Video to "Видео")
             add(KiroXIcon.File to "Файл")
+            add(KiroXIcon.Camera to "Камера")
+            if (history.peerKind != TelegramPeerKind.Channel) add(KiroXIcon.Voice to "Видеосообщение")
+            add(KiroXIcon.Music to "Музыка")
             if (!history.isSecret) add(KiroXIcon.Sliders to "Опрос")
         },
         footer = if (input.text.isNotBlank()) "Текст из поля ввода станет подписью" else null
