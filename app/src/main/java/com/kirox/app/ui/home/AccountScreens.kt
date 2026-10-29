@@ -1147,23 +1147,34 @@ private fun AccountsSheet(onDismiss: () -> Unit) {
     val client = (androidx.compose.ui.platform.LocalContext.current.applicationContext as com.kirox.app.KiroXApplication).telegram.client
     val accounts by client.accounts.accounts.collectAsState()
     val active = client.activeSession
-    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Fusion.colors.surface1) {
-        Text("Аккаунты", color = Fusion.colors.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-        accounts.forEach { account ->
-            val current = account.session == active
-            androidx.compose.material3.ListItem(
-                headlineContent = { Text(account.title.ifBlank { "Вход не завершён" }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                supportingContent = if (account.phone.isNotBlank()) ({ Text("+" + account.phone.trimStart('+')) }) else null,
-                leadingContent = { TelegramAvatar(account.title.ifBlank { "?" }, null, 40.dp) },
-                trailingContent = if (current) ({ IconGlyph(KiroXIcon.Check, "Выбран", Modifier.size(22.dp), Fusion.colors.accent) }) else null,
-                colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = Fusion.colors.surface1, headlineColor = Fusion.colors.textPrimary, supportingColor = Fusion.colors.textSecondary),
-                modifier = Modifier.clickable { onDismiss(); if (!current) client.switchTo(account.session) }
-            )
+    // Approved accounts board: centred title, accounts and «Добавить аккаунт» in one rounded card.
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = if (Fusion.colors.glass) Fusion.colors.surface1 else Fusion.colors.background) {
+        Text("Аккаунты", color = Fusion.colors.textPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp))
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 6.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp)).fusionPanel(Fusion.colors, RoundedCornerShape(20.dp))) {
+            accounts.forEachIndexed { index, account ->
+                val current = account.session == active
+                if (index > 0) HorizontalDivider(Modifier.padding(start = 72.dp), color = Fusion.colors.outline)
+                androidx.compose.material3.ListItem(
+                    headlineContent = { Text(account.title.ifBlank { "Вход не завершён" }, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold) },
+                    supportingContent = if (account.phone.isNotBlank()) ({ Text("+" + account.phone.trimStart('+')) }) else null,
+                    leadingContent = { TelegramAvatar(account.title.ifBlank { "?" }, null, 44.dp) },
+                    trailingContent = if (current) ({
+                        Box(Modifier.size(26.dp).clip(CircleShape).background(Fusion.colors.accent), contentAlignment = Alignment.Center) {
+                            IconGlyph(KiroXIcon.Check, "Выбран", Modifier.size(16.dp), Fusion.colors.onAccent)
+                        }
+                    }) else null,
+                    colors = fusionListColors(),
+                    modifier = Modifier.clickable { onDismiss(); if (!current) client.switchTo(account.session) }
+                )
+            }
+            if (accounts.size < MAX_ACCOUNTS) {
+                if (accounts.isNotEmpty()) HorizontalDivider(Modifier.padding(start = 72.dp), color = Fusion.colors.outline)
+                TileRow(KiroXIcon.Add, "Добавить аккаунт", plainIcon = true) { onDismiss(); client.addAccount() }
+            }
         }
-        if (accounts.size < MAX_ACCOUNTS) TileRow(KiroXIcon.Add, "Добавить аккаунт") { onDismiss(); client.addAccount() }
         Text(
             "Уведомления приходят только от выбранного аккаунта.",
-            color = Fusion.colors.textTertiary, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
+            color = Fusion.colors.textTertiary, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp)
         )
         Spacer(Modifier.navigationBarsPadding().height(8.dp))
     }

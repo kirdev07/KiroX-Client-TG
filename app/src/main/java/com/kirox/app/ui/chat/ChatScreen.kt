@@ -2,6 +2,7 @@ package com.kirox.app.ui.chat
 
 // Shared Fusion chat components used by TelegramChatScreen.
 
+import com.kirox.app.ui.components.fusionPanel
 import androidx.compose.runtime.ReadOnlyComposable
 import com.kirox.app.ui.theme.Fusion
 import androidx.activity.compose.BackHandler
@@ -359,7 +360,25 @@ internal fun ChatComposer(value: TextFieldValue, reply: MessageUi?, editing: Mes
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Fusion.colors.surface1, contentColor = ChatWhite) {
         Text("Вложения", fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-        actions.chunked(3).forEach { row -> Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) { row.forEach { (icon, title) -> Column(Modifier.weight(1f).padding(vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) { androidx.compose.material3.FilledTonalIconButton(onClick = { onPick(title) }, modifier = Modifier.size(52.dp)) { IconGlyph(icon, title, Modifier.size(24.dp), ChatWhite) }; Spacer(Modifier.height(7.dp)); Text(title, color = ChatWhite, fontSize = 12.sp, maxLines = 1) } } } }
+        if (Fusion.colors.backdrop != null) {
+            // Approved media board: a card of rounded square tiles with coloured icons.
+            Column(Modifier.padding(horizontal = 14.dp, vertical = 4.dp).fillMaxWidth().clip(RoundedCornerShape(22.dp)).fusionPanel(Fusion.colors, RoundedCornerShape(22.dp)).padding(vertical = 6.dp)) {
+                actions.chunked(3).forEach { row ->
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp)) {
+                        row.forEach { (icon, title) ->
+                            Column(Modifier.weight(1f).clip(RoundedCornerShape(18.dp)).clickable(onClickLabel = title) { onPick(title) }.padding(vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Box(Modifier.size(56.dp).clip(RoundedCornerShape(18.dp)).background(Fusion.colors.surface2), contentAlignment = Alignment.Center) {
+                                    IconGlyph(icon, title, Modifier.size(26.dp), attachmentTint(title))
+                                }
+                                Spacer(Modifier.height(7.dp))
+                                Text(title, color = ChatWhite, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                        repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            }
+        } else actions.chunked(3).forEach { row -> Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) { row.forEach { (icon, title) -> Column(Modifier.weight(1f).padding(vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) { androidx.compose.material3.FilledTonalIconButton(onClick = { onPick(title) }, modifier = Modifier.size(52.dp)) { IconGlyph(icon, title, Modifier.size(24.dp), ChatWhite) }; Spacer(Modifier.height(7.dp)); Text(title, color = ChatWhite, fontSize = 12.sp, maxLines = 1) } } } }
         if (footer != null) Text(footer, color = ChatSecondary, fontSize = 11.sp, modifier = Modifier.padding(20.dp)); Spacer(Modifier.navigationBarsPadding().height(12.dp))
     }
 }
@@ -526,4 +545,16 @@ private fun bubbleBrush(outgoing: Boolean, appearance: ChatAppearance): androidx
     if (Fusion.colors.backdrop == null) return androidx.compose.ui.graphics.SolidColor(base)
     return if (outgoing) androidx.compose.ui.graphics.Brush.linearGradient(listOf(androidx.compose.ui.graphics.lerp(base, Color.White, 0.16f), base))
     else androidx.compose.ui.graphics.SolidColor(base.copy(alpha = minOf(base.alpha, 0.86f)))
+}
+
+/** Icon colours of the attachment tiles (approved media board). */
+private fun attachmentTint(title: String): Color = when (title) {
+    "Галерея", "Фото и видео" -> Color(0xFF6E8BFF)
+    "Камера", "Видеосообщение" -> Color(0xFFB085FF)
+    "Документ", "Файл" -> Color(0xFFFFC24A)
+    "Музыка" -> Color(0xFF4FD1A5)
+    "Контакт" -> Color(0xFF8FB4FF)
+    "Местоположение" -> Color(0xFFFF7A8A)
+    "Опрос" -> Color(0xFFFF9F5A)
+    else -> Color(0xFFC7B8FF)
 }

@@ -128,10 +128,26 @@ fun TelegramAuthStepScreen(state: TelegramAuthState, repository: TelegramAuthRep
             }
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp)) {
-            Spacer(Modifier.height(36.dp))
-            Text(title, color = Fusion.colors.textPrimary, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(12.dp))
-            Text(description, color = Fusion.colors.textSecondary, fontSize = 15.sp, lineHeight = 21.sp)
+            val v2 = Fusion.colors.backdrop != null
+            if (v2) {
+                // Fusion UI v2 (approved auth board): centred mark — plane for codes, lock for passwords.
+                Spacer(Modifier.height(24.dp))
+                Box(
+                    Modifier.align(Alignment.CenterHorizontally).size(76.dp).clip(CircleShape)
+                        .background(androidx.compose.ui.graphics.Brush.radialGradient(listOf(Fusion.colors.accent.copy(alpha = 0.45f), androidx.compose.ui.graphics.Color.Transparent))),
+                    contentAlignment = Alignment.Center
+                ) {
+                    com.kirox.app.ui.icons.KiroXIcon(
+                        if (isPassword) com.kirox.app.ui.icons.KiroXIcon.Shield else com.kirox.app.ui.icons.KiroXIcon.Send, null, Modifier.size(36.dp), Fusion.colors.accent
+                    )
+                }
+                Spacer(Modifier.height(16.dp))
+            } else Spacer(Modifier.height(36.dp))
+            Text(title, color = Fusion.colors.textPrimary, fontSize = if (v2) 26.sp else 32.sp, fontWeight = FontWeight.Bold,
+                textAlign = if (v2) androidx.compose.ui.text.style.TextAlign.Center else null, modifier = if (v2) Modifier.fillMaxWidth() else Modifier)
+            Spacer(Modifier.height(if (v2) 8.dp else 12.dp))
+            Text(description, color = Fusion.colors.textSecondary, fontSize = 15.sp, lineHeight = 21.sp,
+                textAlign = if (v2) androidx.compose.ui.text.style.TextAlign.Center else null, modifier = if (v2) Modifier.fillMaxWidth() else Modifier)
             if (state is TelegramAuthState.WaitCode) {
                 // The number the code went to, with a quick way to fix it.
                 Row(
@@ -319,8 +335,9 @@ private fun CodeCells(value: String, length: Int, error: Boolean, enabled: Boole
     val focus = remember { androidx.compose.ui.focus.FocusRequester() }
     val shake = remember { androidx.compose.animation.core.Animatable(0f) }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    val animate = com.kirox.app.ui.theme.LocalMotionFactor.current > 0f
     LaunchedEffect(error) {
-        if (error) for (x in listOf(14f, -12f, 8f, -6f, 3f, 0f)) shake.animateTo(x, androidx.compose.animation.core.tween(45))
+        if (error && animate) for (x in listOf(14f, -12f, 8f, -6f, 3f, 0f)) shake.animateTo(x, androidx.compose.animation.core.tween(45))
     }
     BasicTextField(
         value = value,
@@ -337,7 +354,7 @@ private fun CodeCells(value: String, length: Int, error: Boolean, enabled: Boole
                     val current = i == value.length && enabled
                     val border = when {
                         error -> Fusion.colors.danger
-                        current -> Fusion.colors.textPrimary
+                        current -> if (Fusion.colors.backdrop != null) Fusion.colors.accent else Fusion.colors.textPrimary
                         i < value.length -> Fusion.colors.outlineStrong
                         else -> Fusion.colors.outline
                     }
