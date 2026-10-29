@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -32,6 +35,33 @@ data class FusionNavItem(val title: String, val icon: KiroXIcon)
  */
 @Composable
 fun FusionBottomBar(items: List<FusionNavItem>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier, showLabels: Boolean = false) {
+    val colors = Fusion.colors
+    if (colors.backdrop != null) {
+        // Fusion UI v2: a floating dock over the backdrop with labels, the active tab on a coloured pill.
+        val shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp)
+        NavigationBar(
+            containerColor = androidx.compose.ui.graphics.Color.Transparent, tonalElevation = 0.dp,
+            windowInsets = androidx.compose.foundation.layout.WindowInsets(0),
+            modifier = modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp)
+                .clip(shape).fusionPanel(colors, shape, opaque = colors.surface1)
+        ) {
+            items.forEachIndexed { index, item ->
+                NavigationBarItem(
+                    selected = index == selected,
+                    onClick = { onSelect(index) },
+                    icon = { KiroXIcon(item.icon, item.title, Modifier.size(23.dp), LocalContentColor.current) },
+                    label = { Text(item.title, maxLines = 1, style = MaterialTheme.typography.labelMedium) },
+                    alwaysShowLabel = true,
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = colors.onSelectedPill, selectedTextColor = colors.textPrimary,
+                        unselectedIconColor = colors.textSecondary, unselectedTextColor = colors.textSecondary,
+                        indicatorColor = colors.selectedPill
+                    )
+                )
+            }
+        }
+        return
+    }
     Column(modifier.fillMaxWidth()) {
         HorizontalDivider(thickness = FusionSize.hairline, color = Fusion.colors.outline)
         NavigationBar(containerColor = Fusion.colors.background, tonalElevation = 0.dp) {

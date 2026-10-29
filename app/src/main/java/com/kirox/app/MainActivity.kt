@@ -45,9 +45,14 @@ class MainActivity : ComponentActivity() {
             val chatStyle = com.kirox.app.settings.ChatStyle(bubbles.radiusDp, textSize.scale, wallpaper, density)
             val weakDevice = remember { prefersLightEffects(this@MainActivity) }
             val lightEffects = quality == EffectsQuality.Light || (quality == EffectsQuality.Auto && weakDevice)
-            sceneClock.Drive(speed = motion.factor, light = lightEffects)
+            val glassBlur by settings.glassBlur.collectAsStateWithLifecycle()
+            // Animations are switched off app-wide for now (KiroXFeatures.ANIMATIONS); the saved
+            // motion and seasonal settings stay as they are and apply again once it is turned on.
+            val animate = com.kirox.app.ui.theme.KiroXFeatures.ANIMATIONS
+            val motionFactor = if (animate) motion.factor else 0f
+            sceneClock.Drive(speed = motionFactor, light = lightEffects)
             FusionTheme(palette) {
-                CompositionLocalProvider(LocalMotionFactor provides motion.factor, LocalBubbleRadius provides bubbles.radiusDp, LocalSeasonalEffects provides seasonal, LocalLightEffects provides lightEffects, LocalEffectScene provides scene, com.kirox.app.ui.theme.LocalChatStyle provides chatStyle, com.kirox.app.ui.components.LocalSceneClock provides sceneClock) {
+                CompositionLocalProvider(LocalMotionFactor provides motionFactor, LocalBubbleRadius provides bubbles.radiusDp, LocalSeasonalEffects provides (seasonal && animate), com.kirox.app.ui.theme.LocalGlassBlur provides glassBlur, LocalLightEffects provides lightEffects, LocalEffectScene provides scene, com.kirox.app.ui.theme.LocalChatStyle provides chatStyle, com.kirox.app.ui.components.LocalSceneClock provides sceneClock) {
                     KiroXApp()
                 }
             }

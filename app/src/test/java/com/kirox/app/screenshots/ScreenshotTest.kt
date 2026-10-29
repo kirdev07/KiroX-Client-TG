@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
@@ -71,16 +74,16 @@ class ScreenshotTest {
     private val chats = listOf(
         chat(1, "Избранное", "Список дел на завтра", 0, pinned = true, saved = true),
         chat(2, "Анна", "Увидимся в 7, я возьму билеты", 2, pinned = true),
-        chat(3, "Команда KiroX", "Максим: сборка прошла, проверяйте APK", 14),
+        chat(3, "Команда KiroX", "Максим: сборка прошла, проверяйте APK", 14, kind = com.kirox.app.telegram.TelegramChatKind.Group),
         chat(4, "Мама", "Позвони, когда будешь дома", 0, state = LastMessageState.Read),
-        chat(5, "Дизайн", "Новые иконки уже в папке", 0, muted = true),
+        chat(5, "Дизайн", "Новые иконки уже в папке", 0, muted = true, kind = com.kirox.app.telegram.TelegramChatKind.Group),
         chat(6, "Telegram", "Код для входа: ●●●●●", 1),
         chat(7, "Илья", "Ок 👍", 0, state = LastMessageState.Sent),
-        chat(8, "Новости", "Обновление Android 17 уже доступно", 37, muted = true)
+        chat(8, "Новости", "Обновление Android 17 уже доступно", 37, muted = true, kind = com.kirox.app.telegram.TelegramChatKind.Channel)
     )
 
-    private fun chat(id: Long, title: String, preview: String, unread: Int, pinned: Boolean = false, saved: Boolean = false, muted: Boolean = false, state: LastMessageState = LastMessageState.None) =
-        TelegramChatItem(id, title, preview, now - id.toInt() * 1700, unread, isPinned = pinned, isMuted = muted, outgoingState = state, photo = null, archived = false, isSaved = saved)
+    private fun chat(id: Long, title: String, preview: String, unread: Int, pinned: Boolean = false, saved: Boolean = false, muted: Boolean = false, state: LastMessageState = LastMessageState.None, kind: com.kirox.app.telegram.TelegramChatKind = com.kirox.app.telegram.TelegramChatKind.Private) =
+        TelegramChatItem(id, title, preview, now - id.toInt() * 1700, unread, isPinned = pinned, isMuted = muted, outgoingState = state, photo = null, archived = false, isSaved = saved, kind = kind)
 
     private val profile = TelegramUserProfile(1, "Кирилл", "kirdev07", "77011234567", bio = "Android-разработчик", photo = null, firstName = "Кирилл")
 
@@ -100,7 +103,7 @@ class ScreenshotTest {
     }
 
     @Composable
-    private fun Main(tab: Int = 1) = TelegramMainScreen(
+    private fun Main(tab: Int = 0) = TelegramMainScreen(
         lists = TelegramChatLists(
             main = TelegramChatListState(chats, complete = true),
             archive = TelegramChatListState(complete = true),
@@ -115,8 +118,11 @@ class ScreenshotTest {
             com.kirox.app.telegram.TelegramContact(10, "Света", null, com.kirox.app.telegram.TelegramUserStatus.Online, null)
         ), contactsLoading = false, profile = profile, connection = TelegramConnection.Ready,
         onOpenChat = {}, onOpenContact = {}, calls = TelegramCallsState(complete = true), onLoadCalls = {},
-        storyChats = listOf(TelegramStoryChat(2, "Анна", null, listOf(1), hasUnread = true, isSelf = false)),
-        storyActions = storyActions, palette = FusionPalette.AmoledBlack, onPalette = {}, onOpenSavedMessages = {},
+        storyChats = listOf(
+            TelegramStoryChat(2, "Анна", null, listOf(1, 2), hasUnread = true, isSelf = false),
+            TelegramStoryChat(9, "Максим", null, listOf(1), hasUnread = false, isSelf = false)
+        ),
+        storyActions = storyActions, palette = palette, onPalette = {}, onOpenSavedMessages = {},
         seasonal = false, onSeasonal = {},
         bubbleShape = BubbleShape.entries.first(), onBubbleShape = {}, motion = MotionLevel.entries.first(), onMotion = {},
         chatTextSize = ChatTextSize.entries.first(), onChatTextSize = {}, chatWallpaper = ChatWallpaper.entries.first(), onChatWallpaper = {},
@@ -125,30 +131,54 @@ class ScreenshotTest {
         initialTab = tab
     )
 
-    /** Draws [content] for a moment (animations are stepped, not run to the end) and saves it. */
-    private fun shot(name: String, before: () -> Unit = {}, content: @Composable () -> Unit) {
+    private var palette = FusionPalette.Expressive
+
+    /**
+     * Draws [content] in each Fusion UI v2 style and saves `<style>_<name>.png`. Animations are off
+     * as in the app (motion factor 0).
+     */
+    private fun shot(name: String, content: @Composable () -> Unit) {
         // Only in the screenshots workflow; the normal unit test run skips it.
         org.junit.Assume.assumeTrue(System.getenv("KIROX_SCREENSHOTS") == "true")
+        var current by androidx.compose.runtime.mutableStateOf(FusionPalette.Expressive)
         rule.mainClock.autoAdvance = false
-        rule.setContent { FusionTheme(FusionPalette.AmoledBlack) { content() } }
-        rule.mainClock.advanceTimeBy(1_000)
-        before()
+        rule.setContent {
+            FusionTheme(current) {
+                androidx.compose.runtime.CompositionLocalProvider(com.kirox.app.ui.theme.LocalMotionFactor provides 0f) {
+                    androidx.compose.runtime.key(current) { content() }
+                }
+            }
+        }
+        for (style in listOf(FusionPalette.Expressive, FusionPalette.Glass)) {
+            palette = style
+            current = style
+            capture("${style.name.lowercase()}_$name")
+        }
+    }
+
+    private fun capture(name: String) {
         rule.mainClock.advanceTimeBy(1_000)
         val bitmap = rule.onRoot().captureToImage().asAndroidBitmap()
         val dir = File("build/screenshots").apply { mkdirs() }
         File(dir, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
-    @Test fun chats() = shot("01_chats") { Main() }
+    @Test fun chats() = shot("01_chats") { Main(0) }
 
-    @Test fun settings() = shot("02_settings") { Main(tab = 2) }
+    @Test fun calls() = shot("02_calls") { Main(1) }
 
-    @Test fun profile() = shot("03_profile") { Main(tab = 3) }
+    @Test fun stories() = shot("03_stories") { Main(2) }
 
-    @Test fun contacts() = shot("04_contacts") { Main(tab = 0) }
+    @Test fun settings() = shot("04_settings") { Main(3) }
 
-    @Test fun conversation() = shot("05_chat") {
-        val appearance = ChatAppearance()
+    @Test fun contacts() = shot("05_contacts") { Main(4) }
+
+    @Test fun profile() = shot("06_profile") { Main(5) }
+
+    @Test fun conversation() = shot("07_chat") {
+        val c = Fusion.colors
+        fun argb(color: androidx.compose.ui.graphics.Color) = color.toArgbLong()
+        val appearance = ChatAppearance(incomingColor = argb(c.incomingBubble), outgoingColor = argb(c.outgoingBubble), inputColor = argb(c.inputBar))
         val messages = listOf(
             MessageUi(1, "Анна", MessageDirection.Incoming, text = "Привет! Ты уже посмотрел новую версию?", time = "18:40"),
             MessageUi(2, "Вы", MessageDirection.Outgoing, text = "Да, Material 3 выглядит отлично 🔥", time = "18:41"),
@@ -157,7 +187,9 @@ class ScreenshotTest {
             MessageUi(6, "Анна", MessageDirection.Incoming, text = "И видеочаты с показом экрана?", time = "18:43"),
             MessageUi(5, "Вы", MessageDirection.Outgoing, text = "Да, и видео тоже. Вечером созвонимся", time = "18:44")
         )
-        Column(Modifier.fillMaxSize().background(Fusion.colors.background)) {
+        androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+        com.kirox.app.ui.components.ChatWallpaperLayer(ChatWallpaper.None, Modifier.fillMaxSize())
+        Column(Modifier.fillMaxSize()) {
             com.kirox.app.ui.home.BackTitle("Анна") {}
             LazyColumn(Modifier.weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 10.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(appearance.messageSpacingDp.dp)) {
                 item { MessageRow(MessageUi(0, "", MessageDirection.System, text = "Сегодня", time = ""), grouped = false, appearance = appearance, onLongClick = {}, onReply = {}) }
@@ -173,13 +205,14 @@ class ScreenshotTest {
             }
             ChatComposer(TextFieldValue(""), null, null, {}, {}, {}, {}, {}, {}, appearance)
         }
+        }
     }
 
-    @Test fun login() = shot("06_login") {
+    @Test fun login() = shot("08_login") {
         PhoneLoginScreen(PhoneEntryState.create(ApplicationProvider.getApplicationContext()), onChooseCountry = {})
     }
 
-    @Test fun call() = shot("07_call") {
+    @Test fun call() = shot("09_call") {
         CallScreen(
             TelegramActiveCall(7, 2, "Анна", null, isOutgoing = true, isVideo = false, phase = CallPhase.Active(System.currentTimeMillis() - 95_000), emojis = listOf("🐶", "🚀", "🍀", "🎧")),
             object : CallActions {
@@ -194,3 +227,5 @@ class ScreenshotTest {
         )
     }
 }
+
+private fun androidx.compose.ui.graphics.Color.toArgbLong(): Long = toArgb().toLong() and 0xFFFFFFFFL

@@ -16,10 +16,12 @@ import com.kirox.app.ui.theme.Fusion
 @Composable
 fun ChatWallpaperLayer(wallpaper: ChatWallpaper, modifier: Modifier = Modifier, /** Smaller pattern for thumbnails. */ patternScale: Float = 1f) {
     val colors = Fusion.colors
+    // Expressive and Glass have their own tinted conversation background under every pattern.
+    val base = colors.chatWallpaper?.let { Modifier.background(Brush.verticalGradient(it)) } ?: Modifier.background(colors.background)
     when (wallpaper) {
-        ChatWallpaper.None -> Box(modifier.background(colors.background))
-        ChatWallpaper.Gradient -> Box(modifier.background(Brush.verticalGradient(listOf(colors.surface2, colors.background, colors.surface1))))
-        ChatWallpaper.Dots -> Canvas(modifier.background(colors.background)) {
+        ChatWallpaper.None -> Box(modifier.then(base))
+        ChatWallpaper.Gradient -> Box(modifier.background(Brush.verticalGradient(colors.chatWallpaper ?: listOf(colors.surface2, colors.background, colors.surface1))))
+        ChatWallpaper.Dots -> Canvas(modifier.then(base)) {
             val step = 18.dp.toPx() * patternScale
             val r = 1.1.dp.toPx() * patternScale.coerceAtLeast(0.7f)
             var y = step / 2
@@ -30,7 +32,7 @@ fun ChatWallpaperLayer(wallpaper: ChatWallpaper, modifier: Modifier = Modifier, 
                 y += step; row++
             }
         }
-        ChatWallpaper.Pattern -> Canvas(modifier.background(colors.background)) {
+        ChatWallpaper.Pattern -> Canvas(modifier.then(base)) {
             // Small "X" marks and rings on a staggered grid — a quiet kiroX motif.
             val step = 46.dp.toPx() * patternScale
             val arm = 4.dp.toPx() * patternScale.coerceAtLeast(0.6f)

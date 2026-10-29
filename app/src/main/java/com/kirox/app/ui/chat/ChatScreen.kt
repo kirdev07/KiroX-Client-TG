@@ -14,6 +14,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -107,7 +111,8 @@ internal fun MessageRow(message: MessageUi, grouped: Boolean, appearance: ChatAp
     val replyAt = with(density) { 64.dp.toPx() }
     val maxDrag = with(density) { 96.dp.toPx() }
     // The bubble follows the finger a little and springs back; past the threshold it buzzes once.
-    val shown by androidx.compose.animation.core.animateFloatAsState(drag, label = "swipe_reply")
+    val animatedShown by androidx.compose.animation.core.animateFloatAsState(drag, label = "swipe_reply")
+    val shown = if (com.kirox.app.ui.theme.LocalMotionFactor.current > 0f) animatedShown else drag
     // Bubbles of one sender in a row share their inner corners, like a single block (Material 3 chat style).
     val big = appearance.bubbleRadiusDp.dp
     val small = (appearance.bubbleRadiusDp / 3f).coerceAtLeast(4f).dp
@@ -306,9 +311,10 @@ private fun deliveryGlyph(state: DeliveryState) = when (state) { DeliveryState.S
 
 @Composable
 internal fun ChatComposer(value: TextFieldValue, reply: MessageUi?, editing: MessageUi?, onValueChange: (TextFieldValue) -> Unit, onCancelContext: () -> Unit, onAttach: () -> Unit, onEmoji: () -> Unit, onSend: () -> Unit, onMic: () -> Unit, appearance: ChatAppearance) {
+    val animate = com.kirox.app.ui.theme.LocalMotionFactor.current > 0f
     Surface(color = Fusion.colors.background) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
-            AnimatedVisibility(reply != null || editing != null) { (editing ?: reply)?.let { context -> Row(Modifier.fillMaxWidth().background(Fusion.colors.surface1).padding(horizontal = 14.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.width(2.dp).height(34.dp).background(ChatWhite)); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(if (editing != null) "Редактирование сообщения" else "Ответ: ${context.author}", color = ChatWhite, fontSize = 11.sp); Text(context.text, color = ChatSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }; androidx.compose.material3.IconButton(onClick = onCancelContext) { Text("×", color = ChatSecondary, fontSize = 22.sp) } } } }
+            AnimatedVisibility(reply != null || editing != null, enter = if (animate) fadeIn() + expandVertically() else EnterTransition.None, exit = if (animate) fadeOut() + shrinkVertically() else ExitTransition.None) { (editing ?: reply)?.let { context -> Row(Modifier.fillMaxWidth().background(Fusion.colors.surface1).padding(horizontal = 14.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.width(2.dp).height(34.dp).background(ChatWhite)); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(if (editing != null) "Редактирование сообщения" else "Ответ: ${context.author}", color = ChatWhite, fontSize = 11.sp); Text(context.text, color = ChatSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }; androidx.compose.material3.IconButton(onClick = onCancelContext) { Text("×", color = ChatSecondary, fontSize = 22.sp) } } } }
             Surface(
                 color = Color(appearance.inputColor), shape = RoundedCornerShape(26.dp),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp).border(1.dp, Fusion.colors.outline, RoundedCornerShape(26.dp))
@@ -317,8 +323,8 @@ internal fun ChatComposer(value: TextFieldValue, reply: MessageUi?, editing: Mes
                 Row(verticalAlignment = Alignment.Bottom) {
                     ChatIconButton(KiroXIcon.Emoji, "Эмодзи и стикеры", onEmoji)
                     TextField(value, onValueChange, modifier = Modifier.weight(1f).heightIn(min = 48.dp, max = 140.dp), placeholder = { Text("Сообщение", color = ChatSecondary, fontSize = 16.sp) }, colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent, focusedTextColor = ChatWhite, unfocusedTextColor = ChatWhite, cursorColor = ChatWhite), maxLines = 5)
-                    AnimatedVisibility(value.text.isBlank(), enter = fadeIn() + expandHorizontally(), exit = fadeOut() + shrinkHorizontally()) { ChatIconButton(KiroXIcon.Attach, "Вложения", onAttach) }
-                    AnimatedContent(value.text.isNotBlank(), transitionSpec = { (fadeIn() + scaleIn()).togetherWith(fadeOut() + scaleOut()) }, label = "send_mic") { hasText -> if (hasText) SendButton(onSend) else ChatIconButton(KiroXIcon.Voice, "Голосовое сообщение", onMic) }
+                    AnimatedVisibility(value.text.isBlank(), enter = if (animate) fadeIn() + expandHorizontally() else EnterTransition.None, exit = if (animate) fadeOut() + shrinkHorizontally() else ExitTransition.None) { ChatIconButton(KiroXIcon.Attach, "Вложения", onAttach) }
+                    AnimatedContent(value.text.isNotBlank(), transitionSpec = { if (animate) (fadeIn() + scaleIn()).togetherWith(fadeOut() + scaleOut()) else EnterTransition.None.togetherWith(ExitTransition.None) }, label = "send_mic") { hasText -> if (hasText) SendButton(onSend) else ChatIconButton(KiroXIcon.Voice, "Голосовое сообщение", onMic) }
                 }
             }
         }

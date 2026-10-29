@@ -21,6 +21,9 @@ data class TelegramFileRef(val id: Int, val localPath: String?)
 
 enum class LastMessageState { None, Sent, Read }
 
+/** What a chat is, from TDLib's chat type: used by the local Личные / Группы / Каналы filters. */
+enum class TelegramChatKind { Private, Group, Channel }
+
 data class TelegramChatItem(
     val id: Long,
     val title: String,
@@ -36,7 +39,8 @@ data class TelegramChatItem(
     val photo: TelegramFileRef?,
     val archived: Boolean,
     /** The user's own chat (Saved Messages). */
-    val isSaved: Boolean = false
+    val isSaved: Boolean = false,
+    val kind: TelegramChatKind = TelegramChatKind.Private
 )
 
 sealed interface TelegramChatListKey {

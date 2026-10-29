@@ -1,5 +1,6 @@
 package com.kirox.app.ui.auth
 
+import com.kirox.app.ui.components.fusionBackground
 import com.kirox.app.ui.theme.Fusion
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
@@ -115,7 +116,7 @@ fun TelegramAuthStepScreen(state: TelegramAuthState, repository: TelegramAuthRep
     LaunchedEffect(error) { if (error != null && codeLength != null) first = "" }
 
     Column(
-        Modifier.fillMaxSize().background(Fusion.colors.background).statusBarsPadding().navigationBarsPadding().imePadding()
+        Modifier.fillMaxSize().fusionBackground(Fusion.colors).statusBarsPadding().navigationBarsPadding().imePadding()
     ) {
         Row(Modifier.fillMaxWidth().height(56.dp).padding(start = 4.dp, end = 24.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(48.dp).clip(CircleShape).clickable(enabled = !busy, onClick = onBack), contentAlignment = Alignment.Center) {

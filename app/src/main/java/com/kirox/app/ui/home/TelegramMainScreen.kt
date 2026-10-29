@@ -63,13 +63,14 @@ import com.kirox.app.ui.theme.FusionMotion
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 
+/** The approved Fusion UI v2 dock. Contacts and the own profile are sub-screens now. */
 private enum class MainTab(val item: FusionNavItem) {
-    Contacts(FusionNavItem("Контакты", KiroXIcon.Contacts)),
     Chats(FusionNavItem("Чаты", KiroXIcon.Chats)),
-    Settings(FusionNavItem("Настройки", KiroXIcon.Tune)),
-    Profile(FusionNavItem("Профиль", KiroXIcon.ProfileCircle))
+    Calls(FusionNavItem("Звонки", KiroXIcon.Call)),
+    Stories(FusionNavItem("Истории", KiroXIcon.Stories)),
+    Settings(FusionNavItem("Настройки", KiroXIcon.Tune))
 }
-private enum class SubScreen { None, NewMessage, Customization, Themes, ChatStyle, Animations, Updates, Devices, ProfileEdit, Notifications, Privacy, Storage, Premium, Advanced }
+private enum class SubScreen { None, Contacts, Profile, NewMessage, Customization, Themes, ChatStyle, Animations, Updates, Devices, ProfileEdit, Notifications, Privacy, Storage, Premium, Advanced }
 private enum class RealChatSection { Archive, Messages }
 
 /** chatId → "печатает…"-style line shown in a chat row instead of its last message. */
@@ -115,11 +116,11 @@ fun TelegramMainScreen(
     onLogOut: () -> Unit,
     onStartCall: (userId: Long, isVideo: Boolean) -> Unit = { _, _ -> },
     onAddContact: suspend (phone: String, firstName: String, lastName: String) -> Long? = { _, _, _ -> null },
-    /** Tab shown first: 0 contacts, 1 chats, 2 settings, 3 profile (screenshots open other tabs). */
-    initialTab: Int = 1
+    /** Screen shown first (screenshots): 0 chats, 1 calls, 2 stories, 3 settings, 4 contacts, 5 profile. */
+    initialTab: Int = 0
 ) = androidx.compose.runtime.CompositionLocalProvider(com.kirox.app.ui.components.LocalSeasonalEffects provides seasonal) {
-    var tab by rememberSaveable { mutableStateOf(MainTab.entries.getOrElse(initialTab) { MainTab.Chats }) }
-    var sub by rememberSaveable { mutableStateOf(SubScreen.None) }
+    var tab by rememberSaveable { mutableStateOf(MainTab.entries.getOrElse(initialTab) { if (initialTab == 5) MainTab.Settings else MainTab.Chats }) }
+    var sub by rememberSaveable { mutableStateOf(when (initialTab) { 4 -> SubScreen.Contacts; 5 -> SubScreen.Profile; else -> SubScreen.None }) }
     var notice by remember { mutableStateOf<UiNotice?>(null) }
     var viewingStoriesOf by rememberSaveable { mutableStateOf<Long?>(null) }
     val keyboardOpen = WindowInsets.isImeVisible
@@ -127,12 +128,13 @@ fun TelegramMainScreen(
     LaunchedEffect(chatError) { if (chatError != null) { notice = UiNotice(chatError); onChatErrorShown() } }
     val navItems = MainTab.entries.map { it.item }
     BoxWithConstraints(Modifier.fillMaxSize()) {
+    com.kirox.app.ui.components.FusionBackdrop()
     val wide = maxWidth >= 600.dp
     Row(Modifier.fillMaxSize()) {
     if (wide) FusionNavigationRail(navItems, tab.ordinal, { tab = MainTab.entries[it]; sub = SubScreen.None })
     Scaffold(
         modifier = Modifier.weight(1f),
-        containerColor = Fusion.colors.background,
+        containerColor = if (Fusion.colors.backdrop != null) androidx.compose.ui.graphics.Color.Transparent else Fusion.colors.background,
         contentWindowInsets = WindowInsets.statusBars,
         bottomBar = {
             if (!keyboardOpen && !wide) FusionBottomBar(navItems, tab.ordinal, { tab = MainTab.entries[it]; sub = SubScreen.None })
@@ -143,6 +145,8 @@ fun TelegramMainScreen(
             val fadeOutMs = com.kirox.app.ui.theme.motionMs(FusionMotion.FAST)
             AnimatedContent(tab to sub, transitionSpec = { fadeIn(tween(fadeInMs)) togetherWith fadeOut(tween(fadeOutMs)) }, label = "main_tabs") { (current, subScreen) ->
                 when {
+                    subScreen == SubScreen.Contacts -> ContactsTab(contacts, contactsLoading, onOpenContact, showNotice, onStartCall, onAddContact, onBack = { sub = SubScreen.None })
+                    subScreen == SubScreen.Profile -> ProfileTab(profile, onOpenSettings = { tab = MainTab.Settings; sub = SubScreen.None }, onOpenSaved = onOpenSavedMessages, onLogOut = onLogOut, onEditProfile = { sub = SubScreen.ProfileEdit }, onNotice = showNotice, onBack = { sub = SubScreen.None })
                     subScreen == SubScreen.NewMessage -> NewMessageScreen(contacts, onBack = { sub = SubScreen.None }, onOpenContact = { sub = SubScreen.None; onOpenContact(it) }, onOpenSaved = { sub = SubScreen.None; onOpenSavedMessages() }, onOpenChat = { sub = SubScreen.None; onOpenChat(it) }, onNotice = showNotice)
                     subScreen == SubScreen.Customization -> CustomizationScreen(
                         palette, bubbleShape,
@@ -176,9 +180,10 @@ fun TelegramMainScreen(
                         motion, onMotion, seasonal, onSeasonal, effectScene, onEffectScene, effectsQuality, onEffectsQuality, weakDevice,
                         onBack = { sub = SubScreen.Customization }
                     )
-                    current == MainTab.Chats -> ChatsTab(lists, chatActions, connection, onOpenChat, storyChats, profile, { viewingStoriesOf = it.chatId }, onNewMessage = { sub = SubScreen.NewMessage }) { notice = it }
-                    current == MainTab.Contacts -> ContactsTab(contacts, contactsLoading, onOpenContact, calls, onLoadCalls, onOpenChat, showNotice, onStartCall, onAddContact)
-                    current == MainTab.Settings -> SettingsTab(profile, onOpenProfile = { tab = MainTab.Profile }, onOpenCustomization = { sub = SubScreen.Customization }, onOpenUpdates = { sub = SubScreen.Updates }, onOpenDevices = { sub = SubScreen.Devices }, onEditProfile = { sub = SubScreen.ProfileEdit }, onOpenSection = { section ->
+                    current == MainTab.Chats -> ChatsTab(lists, chatActions, connection, onOpenChat, storyChats, profile, { viewingStoriesOf = it.chatId }, onNewMessage = { sub = SubScreen.NewMessage }, onOpenContacts = { sub = SubScreen.Contacts }) { notice = it }
+                    current == MainTab.Calls -> CallsTab(calls, onLoadCalls, onOpenChat, showNotice, onStartCall, onOpenContacts = { sub = SubScreen.Contacts })
+                    current == MainTab.Stories -> StoriesTab(storyChats, profile, onOpen = { viewingStoriesOf = it.chatId }, onNotice = { notice = it })
+                    else -> SettingsTab(profile, onOpenProfile = { sub = SubScreen.Profile }, onOpenContacts = { sub = SubScreen.Contacts }, onOpenCustomization = { sub = SubScreen.Customization }, onOpenUpdates = { sub = SubScreen.Updates }, onOpenDevices = { sub = SubScreen.Devices }, onEditProfile = { sub = SubScreen.ProfileEdit }, onOpenSection = { section ->
                         sub = when (section) {
                             "Уведомления" -> SubScreen.Notifications
                             "Конфиденциальность" -> SubScreen.Privacy
@@ -189,7 +194,6 @@ fun TelegramMainScreen(
                             else -> SubScreen.Advanced
                         }
                     }, onNotice = showNotice)
-                    else -> ProfileTab(profile, onOpenSettings = { tab = MainTab.Settings }, onOpenSaved = onOpenSavedMessages, onLogOut = onLogOut, onEditProfile = { sub = SubScreen.ProfileEdit }, onNotice = showNotice)
                 }
             }
             // Material 3 snackbar; an undo action keeps it a little longer.
@@ -231,6 +235,7 @@ private fun ChatsTab(
     profile: TelegramUserProfile?,
     onOpenStories: (TelegramStoryChat) -> Unit,
     onNewMessage: () -> Unit,
+    onOpenContacts: () -> Unit = {},
     onNotice: (UiNotice) -> Unit
 ) {
     var confirmReadAll by remember { mutableStateOf(false) }
@@ -259,6 +264,8 @@ private fun ChatsTab(
     }
     var section by rememberSaveable { mutableStateOf(RealChatSection.Messages) }
     var folderId by rememberSaveable { mutableStateOf<Int?>(null) }
+    /** Local filter over the loaded list by TDLib chat type; folders stay as they are. */
+    var kindFilter by rememberSaveable { mutableStateOf<com.kirox.app.telegram.TelegramChatKind?>(null) }
     // Folders arrive a moment after start: a saved folder is dropped only once the list is known.
     if (folderId != null && (lists.folders.isNotEmpty() || lists.main.chats.isNotEmpty()) && lists.folders.none { it.id == folderId }) folderId = null
     val listKey: TelegramChatListKey = when {
@@ -274,7 +281,9 @@ private fun ChatsTab(
             onArchive = { archive(chat) }
         )
     }
-    val state = lists[listKey]
+    val loaded = lists[listKey]
+    val activeKind = kindFilter.takeIf { section == RealChatSection.Messages && folderId == null }
+    val state = if (activeKind == null) loaded else loaded.copy(chats = loaded.chats.filter { it.kind == activeKind })
     if (confirmReadAll) {
         val unread = state.chats.filter { it.unreadCount > 0 || it.isMarkedUnread }
         AlertDialog(
@@ -299,6 +308,7 @@ private fun ChatsTab(
     Box(Modifier.fillMaxSize().nestedScroll(fabScroll)) {
     Column(Modifier.fillMaxSize()) {
         ScreenTitle(connectionTitle(connection) ?: "Чаты") {
+            TitleAction(KiroXIcon.Contacts, "Контакты", onOpenContacts)
             TitleAction(KiroXIcon.ReadAll, "Отметить всё прочитанным") { confirmReadAll = true }
             TitleAction(KiroXIcon.Search, "Поиск") { searching = true }
         }
@@ -315,9 +325,12 @@ private fun ChatsTab(
                 // Unread chats per folder, like Telegram's folder tabs.
                 fun unreadIn(state: com.kirox.app.telegram.TelegramChatListState) = state.chats.count { it.unreadCount > 0 || it.isMarkedUnread }
                 fun withCount(title: String, count: Int) = if (count > 0) "$title · $count" else title
-                item { FolderChip(withCount("Все", unreadIn(lists.main)), folderId == null) { folderId = null } }
+                item { FolderChip(withCount("Все", unreadIn(lists.main)), folderId == null && kindFilter == null) { folderId = null; kindFilter = null } }
+                items(KindFilters, key = { "kind_" + it.first.name }) { (kind, title) ->
+                    FolderChip(title, folderId == null && kindFilter == kind) { folderId = null; kindFilter = if (kindFilter == kind) null else kind }
+                }
                 items(lists.folders, key = { it.id }) { folder ->
-                    FolderChip(withCount(folder.title.ifBlank { "Папка" }, unreadIn(lists[TelegramChatListKey.Folder(folder.id)])), folderId == folder.id, onLongClick = { deletingFolder = folder }) { folderId = folder.id }
+                    FolderChip(withCount(folder.title.ifBlank { "Папка" }, unreadIn(lists[TelegramChatListKey.Folder(folder.id)])), folderId == folder.id, onLongClick = { deletingFolder = folder }) { folderId = folder.id; kindFilter = null }
                 }
                 item { FolderChip("+ Папка", false) { creatingFolder = true } }
             }
@@ -325,14 +338,16 @@ private fun ChatsTab(
         }
         key(listKey) {
             val listState = rememberLazyListState()
+            // A type filter may hide most of a page: keep loading until the list is complete.
             LoadMoreEffect(listState, state.chats.size, state.complete) { actions.loadMore(listKey) }
+            if (activeKind != null && state.chats.size < 20 && !state.complete && !state.loading) LaunchedEffect(loaded.chats.size) { actions.loadMore(listKey) }
             when {
                 state.chats.isEmpty() && !state.complete -> CenteredProgress()
                 state.chats.isEmpty() -> EmptyState(
                     when (listKey) {
                         TelegramChatListKey.Archive -> "Архив пуст"
                         is TelegramChatListKey.Folder -> "В этой папке нет чатов"
-                        TelegramChatListKey.Main -> "Здесь появятся ваши чаты"
+                        TelegramChatListKey.Main -> if (activeKind != null) "Нет таких чатов" else "Здесь появятся ваши чаты"
                     }
                 )
                 else -> LazyColumn(Modifier.fillMaxSize(), state = listState) {
@@ -351,8 +366,8 @@ private fun ChatsTab(
     // New message: Material 3 floating action button.
     androidx.compose.animation.AnimatedVisibility(
         fabShown, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-        enter = androidx.compose.animation.scaleIn() + androidx.compose.animation.fadeIn(),
-        exit = androidx.compose.animation.scaleOut() + androidx.compose.animation.fadeOut()
+        enter = if (com.kirox.app.ui.theme.LocalMotionFactor.current > 0f) androidx.compose.animation.scaleIn() + androidx.compose.animation.fadeIn() else androidx.compose.animation.EnterTransition.None,
+        exit = if (com.kirox.app.ui.theme.LocalMotionFactor.current > 0f) androidx.compose.animation.scaleOut() + androidx.compose.animation.fadeOut() else androidx.compose.animation.ExitTransition.None
     ) {
         androidx.compose.material3.FloatingActionButton(
             onClick = onNewMessage,
@@ -442,33 +457,36 @@ private fun connectionTitle(state: TelegramConnection): String? = when (state) {
 
 // ---------- Contacts ----------
 
+private val KindFilters = listOf(
+    com.kirox.app.telegram.TelegramChatKind.Private to "Личные",
+    com.kirox.app.telegram.TelegramChatKind.Group to "Группы",
+    com.kirox.app.telegram.TelegramChatKind.Channel to "Каналы"
+)
+
+private val noCallsText = "Звонки из KiroX пока недоступны: нужен отдельный VoIP-модуль"
+
 @Composable
 private fun ContactsTab(
     contacts: List<TelegramContact>,
     loading: Boolean,
     onOpenContact: (Long) -> Unit,
-    calls: TelegramCallsState,
-    onLoadCalls: () -> Unit,
-    onOpenChat: (Long) -> Unit,
     onNotice: (String) -> Unit,
     onStartCall: (userId: Long, isVideo: Boolean) -> Unit,
-    onAddContact: suspend (phone: String, firstName: String, lastName: String) -> Long?
+    onAddContact: suspend (phone: String, firstName: String, lastName: String) -> Long?,
+    onBack: () -> Unit
 ) {
-    var showCalls by rememberSaveable { mutableStateOf(false) }
+    androidx.activity.compose.BackHandler(onBack = onBack)
     var focusSearch by remember { mutableIntStateOf(0) }
     var card by remember { mutableStateOf<Long?>(null) }
     var adding by remember { mutableStateOf(false) }
-    val noCalls = { onNotice("Звонки из KiroX пока недоступны: нужен отдельный VoIP-модуль") }
     // In a private chat the chat id equals the user id.
-    val call: (Long, Boolean) -> Unit = { userId, video -> if (com.kirox.app.ui.call.callsEnabled) onStartCall(userId, video) else noCalls() }
+    val call: (Long, Boolean) -> Unit = { userId, video -> if (com.kirox.app.ui.call.callsEnabled) onStartCall(userId, video) else onNotice(noCallsText) }
     Column(Modifier.fillMaxSize()) {
-        ScreenTitle("Контакты") {
-            TitleAction(KiroXIcon.Search, "Поиск контактов") { showCalls = false; focusSearch++ }
+        BackTitle("Контакты", onBack) {
+            TitleAction(KiroXIcon.Search, "Поиск контактов") { focusSearch++ }
             TitleAction(KiroXIcon.Add, "Добавить контакт") { adding = true }
         }
-        SectionTabs(listOf("Контакты" to false, "Звонки" to true), showCalls) { showCalls = it }
-        if (showCalls) CallsList(calls, onLoadCalls, onOpenChat) { item -> call(item.chatId, item.isVideo) }
-        else ContactsList(contacts, loading, focusSearch, onOpen = { card = it }, onCall = call)
+        ContactsList(contacts, loading, focusSearch, onOpen = { card = it }, onCall = call)
     }
     contacts.firstOrNull { it.id == card }?.let { contact ->
         ContactCard(
@@ -483,6 +501,78 @@ private fun ContactsTab(
         onAdd = onAddContact,
         onAdded = { userId -> adding = false; card = userId },
         onNotice = onNotice
+    )
+}
+
+/** Звонки tab: the real call history from TDLib (SearchCallMessages). */
+@Composable
+private fun CallsTab(
+    calls: TelegramCallsState,
+    onLoadCalls: () -> Unit,
+    onOpenChat: (Long) -> Unit,
+    onNotice: (String) -> Unit,
+    onStartCall: (userId: Long, isVideo: Boolean) -> Unit,
+    onOpenContacts: () -> Unit
+) {
+    val call: (Long, Boolean) -> Unit = { userId, video -> if (com.kirox.app.ui.call.callsEnabled) onStartCall(userId, video) else onNotice(noCallsText) }
+    Column(Modifier.fillMaxSize()) {
+        ScreenTitle("Звонки") { TitleAction(KiroXIcon.Contacts, "Позвонить контакту", onOpenContacts) }
+        CallsList(calls, onLoadCalls, onOpenChat) { item -> call(item.chatId, item.isVideo) }
+    }
+}
+
+/** Истории tab: own stories and the active stories of chats, as TDLib reports them. */
+@Composable
+private fun StoriesTab(storyChats: List<TelegramStoryChat>, profile: TelegramUserProfile?, onOpen: (TelegramStoryChat) -> Unit, onNotice: (UiNotice) -> Unit) {
+    val postStory = rememberStoryPoster { onNotice(UiNotice(it)) }
+    val own = storyChats.firstOrNull { it.isSelf }
+    val others = storyChats.filterNot { it.isSelf }
+    val (unread, seen) = others.partition { it.hasUnread }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+        item { ScreenTitle("Истории") { TitleAction(KiroXIcon.Camera, "Новая история") { postStory() } } }
+        item {
+            StoryEntry(
+                profile?.name.orEmpty(), profile?.photo, own?.hasUnread == true,
+                title = "Моя история",
+                subtitle = if (own != null) storiesCount(own.storyIds.size) else "Нажмите, чтобы опубликовать"
+            ) { if (own != null) onOpen(own) else postStory() }
+        }
+        if (others.isEmpty()) item { EmptyState("Активных историй пока нет") }
+        if (unread.isNotEmpty()) {
+            item { StorySection("Новые") }
+            items(unread, key = { it.chatId }) { chat -> StoryEntry(chat.title, chat.photo, true, chat.title, storiesCount(chat.storyIds.size)) { onOpen(chat) } }
+        }
+        if (seen.isNotEmpty()) {
+            item { StorySection("Просмотренные") }
+            items(seen, key = { it.chatId }) { chat -> StoryEntry(chat.title, chat.photo, false, chat.title, storiesCount(chat.storyIds.size)) { onOpen(chat) } }
+        }
+    }
+}
+
+private fun storiesCount(n: Int) = when {
+    n % 10 == 1 && n % 100 != 11 -> "$n история"
+    n % 10 in 2..4 && n % 100 !in 12..14 -> "$n истории"
+    else -> "$n историй"
+}
+
+@Composable
+private fun StorySection(title: String) {
+    Text(title, color = Fusion.colors.textSecondary, style = androidx.compose.material3.MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 20.dp, top = 14.dp, bottom = 4.dp))
+}
+
+@Composable
+private fun StoryEntry(name: String, photo: com.kirox.app.telegram.TelegramFileRef?, unread: Boolean, title: String, subtitle: String, onClick: () -> Unit) {
+    androidx.compose.material3.ListItem(
+        headlineContent = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        supportingContent = { Text(subtitle, maxLines = 1) },
+        leadingContent = {
+            Box(
+                Modifier.size(58.dp).border(if (unread) 2.dp else 1.dp, if (unread) Fusion.colors.accent else Fusion.colors.outlineStrong, CircleShape).padding(4.dp),
+                contentAlignment = Alignment.Center
+            ) { TelegramAvatar(name, photo, 50.dp) }
+        },
+        colors = fusionListColors(),
+        modifier = Modifier.clickable(onClick = onClick)
     )
 }
 

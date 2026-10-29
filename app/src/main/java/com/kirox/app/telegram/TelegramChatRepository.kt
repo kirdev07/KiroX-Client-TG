@@ -292,7 +292,12 @@ internal fun toChatItem(chat: TdApi.Chat, position: TdApi.ChatPosition, archived
         },
         photo = if (saved) null else chat.photo?.small?.toRef(),
         archived = archived,
-        isSaved = saved
+        isSaved = saved,
+        kind = when (val type = chat.type) {
+            is TdApi.ChatTypeSupergroup -> if (type.isChannel) TelegramChatKind.Channel else TelegramChatKind.Group
+            is TdApi.ChatTypeBasicGroup -> TelegramChatKind.Group
+            else -> TelegramChatKind.Private
+        }
     )
 }
 

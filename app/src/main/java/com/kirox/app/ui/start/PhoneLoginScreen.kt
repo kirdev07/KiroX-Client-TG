@@ -1,5 +1,6 @@
 package com.kirox.app.ui.start
 
+import com.kirox.app.ui.components.fusionBackground
 import androidx.compose.runtime.ReadOnlyComposable
 import com.kirox.app.ui.theme.Fusion
 import androidx.compose.foundation.Canvas
@@ -67,7 +68,7 @@ fun PhoneLoginScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Fusion.colors.background)
+            .fusionBackground(Fusion.colors)
             .statusBarsPadding()
             .imePadding()
     ) {

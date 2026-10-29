@@ -91,7 +91,7 @@ internal fun SwipeableChatRow(chat: TelegramChatItem, onSwipeRight: () -> Unit, 
             }
         }
         Box(
-            Modifier.graphicsLayer { translationX = offset.value }.background(Fusion.colors.background).draggable(
+            Modifier.graphicsLayer { translationX = offset.value }.background(if (offset.value != 0f) Fusion.colors.background else Fusion.colors.screen).draggable(
                 orientation = Orientation.Horizontal,
                 state = rememberDraggableState { delta ->
                     scope.launch {

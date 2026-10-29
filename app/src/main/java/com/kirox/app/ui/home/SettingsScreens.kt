@@ -48,7 +48,7 @@ import kotlinx.coroutines.launch
 private fun settingsRepo() = (LocalContext.current.applicationContext as KiroXApplication).telegram.settings
 
 @Composable
-private fun ToggleRow(title: String, subtitle: String? = null, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
+internal fun ToggleRow(title: String, subtitle: String? = null, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     // Material 3 list item with a switch; the whole row toggles.
     androidx.compose.material3.ListItem(
         headlineContent = { Text(title) },
@@ -92,7 +92,7 @@ internal fun NotificationSettingsScreen(onBack: () -> Unit, onNotice: (String) -
         state[s] = value
         scope.launch { runCatching { repo.setNotifications(s, value.enabled, value.showPreview) }.onFailure { old?.let { state[s] = it }; onNotice("Не удалось сохранить") } }
     }
-    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.screen), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { BackTitle("Уведомления", onBack) }
         NotifyScope.entries.forEach { s ->
             item(key = s.name) {
@@ -180,7 +180,7 @@ internal fun PrivacyScreen(onBack: () -> Unit, onNotice: (String) -> Unit) {
     val levels = remember { mutableStateMapOf<PrivacyItem, PrivacyLevel>() }
     var choosing by remember { mutableStateOf<PrivacyItem?>(null) }
     LaunchedEffect(Unit) { PrivacyItem.entries.forEach { item -> runCatching { repo.privacy(item) }.onSuccess { levels[item] = it } } }
-    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.screen), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { BackTitle("Конфиденциальность", onBack) }
         item { SmallCaption("Кто видит и может") }
         items(PrivacyItem.entries.toList(), key = { it.name }) { item ->
@@ -241,7 +241,7 @@ internal fun StorageScreen(onBack: () -> Unit, onNotice: (String) -> Unit) {
     var confirm by remember { mutableStateOf(false) }
     fun reload() { scope.launch { runCatching { repo.storage() }.onSuccess { usage = it } } }
     LaunchedEffect(Unit) { reload() }
-    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.screen), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { BackTitle("Данные и память", onBack) }
         item { SmallCaption("Использование памяти") }
         item {
@@ -302,7 +302,7 @@ internal fun formatBytes(bytes: Long): String = when {
 internal fun PremiumScreen(profile: TelegramUserProfile?, onBack: () -> Unit) {
     BackHandler(onBack = onBack)
     val context = LocalContext.current
-    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.screen), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { BackTitle("Telegram Premium", onBack) }
         item {
             Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -336,7 +336,7 @@ internal fun AdvancedScreen(onBack: () -> Unit, onLogOut: () -> Unit, onNotice: 
     val context = LocalContext.current
     var confirmReset by remember { mutableStateOf(false) }
     var confirmLogout by remember { mutableStateOf(false) }
-    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.screen), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { BackTitle("Дополнительно", onBack) }
         item { SmallCaption("О приложении") }
         item { LinkRow("KiroX ${BuildConfig.VERSION_NAME}", "Независимый клиент Telegram на TDLib") {} }
@@ -455,7 +455,7 @@ internal fun CloudPasswordScreen(onBack: () -> Unit, onNotice: (String) -> Unit)
             busy = false
         }
     }
-    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.screen), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { BackTitle("Облачный пароль", onBack) }
         val s = state
         if (s == null) { item { Loading() }; return@LazyColumn }
@@ -531,7 +531,7 @@ internal fun BlockedUsersScreen(onBack: () -> Unit, onNotice: (String) -> Unit) 
     var list by remember { mutableStateOf<List<BlockedSender>?>(null) }
     var confirm by remember { mutableStateOf<BlockedSender?>(null) }
     LaunchedEffect(Unit) { list = runCatching { repo.blocked() }.getOrElse { onNotice("Не удалось загрузить список"); emptyList() } }
-    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.screen), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { BackTitle("Чёрный список", onBack) }
         val current = list
         when {
@@ -575,7 +575,7 @@ internal fun NotificationExceptionsScreen(onBack: () -> Unit) {
     val repo = settingsRepo()
     var list by remember { mutableStateOf<List<NotificationException>?>(null) }
     LaunchedEffect(Unit) { list = runCatching { repo.notificationExceptions() }.getOrDefault(emptyList()) }
-    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.screen), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { BackTitle("Исключения", onBack) }
         val current = list
         when {
@@ -605,7 +605,7 @@ internal fun ProxyScreen(onBack: () -> Unit, onNotice: (String) -> Unit) {
     fun reload() { scope.launch { list = runCatching { repo.proxies() }.getOrDefault(emptyList()) } }
     fun act(block: suspend () -> Unit, failure: String) { scope.launch { runCatching { block() }.onFailure { onNotice(failure) }; reload() } }
     LaunchedEffect(Unit) { reload() }
-    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.screen), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { BackTitle("Прокси", onBack) }
         val current = list
         if (current == null) { item { Loading() }; return@LazyColumn }

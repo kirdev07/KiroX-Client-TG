@@ -1,5 +1,6 @@
 package com.kirox.app.ui.chat
 
+import androidx.compose.ui.graphics.toArgb
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -123,8 +124,12 @@ fun TelegramChatScreen(
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
     val style = com.kirox.app.ui.theme.LocalChatStyle.current
-    val appearance = remember(style) {
-        ChatAppearance(bubbleRadiusDp = style.bubbleRadiusDp, textScale = style.textScale, messageSpacingDp = style.density.spacingDp, bubblePaddingDp = style.density.paddingDp)
+    val fusion = com.kirox.app.ui.theme.Fusion.colors
+    val appearance = remember(style, fusion) {
+        ChatAppearance(
+            incomingColor = fusion.incomingBubble.argb(), outgoingColor = fusion.outgoingBubble.argb(), inputColor = fusion.inputBar.argb(),
+            bubbleRadiusDp = style.bubbleRadiusDp, textScale = style.textScale, messageSpacingDp = style.density.spacingDp, bubblePaddingDp = style.density.paddingDp
+        )
     }
     var input by rememberSaveable(history.chatId, stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue()) }
     var replyTo by remember(history.chatId) { mutableStateOf<MessageUi?>(null) }
@@ -467,7 +472,7 @@ fun TelegramChatScreen(
                     val next = rows.getOrNull(index - 1)?.message
                     val groupedBelow = next != null && next.direction == row.message.direction && next.author == row.message.author && row.message.direction != MessageDirection.System
                     // New messages slide in and the rest move smoothly instead of jumping.
-                    Box(Modifier.animateItem()) {
+                    Box(if (com.kirox.app.ui.theme.LocalMotionFactor.current > 0f) Modifier.animateItem() else Modifier) {
                     MessageRow(
                         row.message, grouped, appearance,
                         groupedBelow = groupedBelow,
@@ -1110,3 +1115,6 @@ private fun PollToggle(title: String, checked: Boolean, enabled: Boolean = true,
         Switch(checked, onChange, enabled = enabled)
     }
 }
+
+/** ARGB as the Long that [ChatAppearance] stores. */
+private fun androidx.compose.ui.graphics.Color.argb(): Long = toArgb().toLong() and 0xFFFFFFFFL

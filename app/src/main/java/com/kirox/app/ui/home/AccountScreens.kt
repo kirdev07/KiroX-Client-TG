@@ -2,12 +2,12 @@
 
 package com.kirox.app.ui.home
 
+import com.kirox.app.ui.components.fusionPanel
 import androidx.compose.material3.MaterialTheme
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -31,11 +31,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
@@ -59,21 +54,24 @@ private const val IN_PROGRESS = "В разработке"
 // ---------- Settings: profile header + icon-tile rows (old Fusion layout) ----------
 
 @Composable
-internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Unit, onOpenCustomization: () -> Unit, onOpenUpdates: () -> Unit, onOpenDevices: () -> Unit, onEditProfile: () -> Unit, onOpenSection: (String) -> Unit, onNotice: (String) -> Unit) {
+internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Unit, onOpenCustomization: () -> Unit, onOpenUpdates: () -> Unit, onOpenDevices: () -> Unit, onEditProfile: () -> Unit, onOpenSection: (String) -> Unit, onNotice: (String) -> Unit, onOpenContacts: () -> Unit = {}) {
     val pickPhoto = rememberProfilePhotoPicker(onNotice)
     var showAccounts by remember { mutableStateOf(false) }
     if (showAccounts) AccountsSheet { showAccounts = false }
-    val entries = listOf(
-        KiroXIcon.Palette to "Кастомизация", KiroXIcon.Chats to "Чаты и папки", KiroXIcon.Bell to "Уведомления",
-        KiroXIcon.Shield to "Конфиденциальность", KiroXIcon.Storage to "Данные и память", KiroXIcon.Devices to "Устройства",
-        KiroXIcon.Star to "Telegram Premium", KiroXIcon.Sliders to "Возможности KiroX", KiroXIcon.Settings to "Дополнительно",
-        KiroXIcon.Refresh to "Обновления", KiroXIcon.Info to "О KiroX"
+    // Rows in grouped cards, Fusion UI v2 style.
+    val groups = listOf(
+        "Аккаунт" to listOf(KiroXIcon.ProfileCircle to "Мой профиль", KiroXIcon.Contacts to "Контакты", KiroXIcon.Devices to "Устройства"),
+        "Оформление" to listOf(KiroXIcon.Palette to "Кастомизация", KiroXIcon.Chats to "Чаты и папки", KiroXIcon.Sliders to "Возможности KiroX"),
+        "Telegram" to listOf(KiroXIcon.Bell to "Уведомления", KiroXIcon.Shield to "Конфиденциальность", KiroXIcon.Storage to "Данные и память", KiroXIcon.Star to "Telegram Premium"),
+        "Приложение" to listOf(KiroXIcon.Settings to "Дополнительно", KiroXIcon.Refresh to "Обновления", KiroXIcon.Info to "О KiroX")
     )
     // Search filters the rows by name and by what each section contains.
     var searching by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     val keywords = mapOf(
-        "Кастомизация" to "тема цвет пузыри анимации обои шрифт",
+        "Мой профиль" to "имя фото qr username выйти",
+        "Контакты" to "друзья добавить пригласить",
+        "Кастомизация" to "тема цвет пузыри анимации обои шрифт стекло expressive glass",
         "Чаты и папки" to "чат обои размер текста плотность",
         "Уведомления" to "звук вибрация превью",
         "Конфиденциальность" to "приватность номер телефона время захода фото звонки приглашения",
@@ -82,9 +80,8 @@ internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Uni
         "Дополнительно" to "язык сброс выход лицензии",
         "Обновления" to "версия бета github"
     )
-    val shown = if (query.isBlank()) entries else entries.filter { (_, title) ->
-        title.contains(query, true) || keywords[title]?.contains(query, true) == true
-    }
+    fun matches(title: String) = query.isBlank() || title.contains(query, true) || keywords[title]?.contains(query, true) == true
+    val shown = groups.map { (name, rows) -> name to rows.filter { matches(it.second) } }.filter { it.second.isNotEmpty() }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
             Box {
@@ -96,18 +93,25 @@ internal fun SettingsTab(profile: TelegramUserProfile?, onOpenProfile: () -> Uni
                 }
             }
         }
-        item { HorizontalDivider(Modifier.padding(horizontal = 18.dp, vertical = 8.dp), color = Fusion.colors.outline) }
         if (shown.isEmpty()) item { Text("Ничего не найдено", color = Fusion.colors.textSecondary, modifier = Modifier.padding(20.dp)) }
-        items(shown, key = { it.second }) { (icon, title) ->
-            TileRow(icon, title, trailing = if (title == "Обновления") BuildConfig.VERSION_NAME else null) {
-                when (title) {
-                    "Кастомизация" -> onOpenCustomization()
-                    "Обновления" -> onOpenUpdates()
-                    "Устройства" -> onOpenDevices()
-                    "Чаты и папки", "Возможности KiroX" -> onOpenSection(title)
-                    "Уведомления", "Конфиденциальность", "Данные и память", "Telegram Premium", "Дополнительно" -> onOpenSection(title)
-                    "О KiroX" -> onNotice("KiroX ${BuildConfig.VERSION_NAME} — независимый клиент Telegram на TDLib")
-                    else -> onNotice("«$title» — $IN_PROGRESS")
+        items(shown, key = { it.first }) { (name, rows) ->
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                Text(name, color = Fusion.colors.textSecondary, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 6.dp, bottom = 6.dp))
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).fusionPanel(Fusion.colors, RoundedCornerShape(22.dp))) {
+                    rows.forEachIndexed { index, (icon, title) ->
+                        if (index > 0) HorizontalDivider(Modifier.padding(start = 72.dp), color = Fusion.colors.outline)
+                        TileRow(icon, title, trailing = if (title == "Обновления") BuildConfig.VERSION_NAME else null) {
+                            when (title) {
+                                "Мой профиль" -> onOpenProfile()
+                                "Контакты" -> onOpenContacts()
+                                "Кастомизация" -> onOpenCustomization()
+                                "Обновления" -> onOpenUpdates()
+                                "Устройства" -> onOpenDevices()
+                                "О KiroX" -> onNotice("KiroX ${BuildConfig.VERSION_NAME} — независимый клиент Telegram на TDLib")
+                                else -> onOpenSection(title)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -191,7 +195,7 @@ internal fun CustomizationScreen(
     onBack: () -> Unit
 ) {
     BackHandler(onBack = onBack)
-    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.screen), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { BackTitle("Кастомизация", onBack) }
         item { StyleBanner(palette.title, animationsSummary, animationsOn) }
         item { TileRow(KiroXIcon.Palette, "Темы", trailing = palette.title, onClick = onOpenThemes) }
@@ -225,18 +229,32 @@ private fun StyleBanner(theme: String, animation: String, animationsOn: Boolean)
 @Composable
 internal fun ThemesScreen(palette: FusionPalette, onPalette: (FusionPalette) -> Unit, onBack: () -> Unit) {
     BackHandler(onBack = onBack)
-    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
+    val settings = (androidx.compose.ui.platform.LocalContext.current.applicationContext as com.kirox.app.KiroXApplication).settings
+    val blur by settings.glassBlur.collectAsState()
+    val v2 = listOf(FusionPalette.Expressive, FusionPalette.Glass)
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.screen), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { BackTitle("Темы", onBack) }
-        FusionPalette.entries.chunked(2).forEach { pair ->
-            item(key = pair.first().name) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    pair.forEach { option -> ThemeCard(option, option == palette, Modifier.weight(1f)) { onPalette(option) } }
-                    if (pair.size == 1) Spacer(Modifier.weight(1f))
+        item { SectionCaption("Fusion UI v2") }
+        listOf(v2, FusionPalette.entries - v2.toSet()).forEachIndexed { group, options ->
+            if (group == 1) item { SectionCaption("Классические монохромные") }
+            options.chunked(2).forEach { pair ->
+                item(key = pair.first().name) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        pair.forEach { option -> ThemeCard(option, option == palette, Modifier.weight(1f)) { onPalette(option) } }
+                        if (pair.size == 1) Spacer(Modifier.weight(1f))
+                    }
                 }
             }
         }
+        item { SectionCaption("Стекло") }
         item {
-            Text("Все темы тёмные и с белыми акцентами — в стиле kiroX.", color = Fusion.colors.textTertiary, fontSize = 12.sp,
+            ToggleRow(
+                "Размытие фона", if (android.os.Build.VERSION.SDK_INT >= 31) "Мягкое свечение за панелями Fusion Glass и Expressive" else "Нужен Android 12 или новее; без него свечение остаётся без размытия",
+                checked = blur, onChange = settings::setGlassBlur
+            )
+        }
+        item {
+            Text("Сохранённая тема не меняется при обновлении; Fusion Expressive — тема по умолчанию для новых установок.", color = Fusion.colors.textTertiary, fontSize = 12.sp,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp))
         }
     }
@@ -252,7 +270,7 @@ internal fun ChatStyleScreen(
     onBack: () -> Unit
 ) {
     BackHandler(onBack = onBack)
-    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.screen), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { BackTitle("Чаты", onBack) }
         item { LivePreview(bubbleShape.radiusDp, textSize.scale, wallpaper, density) }
         item { SectionCaption("Пузыри сообщений") }
@@ -358,7 +376,8 @@ private fun ThemeCard(palette: FusionPalette, selected: Boolean, modifier: Modif
     OptionCard(selected, modifier, onClick) {
         // Mini chat painted with that theme's own colours.
         Column(
-            Modifier.fillMaxWidth().height(86.dp).clip(RoundedCornerShape(10.dp)).background(colors.background)
+            Modifier.fillMaxWidth().height(86.dp).clip(RoundedCornerShape(10.dp))
+                .background(colors.backdrop?.let { androidx.compose.ui.graphics.Brush.verticalGradient(it) } ?: androidx.compose.ui.graphics.SolidColor(colors.background))
                 .border(1.dp, colors.outline, RoundedCornerShape(10.dp))
         ) {
             Row(Modifier.fillMaxWidth().background(colors.surface1).padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -367,9 +386,9 @@ private fun ThemeCard(palette: FusionPalette, selected: Boolean, modifier: Modif
                 Box(Modifier.width(34.dp).height(6.dp).clip(RoundedCornerShape(3.dp)).background(colors.textSecondary))
             }
             Column(Modifier.fillMaxWidth().padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Box(Modifier.fillMaxWidth(0.7f).height(11.dp).clip(RoundedCornerShape(6.dp)).background(colors.surface2))
-                Box(Modifier.fillMaxWidth(0.55f).height(11.dp).clip(RoundedCornerShape(6.dp)).background(colors.surface3).align(Alignment.End))
-                Box(Modifier.fillMaxWidth(0.45f).height(11.dp).clip(RoundedCornerShape(6.dp)).background(colors.surface2))
+                Box(Modifier.fillMaxWidth(0.7f).height(11.dp).clip(RoundedCornerShape(6.dp)).background(colors.incomingBubble))
+                Box(Modifier.fillMaxWidth(0.55f).height(11.dp).clip(RoundedCornerShape(6.dp)).background(colors.outgoingBubble).align(Alignment.End))
+                Box(Modifier.fillMaxWidth(0.45f).height(11.dp).clip(RoundedCornerShape(6.dp)).background(colors.incomingBubble))
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -405,7 +424,7 @@ internal fun AnimationsScreen(
     onBack: () -> Unit
 ) {
     BackHandler(onBack = onBack)
-    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.screen), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { BackTitle("Анимации", onBack) }
         item {
             Box(
@@ -505,8 +524,11 @@ private fun <T> SegmentRow(icon: KiroXIcon, title: String, options: List<T>, sel
 // ---------- My profile (old Fusion layout) ----------
 
 @Composable
-internal fun ProfileTab(profile: TelegramUserProfile?, onOpenSettings: () -> Unit, onOpenSaved: () -> Unit, onLogOut: () -> Unit, onEditProfile: () -> Unit, onNotice: (String) -> Unit) {
+internal fun ProfileTab(profile: TelegramUserProfile?, onOpenSettings: () -> Unit, onOpenSaved: () -> Unit, onLogOut: () -> Unit, onEditProfile: () -> Unit, onNotice: (String) -> Unit, onBack: (() -> Unit)? = null) {
     var showQr by remember { mutableStateOf(false) }
+    var showAccounts by remember { mutableStateOf(false) }
+    if (showAccounts) AccountsSheet { showAccounts = false }
+    if (onBack != null) androidx.activity.compose.BackHandler(onBack = onBack)
     if (showQr) ProfileQrDialog(profile) { showQr = false }
     val pickPhoto = rememberProfilePhotoPicker(onNotice)
     var menu by remember { mutableStateOf(false) }
@@ -518,13 +540,14 @@ internal fun ProfileTab(profile: TelegramUserProfile?, onOpenSettings: () -> Uni
                 Box(Modifier.fillMaxWidth()) {
                 SeasonalLayer(Modifier.matchParentSize(), freeZoneFraction = 0.2f..0.8f)
                 Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (onBack != null) TitleAction(KiroXIcon.Back, "Назад", onBack)
                     TitleAction(KiroXIcon.Qr, "QR-код профиля") { showQr = true }
                     Spacer(Modifier.weight(1f))
                     Box {
                         TitleAction(KiroXIcon.More, "Ещё") { menu = true }
                         DropdownMenu(menu, { menu = false }, modifier = Modifier.background(Fusion.colors.surface2)) {
                             DropdownMenuItem(text = { Text("Избранное", color = Fusion.colors.textPrimary) }, onClick = { menu = false; onOpenSaved() })
-                            DropdownMenuItem(text = { Text("Переключить аккаунт", color = Fusion.colors.textPrimary) }, onClick = { menu = false; onNotice("Несколько аккаунтов — $IN_PROGRESS") })
+                            DropdownMenuItem(text = { Text("Переключить аккаунт", color = Fusion.colors.textPrimary) }, onClick = { menu = false; showAccounts = true })
                             DropdownMenuItem(text = { Text("Выйти из аккаунта", color = Fusion.colors.danger) }, onClick = { menu = false; confirmLogout = true })
                         }
                     }
@@ -537,14 +560,15 @@ internal fun ProfileTab(profile: TelegramUserProfile?, onOpenSettings: () -> Uni
                     Spacer(Modifier.height(12.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(profile?.name ?: "Загрузка…", color = Fusion.colors.textPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
-                        Spacer(Modifier.width(8.dp))
-                        KiroXBadge(Modifier.size(20.dp))
+                        // Marks only when TDLib reports them; no local badge that could pass for verification.
+                        if (profile?.isVerified == true) { Spacer(Modifier.width(6.dp)); IconGlyph(KiroXIcon.Verified, "Проверено Telegram", Modifier.size(20.dp), Fusion.colors.accent) }
+                        if (profile?.isPremium == true) { Spacer(Modifier.width(6.dp)); IconGlyph(KiroXIcon.Star, "Telegram Premium", Modifier.size(19.dp), Fusion.colors.accent) }
                     }
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        listOfNotNull("в сети", "Пользователь KiroX", if (profile?.isPremium == true) "Premium" else null, if (profile?.isVerified == true) "Проверено Telegram" else null).joinToString(" · "),
-                        color = Fusion.colors.textSecondary, fontSize = 14.sp, textAlign = TextAlign.Center
-                    )
+                    val facts = listOfNotNull(profile?.username?.let { "@$it" }, if (profile?.isPremium == true) "Premium" else null, if (profile?.isVerified == true) "Проверено Telegram" else null)
+                    if (facts.isNotEmpty()) {
+                        Spacer(Modifier.height(2.dp))
+                        Text(facts.joinToString(" · "), color = Fusion.colors.textSecondary, fontSize = 14.sp, textAlign = TextAlign.Center)
+                    }
                     Spacer(Modifier.height(16.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ActionTile(KiroXIcon.Camera, "Выбрать фото", Modifier.weight(1f), pickPhoto)
@@ -624,24 +648,6 @@ private fun InfoLine(icon: KiroXIcon, value: String, label: String) {
     }
 }
 
-/** Local KiroX mark: a monochrome hexagon, deliberately unlike Telegram's verification check. */
-@Composable
-internal fun KiroXBadge(modifier: Modifier) {
-    val fill = Fusion.colors.surface3
-    val stroke = Fusion.colors.textPrimary
-    Canvas(modifier.semantics { contentDescription = "Отметка KiroX (локальная)" }) {
-        val w = size.width; val h = size.height
-        val hex = Path().apply {
-            moveTo(w * .25f, h * .06f); lineTo(w * .75f, h * .06f); lineTo(w, h * .5f)
-            lineTo(w * .75f, h * .94f); lineTo(w * .25f, h * .94f); lineTo(0f, h * .5f); close()
-        }
-        drawPath(hex, fill)
-        val sw = w * .09f
-        drawLine(stroke, Offset(w * .3f, h * .52f), Offset(w * .44f, h * .66f), sw, StrokeCap.Round)
-        drawLine(stroke, Offset(w * .44f, h * .66f), Offset(w * .7f, h * .36f), sw, StrokeCap.Round)
-    }
-}
-
 // ---------- New message ----------
 
 private enum class NewChatMode { Menu, Message, Secret, GroupMembers, GroupTitle, Channel }
@@ -680,7 +686,7 @@ internal fun NewMessageScreen(
             busy = false
         }
     }
-    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background).imePadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.screen).imePadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
             BackTitle(
                 when (mode) {
@@ -803,10 +809,11 @@ internal fun TitleAction(icon: KiroXIcon, description: String, size: Dp = 24.dp,
 
 /** Material 3 top app bar with a back button. */
 @Composable
-internal fun BackTitle(title: String, onBack: () -> Unit) {
+internal fun BackTitle(title: String, onBack: () -> Unit, actions: @Composable RowScope.() -> Unit = {}) {
     androidx.compose.material3.TopAppBar(
         title = { Text(title, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         navigationIcon = { TitleAction(KiroXIcon.Back, "Назад", onClick = onBack) },
+        actions = actions,
         windowInsets = androidx.compose.foundation.layout.WindowInsets(0),
         colors = fusionTopBarColors()
     )
@@ -828,7 +835,7 @@ internal fun UpdatesScreen(updates: com.kirox.app.update.UpdateCenter, onBack: (
     val context = androidx.compose.ui.platform.LocalContext.current
     val state by updates.state.collectAsStateWithLifecycle()
     var beta by remember { mutableStateOf(updates.betaChannel) }
-    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.screen), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { BackTitle("Обновления", onBack) }
         item {
             Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
@@ -906,7 +913,7 @@ internal fun DevicesScreen(sessions: com.kirox.app.telegram.TelegramSessionsRepo
         scope.launch { runCatching { sessions.sessions() }.onSuccess { list = it; failed = false }.onFailure { failed = true } }
     }
     LaunchedEffect(Unit) { reload() }
-    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background), contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.screen), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { BackTitle("Устройства", onBack) }
         val current = list?.firstOrNull { it.isCurrent }
         val others = list?.filterNot { it.isCurrent }.orEmpty()
@@ -1042,7 +1049,7 @@ internal fun ProfileEditScreen(profile: TelegramUserProfile?, onBack: () -> Unit
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val pickPhoto = rememberProfilePhotoPicker(onNotice)
-    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.background).imePadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(Modifier.fillMaxSize().background(Fusion.colors.screen).imePadding(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { BackTitle("Профиль", onBack) }
         item {
             Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {

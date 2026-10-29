@@ -1,5 +1,6 @@
 package com.kirox.app.ui.country
 
+import com.kirox.app.ui.components.fusionBackground
 import com.kirox.app.ui.theme.Fusion
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
@@ -45,7 +46,7 @@ fun CountryPickerScreen(state: PhoneEntryState, onBack: () -> Unit) {
 
     BackHandler(onBack = onBack)
     Box(
-        Modifier.fillMaxSize().background(Fusion.colors.background).statusBarsPadding().navigationBarsPadding()
+        Modifier.fillMaxSize().fusionBackground(Fusion.colors).statusBarsPadding().navigationBarsPadding()
     ) {
         Column(
             Modifier.fillMaxSize().padding(top = 8.dp).clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)).background(Fusion.colors.background)

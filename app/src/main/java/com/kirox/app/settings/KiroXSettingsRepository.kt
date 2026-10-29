@@ -84,8 +84,9 @@ class KiroXSettingsRepository(context: Context) {
 
     val palette: StateFlow<FusionPalette> = store.data
         .catch { emit(androidx.datastore.preferences.core.emptyPreferences()) }
-        .map { prefs -> FusionPalette.entries.firstOrNull { it.name == prefs[paletteKey] } ?: FusionPalette.AmoledBlack }
-        .stateIn(scope, SharingStarted.Eagerly, FusionPalette.AmoledBlack)
+        // A saved palette (old or new) is kept; only a fresh install starts with Fusion Expressive.
+        .map { prefs -> FusionPalette.entries.firstOrNull { it.name == prefs[paletteKey] } ?: FusionPalette.Expressive }
+        .stateIn(scope, SharingStarted.Eagerly, FusionPalette.Expressive)
 
     /** Light seasonal particles in screen headers; on by default, like the old Fusion. */
     val seasonalEffects: StateFlow<Boolean> = store.data
@@ -141,6 +142,14 @@ class KiroXSettingsRepository(context: Context) {
 
     fun setBubbleShape(value: BubbleShape) { scope.launch { store.edit { it[bubbleKey] = value.name } } }
     fun setMotion(value: MotionLevel) { scope.launch { store.edit { it[motionKey] = value.name } } }
+
+    private val glassBlurKey = androidx.datastore.preferences.core.booleanPreferencesKey("glass_blur")
+    /** Blur of the Glass backdrop glows (Android 12+). */
+    val glassBlur: StateFlow<Boolean> = store.data
+        .catch { emit(androidx.datastore.preferences.core.emptyPreferences()) }
+        .map { it[glassBlurKey] ?: true }
+        .stateIn(scope, SharingStarted.Eagerly, true)
+    fun setGlassBlur(value: Boolean) { scope.launch { store.edit { it[glassBlurKey] = value } } }
 
     fun setPalette(value: FusionPalette) {
         scope.launch { store.edit { it[paletteKey] = value.name } }

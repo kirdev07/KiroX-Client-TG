@@ -82,9 +82,9 @@ interface CallActions {
 
 /** Full-screen call: outgoing, incoming, connected and finished states for voice and video. */
 @Composable
-fun CallScreen(call: TelegramActiveCall, actions: CallActions) {
+fun CallScreen(call: TelegramActiveCall, actions: CallActions, onMinimize: (() -> Unit)? = null) {
     val live = call.phase.isLive()
-    BackHandler { if (!live) actions.dismiss() }
+    BackHandler { if (!live) actions.dismiss() else onMinimize?.invoke() }
     IncomingAlert(call.phase == CallPhase.Incoming)
     val talking = live && call.phase != CallPhase.Incoming
     // Switch audio to call mode only once connected: during ringing other apps on the phone must not see a busy line.
@@ -96,10 +96,13 @@ fun CallScreen(call: TelegramActiveCall, actions: CallActions) {
 
     Box(
         Modifier.fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Color(0xFF1C2633), Color(0xFF10151C), Color(0xFF050608))))
+            .background(Brush.verticalGradient(com.kirox.app.ui.theme.Fusion.colors.backdrop ?: listOf(Color(0xFF1C2633), Color(0xFF10151C), Color(0xFF050608))))
             .clickable(enabled = false) {}
     ) {
         if (showVideo) CallVideo(call, actions)
+        if (onMinimize != null) androidx.compose.material3.IconButton(
+            onClick = onMinimize, modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(4.dp).size(48.dp)
+        ) { IconGlyph(KiroXIcon.Back, "Свернуть звонок", Modifier.size(24.dp), Color.White) }
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Spacer(Modifier.height(16.dp))
             TopLabel(call)
@@ -228,7 +231,7 @@ private fun PulsingAvatar(call: TelegramActiveCall, pulsing: Boolean) {
     val transition = rememberInfiniteTransition(label = "call_pulse")
     val wave by transition.animateFloat(0f, 1f, infiniteRepeatable(tween(1800, easing = LinearEasing), RepeatMode.Restart), label = "wave")
     Box(Modifier.size(220.dp), contentAlignment = Alignment.Center) {
-        if (pulsing) Canvas(Modifier.fillMaxSize()) {
+        if (pulsing && com.kirox.app.ui.theme.LocalMotionFactor.current > 0f) Canvas(Modifier.fillMaxSize()) {
             repeat(2) { i ->
                 val p = (wave + i * 0.5f) % 1f
                 drawCircle(Color.White.copy(alpha = 0.16f * (1f - p)), radius = size.minDimension * (0.3f + 0.2f * p))
@@ -281,7 +284,7 @@ private fun IncomingControls(call: TelegramActiveCall, actions: CallActions) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Bottom) {
         LabeledButton("Отклонить") { RoundButton(KiroXIcon.CallEnd, "Отклонить", CallRed, Color.White, size = 72.dp, onClick = actions::hangUp) }
         if (canAnswer) LabeledButton(if (call.isVideo) "С видео" else "Принять") {
-            Box(Modifier.padding(bottom = (6 * bounce).dp)) {
+            Box(Modifier.padding(bottom = (if (com.kirox.app.ui.theme.LocalMotionFactor.current > 0f) 6 * bounce else 0f).dp)) {
                 RoundButton(if (call.isVideo) KiroXIcon.Video else KiroXIcon.Call, "Принять", CallGreen, Color.White, size = 72.dp, onClick = actions::accept)
             }
         } else Text("Ответьте на другом устройстве", color = Color(0x99FFFFFF), fontSize = 13.sp, modifier = Modifier.width(140.dp), textAlign = TextAlign.Center)
@@ -350,4 +353,35 @@ private fun IncomingAlert(active: Boolean) {
 internal fun formatDuration(seconds: Int): String {
     val s = seconds.coerceAtLeast(0)
     return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, s / 60 % 60, s % 60) else "%d:%02d".format(s / 60, s % 60)
+}
+
+/**
+ * In-app mini call window: a pill at the top of the app while the call screen is minimized.
+ * Tap returns to the call; the red button hangs up. System picture-in-picture is not used.
+ */
+@Composable
+fun MiniCallChip(call: TelegramActiveCall, onOpen: () -> Unit, onHangUp: () -> Unit, modifier: Modifier = Modifier) {
+    val phase = call.phase
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    if (phase is CallPhase.Active) LaunchedEffect(phase.sinceMillis) { while (true) { now = System.currentTimeMillis(); delay(1000) } }
+    val status = when (phase) {
+        is CallPhase.Active -> if (phase.reconnecting) "Переподключение…" else formatDuration(((now - phase.sinceMillis) / 1000).toInt())
+        is CallPhase.Calling -> "Вызов…"
+        CallPhase.Connecting -> "Соединение…"
+        else -> ""
+    }
+    Row(
+        modifier.statusBarsPadding().padding(horizontal = 12.dp, vertical = 6.dp).fillMaxWidth().clip(RoundedCornerShape(24.dp))
+            .background(Color(0xFF1F8F4E)).clickable(onClick = onOpen).padding(start = 16.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconGlyph(if (call.isVideo) KiroXIcon.Video else KiroXIcon.Call, null, Modifier.size(18.dp), Color.White)
+        Spacer(Modifier.width(10.dp))
+        Text(call.name, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+        if (status.isNotEmpty()) Text(" · $status", color = Color(0xE6FFFFFF), fontSize = 14.sp, maxLines = 1)
+        Spacer(Modifier.weight(1f))
+        androidx.compose.material3.IconButton(onClick = onHangUp, modifier = Modifier.size(44.dp)) {
+            IconGlyph(KiroXIcon.CallEnd, "Завершить звонок", Modifier.size(22.dp), Color.White)
+        }
+    }
 }

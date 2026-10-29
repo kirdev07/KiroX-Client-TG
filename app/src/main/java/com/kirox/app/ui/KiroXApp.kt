@@ -1,5 +1,6 @@
 package com.kirox.app.ui
 
+import com.kirox.app.ui.components.fusionBackground
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
@@ -252,7 +253,7 @@ fun KiroXApp() {
 
     BackHandler(enabled = stack.canPop) { stack.pop() }
 
-    Box(Modifier.fillMaxSize().background(Fusion.colors.background)) {
+    Box(Modifier.fillMaxSize().fusionBackground(Fusion.colors)) {
         Crossfade(
             targetState = splashVisible || phoneState == null,
             animationSpec = tween(0),
@@ -410,7 +411,13 @@ fun KiroXApp() {
             )
         }
         activeCall?.let { call ->
-            CompositionLocalProvider(LocalTelegramFiles provides telegramViewModel.files) { com.kirox.app.ui.call.CallScreen(call, permittedCallActions) }
+            // A live call can be minimized to a pill on top of the app; ringing and ended calls stay full screen.
+            var minimized by rememberSaveable(call.id) { mutableStateOf(false) }
+            val canMinimize = call.phase is com.kirox.app.telegram.CallPhase.Active || call.phase is com.kirox.app.telegram.CallPhase.Calling || call.phase == com.kirox.app.telegram.CallPhase.Connecting
+            if (minimized && canMinimize) com.kirox.app.ui.call.MiniCallChip(call, onOpen = { minimized = false }, onHangUp = permittedCallActions::hangUp, modifier = Modifier.align(androidx.compose.ui.Alignment.TopCenter))
+            else CompositionLocalProvider(LocalTelegramFiles provides telegramViewModel.files) {
+                com.kirox.app.ui.call.CallScreen(call, permittedCallActions, onMinimize = if (canMinimize) ({ minimized = true }) else null)
+            }
         }
     }
 }
