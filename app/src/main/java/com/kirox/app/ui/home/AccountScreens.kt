@@ -540,7 +540,7 @@ internal fun ProfileTab(profile: TelegramUserProfile?, onOpenSettings: () -> Uni
                 Box(Modifier.fillMaxWidth()) {
                 SeasonalLayer(Modifier.matchParentSize(), freeZoneFraction = 0.2f..0.8f)
                 Row(Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (onBack != null) TitleAction(KiroXIcon.Back, "Назад", onBack)
+                    if (onBack != null) TitleAction(KiroXIcon.Back, "Назад", onClick = onBack)
                     TitleAction(KiroXIcon.Qr, "QR-код профиля") { showQr = true }
                     Spacer(Modifier.weight(1f))
                     Box {
@@ -696,8 +696,9 @@ internal fun NewMessageScreen(
                     NewChatMode.GroupMembers -> if (members.isEmpty()) "Участники группы" else "Выбрано: ${members.size}"
                     NewChatMode.GroupTitle -> "Новая группа"
                     NewChatMode.Channel -> "Новый канал"
-                }
-            ) { back() }
+                },
+                onBack = { back() }
+            )
         }
         when (mode) {
             NewChatMode.Menu -> {

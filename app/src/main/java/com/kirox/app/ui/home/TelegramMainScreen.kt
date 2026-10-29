@@ -308,7 +308,7 @@ private fun ChatsTab(
     Box(Modifier.fillMaxSize().nestedScroll(fabScroll)) {
     Column(Modifier.fillMaxSize()) {
         ScreenTitle(connectionTitle(connection) ?: "Чаты") {
-            TitleAction(KiroXIcon.Contacts, "Контакты", onOpenContacts)
+            TitleAction(KiroXIcon.Contacts, "Контакты", onClick = onOpenContacts)
             TitleAction(KiroXIcon.ReadAll, "Отметить всё прочитанным") { confirmReadAll = true }
             TitleAction(KiroXIcon.Search, "Поиск") { searching = true }
         }
@@ -516,7 +516,7 @@ private fun CallsTab(
 ) {
     val call: (Long, Boolean) -> Unit = { userId, video -> if (com.kirox.app.ui.call.callsEnabled) onStartCall(userId, video) else onNotice(noCallsText) }
     Column(Modifier.fillMaxSize()) {
-        ScreenTitle("Звонки") { TitleAction(KiroXIcon.Contacts, "Позвонить контакту", onOpenContacts) }
+        ScreenTitle("Звонки") { TitleAction(KiroXIcon.Contacts, "Позвонить контакту", onClick = onOpenContacts) }
         CallsList(calls, onLoadCalls, onOpenChat) { item -> call(item.chatId, item.isVideo) }
     }
 }

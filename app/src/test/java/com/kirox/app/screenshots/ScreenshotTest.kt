@@ -190,7 +190,7 @@ class ScreenshotTest {
         androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
         com.kirox.app.ui.components.ChatWallpaperLayer(ChatWallpaper.None, Modifier.fillMaxSize())
         Column(Modifier.fillMaxSize()) {
-            com.kirox.app.ui.home.BackTitle("Анна") {}
+            com.kirox.app.ui.home.BackTitle("Анна", onBack = {})
             LazyColumn(Modifier.weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 10.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(appearance.messageSpacingDp.dp)) {
                 item { MessageRow(MessageUi(0, "", MessageDirection.System, text = "Сегодня", time = ""), grouped = false, appearance = appearance, onLongClick = {}, onReply = {}) }
                 items(messages.size) { i ->
