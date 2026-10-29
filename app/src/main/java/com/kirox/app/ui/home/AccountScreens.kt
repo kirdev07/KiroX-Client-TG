@@ -762,8 +762,8 @@ internal fun NewMessageScreen(
             NewChatMode.GroupTitle, NewChatMode.Channel -> {
                 val group = mode == NewChatMode.GroupTitle
                 // Approved groups board: a large round mark above the fields (no photo picker yet, so no camera badge).
-                if (Fusion.colors.backdrop != null) item {
-                    Box(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp), contentAlignment = Alignment.Center) {
+                item {
+                    if (Fusion.colors.backdrop != null) Box(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp), contentAlignment = Alignment.Center) {
                         Box(
                             Modifier.size(104.dp).clip(CircleShape)
                                 .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(androidx.compose.ui.graphics.lerp(Fusion.colors.accent, androidx.compose.ui.graphics.Color.White, 0.2f), Fusion.colors.outgoingBubble))),
