@@ -28,6 +28,8 @@ The owner-approved raster image lives in the ChatGPT conversation; it is **not y
 - [Design contract](DESIGN_SPEC.md)
 - [Claude Code task brief](CLAUDE_HANDOFF.md)
 - [Theme tokens](theme-tokens.json)
+- [Additional call screens — visually approved](CALLS_EXTRA_DRAFT.md)
+- [Stories screens — draft for owner review](STORIES_DESIGN_DRAFT.md)
 - [Local interactive preview](preview.html)
 
 Existing materials in parent directory are **older references** and conflict with the newly approved primary-navigation layout. This branch does not silently rewrite old specs; new design decisions are documented below.
