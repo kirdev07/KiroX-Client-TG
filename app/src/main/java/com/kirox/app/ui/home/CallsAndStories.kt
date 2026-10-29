@@ -93,8 +93,8 @@ internal fun CallsList(state: TelegramCallsState, onLoadMore: () -> Unit, onOpen
         // v2 (approved calls board): segmented group in a rounded container, the active one filled with the accent.
         val segmented = Fusion.colors.backdrop != null
         Row(
-            (if (segmented) Modifier.padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(22.dp)).fusionPanel(Fusion.colors, RoundedCornerShape(22.dp)).padding(4.dp)
-            else Modifier.padding(horizontal = 16.dp, vertical = 10.dp)).horizontalScroll(rememberScrollState()),
+            (if (segmented) Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth().clip(RoundedCornerShape(22.dp)).fusionPanel(Fusion.colors, RoundedCornerShape(22.dp)).padding(4.dp)
+            else Modifier.padding(horizontal = 16.dp, vertical = 10.dp).horizontalScroll(rememberScrollState())),
             horizontalArrangement = Arrangement.spacedBy(if (segmented) 2.dp else 8.dp)
         ) {
             CallFilter.entries.forEach { value ->
@@ -102,14 +102,16 @@ internal fun CallsList(state: TelegramCallsState, onLoadMore: () -> Unit, onOpen
                 val active = filter == value
                 Text(
                     value.title, color = if (active) Fusion.colors.onAccent else Fusion.colors.textSecondary,
-                    fontSize = if (v2) 14.sp else 13.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
-                    modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(when {
+                    fontSize = 13.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1,
+                    textAlign = TextAlign.Center,
+                    // v2: four equal segments that always fit, no sideways scrolling.
+                    modifier = (if (segmented) Modifier.weight(1f) else Modifier).clip(RoundedCornerShape(20.dp)).background(when {
                         active && v2 -> Fusion.colors.accent
                         active -> Fusion.colors.accent
                         v2 -> androidx.compose.ui.graphics.Color.Transparent
                         else -> Fusion.colors.surface2
                     })
-                        .clickable { filter = value }.padding(horizontal = 14.dp, vertical = 8.dp)
+                        .clickable { filter = value }.padding(horizontal = if (segmented) 4.dp else 14.dp, vertical = 8.dp)
                 )
             }
         }

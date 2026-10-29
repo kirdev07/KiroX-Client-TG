@@ -124,7 +124,8 @@ fun TelegramAuthStepScreen(state: TelegramAuthState, repository: TelegramAuthRep
             }
             Box(Modifier.weight(1f).fillMaxHeight()) {
                 com.kirox.app.ui.components.SeasonalLayer(Modifier.matchParentSize(), freeZoneFraction = 0.35f..0.98f)
-                Text("kiroX", color = Fusion.colors.textPrimary, fontSize = 26.sp, fontWeight = FontWeight.Light, modifier = Modifier.align(Alignment.CenterStart))
+                // v2 (approved auth board): only the back arrow in the bar; the mark is in the centre below.
+                if (Fusion.colors.backdrop == null) Text("kiroX", color = Fusion.colors.textPrimary, fontSize = 26.sp, fontWeight = FontWeight.Light, modifier = Modifier.align(Alignment.CenterStart))
             }
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp)) {
